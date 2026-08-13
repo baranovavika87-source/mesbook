@@ -18,20 +18,32 @@ import {
 
 
 const queryClient = new QueryClient();
+function ProtectedRoute({ component: Component, path }: any) {
+  const isAuthenticated = localStorage.getItem("mesbook_user");
+  const [, setLocation] = useLocation();
+
+  if (!isAuthenticated) {
+    setTimeout(() => setLocation("/auth"), 0);
+    return null;
+  }
+
+  return <Route path={path} component={Component} />;
+}
 
 function Router() {
   return (
     // Keep a shared shell (sidebar, navbar) outside the boundary so it
     // survives a page crash.
     <RoutedErrorBoundary>
-      <Switch>
-        <Route path="/" component={ChatsPage} />
-        <Route path="/chat/:chatId" component={ChatPage} />
-        <Route path="/wall" component={WallPage} />
-        <Route path="/settings" component={SettingsPage} />
-           <Route path="/auth" component={AuthPage} />
-       <Route component={NotFound} />
-      </Switch>
+              <Switch>
+          <ProtectedRoute path="/" component={ChatsPage} />
+          <ProtectedRoute path="/chat/:chatId" component={ChatPage} />
+          <ProtectedRoute path="/wall" component={WallPage} />
+          <ProtectedRoute path="/settings" component={SettingsPage} />
+          <Route path="/auth" component={AuthPage} />
+          <Route component={NotFound} />
+        </Switch>
+     
     </RoutedErrorBoundary>
   );
 }
