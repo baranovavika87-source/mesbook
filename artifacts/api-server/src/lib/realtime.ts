@@ -20,6 +20,14 @@ export function configureRealtime(server: HttpServer): Server {
     socket.on("leave-chat", (chatId: number) => {
       socket.leave(`chat:${Number(chatId)}`);
     });
+        socket.on("typing", ({ chatId }: { chatId: number }) => {
+      socket.to(`chat:${Number(chatId)}`).emit("user:typing");
+    });
+
+    socket.on("stopTyping", ({ chatId }: { chatId: number }) => {
+      socket.to(`chat:${Number(chatId)}`).emit("user:stopTyping");
+    });
+   
   });
 
   return socketServer;
