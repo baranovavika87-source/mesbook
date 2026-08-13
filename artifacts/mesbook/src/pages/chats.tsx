@@ -7,7 +7,7 @@ import { AppShell, Avatar, EmptyState, ErrorState, LoadingList, PageIntro, forma
 export default function ChatsPage() {
   const [search, setSearch] = useState('');
   const chatsQuery = useListChats({ query: { queryKey: getListChatsQueryKey() } });
-  const chats = chatsQuery.data ?? [];
+  const chats = Array.isArray(chatsQuery.data) ? chatsQuery.data : [];
   const visibleChats = useMemo(() => chats.filter((chat) => `${chat.participant.displayName} ${chat.lastMessage}`.toLowerCase().includes(search.toLowerCase())), [chats, search]);
   return (
     <AppShell>
