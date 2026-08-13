@@ -100,12 +100,13 @@ function seed(database: Database): void {  run(database, `CREATE TABLE IF NOT EX
 
   run(
     database,
-    `INSERT INTO users (id, display_name, avatar_url) VALUES
-      (1, 'You', ''),
-      (2, 'Mia Rodriguez', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80'),
-      (3, 'Alex Chen', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80'),
-      (4, 'Noah Williams', 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=200&q=80')`,
+    `INSERT INTO users (id, username, password, display_name, avatar_url) VALUES
+    (1, 'you', '123456', 'You', ''),
+    (2, 'nia', '123456', 'Nia Rodriguez', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80'),
+    (3, 'alex', '123456', 'Alex Chen', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80'),
+    (4, 'noah', '123456', 'Noah Williams', 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=200&q=80')`
   );
+                                         
   run(
     database,
     `INSERT INTO chats (id, participant_id, created_at) VALUES
