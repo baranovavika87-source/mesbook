@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Mesbook"
+description = "A real-time messaging app with private conversations, a public social Wall, and editable profile settings, designed for a focused mobile experience."
+version = "1.0.0"
+id = "artifacts/mesbook"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21848
+
+[services.development]
+run = "pnpm --filter @workspace/mesbook run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/mesbook", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/mesbook/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21848"
+BASE_PATH = "/"

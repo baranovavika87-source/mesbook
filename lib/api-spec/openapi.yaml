@@ -10,6 +10,12 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: profile
+    description: Current user profile operations
+  - name: chats
+    description: Private conversation operations
+  - name: wall
+    description: Public Wall operations
 paths:
   /healthz:
     get:
@@ -24,6 +30,123 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /me:
+    get:
+      operationId: getMe
+      tags: [profile]
+      summary: Get the current profile
+      responses:
+        "200":
+          description: Current profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    patch:
+      operationId: updateMe
+      tags: [profile]
+      summary: Update the current profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /chats:
+    get:
+      operationId: listChats
+      tags: [chats]
+      summary: List private chats
+      responses:
+        "200":
+          description: Private chats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Chat"
+  /chats/{chatId}/messages:
+    get:
+      operationId: listMessages
+      tags: [chats]
+      summary: List messages for a chat
+      parameters:
+        - name: chatId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Chat messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      operationId: createMessage
+      tags: [chats]
+      summary: Create a message in a chat
+      parameters:
+        - name: chatId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: Created message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+  /wall/posts:
+    get:
+      operationId: listWallPosts
+      tags: [wall]
+      summary: List public Wall posts
+      responses:
+        "200":
+          description: Wall posts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WallPost"
+    post:
+      operationId: createWallPost
+      tags: [wall]
+      summary: Publish a Wall post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WallPostInput"
+      responses:
+        "201":
+          description: Created Wall post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WallPost"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +156,84 @@ components:
           type: string
       required:
         - status
+    User:
+      type: object
+      required: [id, displayName, avatarUrl]
+      properties:
+        id:
+          type: number
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+    ProfileUpdate:
+      type: object
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 60
+        avatarUrl:
+          type: string
+          maxLength: 500
+    Chat:
+      type: object
+      required: [id, participant, lastMessage, lastMessageAt, unreadCount]
+      properties:
+        id:
+          type: number
+        participant:
+          $ref: "#/components/schemas/User"
+        lastMessage:
+          type: string
+        lastMessageAt:
+          type: string
+        unreadCount:
+          type: number
+    Message:
+      type: object
+      required: [id, chatId, senderId, senderName, content, createdAt, isMine]
+      properties:
+        id:
+          type: number
+        chatId:
+          type: number
+        senderId:
+          type: number
+        senderName:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+        isMine:
+          type: boolean
+    MessageInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    WallPost:
+      type: object
+      required: [id, author, content, createdAt]
+      properties:
+        id:
+          type: number
+        author:
+          $ref: "#/components/schemas/User"
+        content:
+          type: string
+        createdAt:
+          type: string
+    WallPostInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 500
 
