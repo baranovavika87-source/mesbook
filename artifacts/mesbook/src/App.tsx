@@ -8,12 +8,14 @@ import ChatPage from '@/pages/chat';
 import WallPage from '@/pages/wall';
 import SettingsPage from '@/pages/settings';
 import NotFound from '@/pages/not-found';
+import AuthPage from '@/pages/auth';
 import {
   Route,
   Switch,
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
+
 
 const queryClient = new QueryClient();
 
@@ -27,7 +29,8 @@ function Router() {
         <Route path="/chat/:chatId" component={ChatPage} />
         <Route path="/wall" component={WallPage} />
         <Route path="/settings" component={SettingsPage} />
-        <Route component={NotFound} />
+           <Route path="/auth" component={AuthPage} />
+       <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>
   );

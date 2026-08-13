@@ -18,6 +18,9 @@ import {
   getDatabase,
   persistDatabase,
   queryRows,
+  createUser,
+  getUserByUsername,
+  searchUsers
 } from "../lib/database";
 import { broadcastToChat, broadcastToWall } from "../lib/realtime";
 
@@ -296,6 +299,52 @@ router.post("/wall/posts", async (req, res): Promise<void> => {
   const response = CreateWallPostResponse.parse(post);
   broadcastToWall(response);
   res.status(201).json(response);
+});
+// Регистрация нового пользователя
+router.post("/register", async (req, res) => {
+  const { username, password, displayName, avatarUrl } = req.body;
+  const db = await getDatabase();
+  
+  const existing = getUserByUsername(db, username);
+  if (existing) {
+    return res.status(400).json({ error: "Пользователь с таким ником уже существует" });
+  }
+
+  const userId = createUser(db, username, password, displayName || username, avatarUrl || "");
+  await persistDatabase(db);
+
+  return res.json({ 
+    id: userId, 
+    username, 
+    displayName: displayName || username, 
+    avatarUrl: avatarUrl || "" 
+  });
+});
+
+// Авторизация (Вход)
+router.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+  const db = await getDatabase();
+
+  const user = getUserByUsername(db, username);
+  if (!user || user.password !== password) {
+    return res.status(400).json({ error: "Неверный логин или пароль" });
+  }
+
+  return res.json({
+    id: user.id,
+    username: user.username,
+    displayName: user.display_name,
+    avatarUrl: user.avatar_url
+  });
+});
+
+// Поиск пользователей
+router.get("/users/search", async (req, res) => {
+  const query = String(req.query.q || "");
+  const db = await getDatabase();
+  const users = searchUsers(db, query, currentUserId);
+  return res.json(users);
 });
 
 export default router;

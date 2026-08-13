@@ -57,12 +57,14 @@ export async function persistDatabase(database: Database): Promise<void> {
   await writeFile(databasePath, Buffer.from(bytes));
 }
 
-function seed(database: Database): void {
-  run(database, `CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      display_name TEXT NOT NULL,
-      avatar_url TEXT NOT NULL DEFAULT ''
-    )`);
+function seed(database: Database): void {  run(database, `CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    avatar_url TEXT DEFAULT ''
+  )`);
+
   run(database, `CREATE TABLE IF NOT EXISTS chats (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       participant_id INTEGER NOT NULL,
@@ -157,4 +159,44 @@ export function getDatabase(): Promise<Database> {
   })();
 
   return databasePromise;
+}// Регистрация нового пользователя
+export function createUser(db: any, username: string, password: string, displayName: string, avatarUrl: string = '') {
+  const stmt = db.prepare(`
+    INSERT INTO users (username, password, display_name, avatar_url)
+    VALUES (?, ?, ?, ?)
+  `);
+  stmt.run([username, password, displayName, avatarUrl]);
+  return db.exec("SELECT last_insert_rowid() as id")[0].values[0][0];
+}
+
+// Вход по никнейму
+export function getUserByUsername(db: any, username: string) {
+  const res = db.exec(`SELECT * FROM users WHERE username = '${username}'`);
+  if (!res.length || !res[0].values.length) return null;
+  const cols = res[0].columns;
+  const val = res[0].values[0];
+  const user: any = {};
+  cols.forEach((col: string, idx: number) => {
+    user[col] = val[idx];
+  });
+  return user;
+}
+
+// Поиск пользователей
+export function searchUsers(db: any, query: string, currentUserId: number) {
+  const res = db.exec(`
+    SELECT id, username, display_name, avatar_url 
+    FROM users 
+    WHERE (username LIKE '%${query}%' OR display_name LIKE '%${query}%')
+      AND id != ${currentUserId}
+  `);
+  if (!res.length) return [];
+  const cols = res[0].columns;
+  return res[0].values.map((row: any[]) => {
+    const user: any = {};
+    cols.forEach((col: string, idx: number) => {
+      user[col] = row[idx];
+    });
+    return user;
+  });
 }
