@@ -157,46 +157,33 @@ export function getDatabase(): Promise<Database> {
     });
     return initializeDatabase(SqlJs);
   })();
-
-  return databasePromise;
-}// Регистрация нового пользователя
-export function createUser(db: any, username: string, password: string, displayName: string, avatarUrl: string = '') {
-  const stmt = db.prepare(`
-    INSERT INTO users (username, password, display_name, avatar_url)
-    VALUES (?, ?, ?, ?)
-  `);
-  stmt.run([username, password, displayName, avatarUrl]);
-  return db.exec("SELECT last_insert_rowid() as id")[0].values[0][0];
+    return databasePromise;
 }
 
-// Вход по никнейму
+// Регистрация нового пользователя
 export function getUserByUsername(db: any, username: string) {
-  const res = db.exec(`SELECT * FROM users WHERE username = '${username}'`);
-  if (!res.length || !res[0].values.length) return null;
-  const cols = res[0].columns;
-  const val = res[0].values[0];
-  const user: any = {};
-  cols.forEach((col: string, idx: number) => {
-    user[col] = val[idx];
-  });
-  return user;
+  const rows = queryRows(
+    db,
+    "SELECT id, username, password, display_name, avatar_url FROM users WHERE username = ?",
+    [username]
+  );
+  return rows[0] || null;
 }
 
-// Поиск пользователей
+export function createUser(db: any, username: string, password: string, displayName: string, avatarUrl?: string) {
+  const result = execute(
+    db,
+    "INSERT INTO users (username, password, display_name, avatar_url) VALUES (?, ?, ?, ?)",
+    [username, password, displayName, avatarUrl || ""]
+  );
+  return (result as any)?.lastInsertRowid || 0;
+}
+
 export function searchUsers(db: any, query: string, currentUserId: number) {
-  const res = db.exec(`
-    SELECT id, username, display_name, avatar_url 
-    FROM users 
-    WHERE (username LIKE '%${query}%' OR display_name LIKE '%${query}%')
-      AND id != ${currentUserId}
-  `);
-  if (!res.length) return [];
-  const cols = res[0].columns;
-  return res[0].values.map((row: any[]) => {
-    const user: any = {};
-    cols.forEach((col: string, idx: number) => {
-      user[col] = row[idx];
-    });
-    return user;
-  });
+  const searchPattern = "%" + query + "%";
+  return queryRows(
+    db,
+    "SELECT id, display_name as displayName, avatar_url as avatarUrl FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?",
+    [searchPattern, searchPattern, currentUserId]
+  );
 }
