@@ -18,6 +18,9 @@ export default function ChatPage() {
   const [content, setContent] = useState('');
   const [liveMessages, setLiveMessages] = useState<Message[]>([]);
   const [socketReady, setSocketReady] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const socketRef = useRef<any>(null);
+  const typingTimeout = useRef<any>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const chat = useMemo(() => chats?.find((item) => item.id === chatId), [chats, chatId]);
   const messages = useMemo(() => {
@@ -33,33 +36,44 @@ export default function ChatPage() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
-  useEffect(() => {
+     useEffect(() => {
     const socket = io({
       path: '/socket.io',
-      transports: ['websocket', 'polling'],
+      transports: ['websocket', 'polling']
     });
+    socketRef.current = socket; 
+
     const handler = (message: Message) => {
       if (message.chatId === chatId) {
         addLiveMessage(message);
       }
     };
+
     const handleConnect = () => {
       setSocketReady(true);
       socket.emit('join-chat', chatId);
     };
+
     const handleDisconnect = () => setSocketReady(false);
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('chat:message', handler);
+    
+    // Новые слушатели для индикатора печати
+    socket.on('user:typing', () => setIsTyping(true));
+    socket.on('user:stopTyping', () => setIsTyping(false));
+
     return () => {
       socket.emit('leave-chat', chatId);
       socket.off('connect', handleConnect);
       socket.off('disconnect', handleDisconnect);
       socket.off('chat:message', handler);
+      socket.off('user:typing');
+      socket.off('user:stopTyping');
       socket.disconnect();
     };
   }, [chatId]);
-
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     const trimmed = content.trim();
