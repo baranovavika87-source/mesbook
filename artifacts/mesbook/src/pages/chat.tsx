@@ -105,8 +105,24 @@ export default function ChatPage() {
             </div>
           )}
         </div>
+                {isTyping && (
+          <div className="text-xs text-muted-foreground px-4 py-2 italic animate-pulse">
+            {chat?.participant.displayName} печатает...
+          </div>
+        )}
+        
         <form onSubmit={handleSubmit} className="sticky bottom-0 flex gap-2 border-t border-[hsl(var(--border))] bg-[hsl(var(--card)/.96)] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
-          <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={1} maxLength={2000} placeholder="Write something private…" className="max-h-28 min-h-11 flex-1 resize-none rounded-2xl bg-[hsl(var(--background))] px-4 py-3 text-sm leading-5 outline-none placeholder:text-[hsl(var(--muted-foreground))]" aria-label="Message" data-testid="input-message" />
+          <textarea value={content}             onChange={(event) => {
+              setContent(event.target.value);
+              if (socketRef.current) {
+                socketRef.current.emit('typing', { chatId });
+                if (typingTimeout.current) clearTimeout(typingTimeout.current);
+                typingTimeout.current = setTimeout(() => {
+                  socketRef.current.emit('stopTyping', { chatId });
+                }, 2000);
+              }
+            }}
+            rows={1} maxLength={2000} placeholder="Write something private…" className="max-h-28 min-h-11 flex-1 resize-none rounded-2xl bg-[hsl(var(--background))] px-4 py-3 text-sm leading-5 outline-none placeholder:text-[hsl(var(--muted-foreground))]" aria-label="Message" data-testid="input-message" />
           <button type="submit" disabled={!content.trim() || sendMessage.isPending} className="flex h-11 w-11 shrink-0 items-center justify-center self-end rounded-full bg-[hsl(var(--primary))] text-white transition-all hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Send message" data-testid="button-send-message"><Send size={17} className={sendMessage.isPending ? 'animate-pulse' : ''} /></button>
           {sendMessage.isError && <span className="absolute bottom-1 left-5 text-[10px] text-[hsl(var(--destructive))]" data-testid="status-send-error">Could not send. Try again.</span>}
         </form>
