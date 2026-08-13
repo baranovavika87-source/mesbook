@@ -171,12 +171,10 @@ export function getUserByUsername(db: any, username: string) {
 }
 
 export function createUser(db: any, username: string, password: string, displayName: string, avatarUrl?: string) {
-  const result = execute(
-    db,
-    "INSERT INTO users (username, password, display_name, avatar_url) VALUES (?, ?, ?, ?)",
-    [username, password, displayName, avatarUrl || ""]
-  );
-  return (result as any)?.lastInsertRowid || 0;
+  const stmt = db.prepare("INSERT INTO users (username, password, display_name, avatar_url) VALUES (?, ?, ?, ?)");
+  stmt.run([username, password, displayName, avatarUrl || ""]);
+  const res = db.exec("SELECT last_insert_rowid() as id");
+  return res[0].values[0][0];
 }
 
 export function searchUsers(db: any, query: string, currentUserId: number) {
