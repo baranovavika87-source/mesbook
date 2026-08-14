@@ -8,33 +8,26 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
-app.use(
-  pinoHttp({
-    logger,
-    serializers: {
-      req (req) {
-        return {
-          id: req.id,
-          method: req.method,
-          url: req.url?.split("?")[0],
-        };
-      },
-      res (res) {
-        return {
-          statusCode: res.statusCode,
-        };
-      },
-    },
-  }),
-);
-
+app.use(pinoHttp({ logger }));
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Дублируем пути, чтобы точно не промахнуться мимо роутера
 app.use("/api", router);
+app.use(router);
 
-// Жесткий поиск именно файла index.html по всем возможным папкам сборки
+// Перехватчик №1: Если маршрут сбился, отдаем текст на телефон
+app.use("/api", (req, res) => {
+  res.status(404).json({ error: `Маршрут не найден: ${req.url}` });
+});
+
+// Перехватчик №2: Ловит скрытые падения базы или сервера и выводит текст на экран
+app.use((err: any, req: any, res: any, next: any) => {
+  const errorMsg = err.message || "Неизвестная ошибка на сервере";
+  res.status(500).json({ error: `Скрытая ошибка: ${errorMsg}` });
+});
+
 const possiblePaths = [
   path.resolve(process.cwd(), "../mesbook/dist/client"),
   path.resolve(process.cwd(), "../mesbook/dist/public"),
