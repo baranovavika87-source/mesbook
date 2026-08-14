@@ -32,9 +32,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
-const clientDistPath = fs.existsSync(path.resolve(process.cwd(), "../mesbook/dist"))
-  ? path.resolve(process.cwd(), "../mesbook/dist")
-  : path.resolve(process.cwd(), "artifacts/mesbook/dist");
+const possiblePaths = [
+  path.resolve(process.cwd(), "../mesbook/dist"),
+  path.resolve(process.cwd(), "artifacts/mesbook/dist"),
+  path.resolve(process.cwd(), "../../artifacts/mesbook/dist"),
+  path.resolve(process.cwd(), "dist/public"),
+  path.resolve(process.cwd(), "public"),
+];
+const clientDistPath = possiblePaths.find((p) => fs.existsSync(p)) || path.resolve(process.cwd(), "../mesbook/dist");
+
 
 app.use(express.static(clientDistPath));
 
