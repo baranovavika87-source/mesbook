@@ -1,6 +1,6 @@
+import express, { type Express } from "express";
 import path from "path";
 import fs from "fs";
-import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -12,14 +12,14 @@ app.use(
   pinoHttp({
     logger,
     serializers: {
-      req(req) {
+      req (req) {
         return {
           id: req.id,
           method: req.method,
           url: req.url?.split("?")[0],
         };
       },
-      res(res) {
+      res (res) {
         return {
           statusCode: res.statusCode,
         };
@@ -27,26 +27,33 @@ app.use(
     },
   }),
 );
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
-const possiblePaths = [
-  path.resolve(process.cwd(), "../mesbook/dist"),
-  path.resolve(process.cwd(), "artifacts/mesbook/dist"),
-  path.resolve(process.cwd(), "../../artifacts/mesbook/dist"),
-  path.resolve(process.cwd(), "dist/public"),
-  path.resolve(process.cwd(), "public"),
-];
-const clientDistPath = possiblePaths.find((p) => fs.existsSync(p)) || path.resolve(process.cwd(), "../mesbook/dist");
 
+// Жесткий поиск именно файла index.html по всем возможным папкам сборки
+const possiblePaths = [
+  path.resolve(process.cwd(), "../mesbook/dist/client"),
+  path.resolve(process.cwd(), "../mesbook/dist/public"),
+  path.resolve(process.cwd(), "../mesbook/dist"),
+  path.resolve(process.cwd(), "../mesbook/build"),
+  path.resolve(process.cwd(), "../../dist"),
+];
+
+const clientDistPath = possiblePaths.find((p) => fs.existsSync(path.join(p, "index.html"))) || path.resolve(process.cwd(), "../mesbook/dist");
 
 app.use(express.static(clientDistPath));
 
 app.use((req, res, next) => {
   if (req.path.startsWith("/api")) return next();
-  res.sendFile(path.join(clientDistPath, "index.html"));
+  const indexPath = path.join(clientDistPath, "index.html");
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  next();
 });
 
 export default app;
