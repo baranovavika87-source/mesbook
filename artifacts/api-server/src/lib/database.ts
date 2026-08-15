@@ -7,7 +7,7 @@ import { logger } from "./logger";
 const require = createRequire(import.meta.url);
 const databasePath =
   process.env.MESBOOK_DB_PATH ??
-  path.resolve(process.cwd(), "artifacts/api-server/data/mesbook.sqlite");
+  path.resolve(process.cwd(), "artifacts/api-server/data/mesbook2.sqlite");
 
 let databasePromise: Promise<Database> | undefined;
 
