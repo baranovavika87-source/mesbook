@@ -1,46 +1,95 @@
-import { useMemo, useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'wouter';
-import { Search, ArrowUpRight, MessageCircle } from 'lucide-react';
+import { Search, ArrowUpRight, MessageCircle, UserPlus } from 'lucide-react';
 import { getListChatsQueryKey, useListChats } from '@workspace/api-client-react';
-import { AppShell, Avatar, EmptyState, ErrorState, LoadingList, PageIntro, formatRelative } from '@/components/mesbook-shell';
+import { AppShell, Avatar, EmptyState, ErrorState, LoadingList, PageIntro } from '@/components/mesbook';
 
 export default function ChatsPage() {
   const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   const chatsQuery = useListChats({ query: { queryKey: getListChatsQueryKey() } });
-  const chats = Array.isArray(chatsQuery.data) ? chatsQuery.data : [];
-  const visibleChats = useMemo(() => chats.filter((chat) => `${chat.participant.displayName} ${chat.lastMessage}`.toLowerCase().includes(search.toLowerCase())), [chats, search]);
+
+  // Фильтруем существующие чаты
+  const visibleChats = useMemo(() => {
+    if (!Array.isArray(chatsQuery.data)) return [];
+    return chatsQuery.data.filter((chat) => 
+      chat.participant.displayName.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [chatsQuery.data, search]);
+
+  // Функция для глобального поиска пользователей
+  const handleSearch = async (value: string) => {
+    setSearch(value);
+    if (value.length > 2) {
+      const res = await fetch(`/api/users/search?q=${value}`, {
+        headers: { 'Authorization': `Bearer ${JSON.parse(localStorage.getItem("mesbook_user") || "{}").id}` }
+      });
+      const users = await res.json();
+      setSearchResults(users);
+    } else {
+      setSearchResults([]);
+    }
+  };
+
   return (
     <AppShell>
-      <PageIntro eyebrow="A quieter inbox" title="Chats" subtitle="Private words, kept close." action={<button type="button" className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--secondary))] text-[hsl(var(--accent))] transition-transform hover:scale-105 active:scale-95" aria-label="Focus search" onClick={() => document.getElementById('input-search-chats')?.focus()} data-testid="button-focus-search"><Search size={18} /></button>} />
+      <PageIntro eyebrow="A quieter inbox" title="Chats" subtitle="Private words, kept close." />
+      
       <div className="px-5 pb-5">
-        <label className="flex h-12 items-center gap-3 rounded-2xl bg-[hsl(var(--background))] px-4 text-[hsl(var(--muted-foreground))]">
-          <Search size={17} />
-          <input id="input-search-chats" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search conversations" className="min-w-0 flex-1 bg-transparent text-sm text-[hsl(var(--foreground))] outline-none placeholder:text-[hsl(var(--muted-foreground))]" data-testid="input-search-chats" />
-          {search && <button type="button" onClick={() => setSearch('')} className="text-xs font-bold" data-testid="button-clear-search">Clear</button>}
-        </label>
+        <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-lg">
+          <Search size={17} className="text-gray-400" />
+          <input 
+            id="input-search-chats" 
+            value={search} 
+            onChange={(e) => handleSearch(e.target.value)} 
+            placeholder="Поиск или @имя пользователя..." 
+            className="w-full bg-transparent text-sm outline-none" 
+          />
+        </div>
       </div>
-      {chatsQuery.isLoading ? <LoadingList /> : chatsQuery.isError ? <ErrorState onRetry={() => chatsQuery.refetch()} /> : visibleChats.length === 0 ? (
-        <EmptyState icon={MessageCircle} title={search ? 'No matches here' : 'Your quiet corner is ready'} body={search ? 'Try a different name or phrase.' : 'When a private conversation starts, it will settle here.'} />
-      ) : (
-        <div className="px-4" data-testid="list-chats">
-          {visibleChats.map((chat, index) => (
-            <Link href={`/chat/${chat.id}`} className="group flex items-center gap-3 rounded-2xl px-2 py-3.5 transition-colors hover:bg-[hsl(var(--background))] animate-rise-in" style={{ animationDelay: `${index * 55}ms` }} data-testid={`link-chat-${chat.id}`} key={chat.id}>
-              <Avatar name={chat.participant.displayName} url={chat.participant.avatarUrl} testId={`img-chat-avatar-${chat.id}`} />
+
+      {chatsQuery.isLoading ? <LoadingList /> : (
+        <div className="px-4 data-testid='list-chats'">
+          {/* Список существующих чатов */}
+          {visibleChats.map((chat) => (
+            <Link href={`/chat/${chat.id}`} key={chat.id} className="group flex items-center gap-3 rounded-2xl px-2 py-3.5 transition hover:bg-gray-50">
+              <Avatar url={chat.participant.avatarUrl} />
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3">
-                  <h2 className="truncate font-display text-[15px] font-bold text-[hsl(var(--foreground))]" data-testid={`text-chat-name-${chat.id}`}>{chat.participant.displayName}</h2>
-                  <span className="shrink-0 text-[11px] font-medium text-[hsl(var(--muted-foreground))]" data-testid={`text-chat-time-${chat.id}`}>{formatRelative(chat.lastMessageAt)}</span>
-                </div>
-                <div className="mt-1 flex items-center justify-between gap-3">
-                  <p className="truncate text-sm text-[hsl(var(--muted-foreground))]" data-testid={`text-chat-preview-${chat.id}`}>{chat.lastMessage || 'Start a conversation'}</p>
-                  {chat.unreadCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[hsl(var(--primary))] px-1.5 text-[10px] font-bold text-white" data-testid={`badge-unread-${chat.id}`}>{chat.unreadCount}</span>}
-                </div>
+                <h2 className="truncate font-bold">{chat.participant.displayName}</h2>
+                <p className="truncate text-sm text-gray-500">{chat.lastMessage}</p>
               </div>
-              <ArrowUpRight size={16} className="text-[hsl(var(--border))] transition-colors group-hover:text-[hsl(var(--primary))]" />
+              <ArrowUpRight size={16} className="text-gray-400" />
             </Link>
           ))}
+
+          {/* Глобальный поиск (если ничего не найдено) */}
+          {search.length > 2 && searchResults.length > 0 && (
+            <div className="mt-4 border-t pt-4">
+              <h3 className="text-xs font-bold text-gray-400 uppercase px-2 mb-2">Глобальный поиск</h3>
+              {searchResults.map((user) => (
+                <div key={user.id} className="flex items-center gap-3 rounded-2xl px-2 py-3.5">
+                  <Avatar url={user.avatarUrl} />
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-bold">{user.displayName}</h2>
+                  </div>
+                  <button 
+                    onClick={() => {
+                        // Математическая формула ID чата, которую мы заложили в сервер
+                        const myId = Number(JSON.parse(localStorage.getItem("mesbook_user") || "{}").id);
+                        const chatId = Math.min(myId, user.id) * 10000 + Math.max(myId, user.id);
+                        window.location.href = `/chat/${chatId}`;
+                    }}
+                    className="text-blue-500 font-bold text-sm"
+                  >
+                    Начать
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </AppShell>
   );
 }
+
