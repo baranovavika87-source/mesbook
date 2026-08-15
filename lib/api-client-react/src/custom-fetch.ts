@@ -16,7 +16,12 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 // ---------------------------------------------------------------------------
 
 let _baseUrl: string | null = null;
-let _authTokenGetter: AuthTokenGetter | null = null;
+let _authTokenGetter: any = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("mesbook_user") || "{}");
+    return user.id ? String(user.id) : null;
+  } catch(e) { return null; }
+};
 
 /**
  * Set a base URL that is prepended to every relative request URL
