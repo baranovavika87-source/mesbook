@@ -25,7 +25,6 @@ import {
 import { broadcastToChat, broadcastToWall } from "../lib/realtime";
 
 const router: IRouter = Router();
-const currentUserId = 1;
 
 type UserRow = {
   id: number;
@@ -50,7 +49,8 @@ function getUser(database: Awaited<ReturnType<typeof getDatabase>>, id: number) 
   return row ? userFromRow(row) : null;
 }
 
-router.get("/me", async (_req, res): Promise<void> => {
+router.get("/me", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
   const user = getUser(database, currentUserId);
   if (!user) {
@@ -61,12 +61,13 @@ router.get("/me", async (_req, res): Promise<void> => {
 });
 
 router.patch("/me", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const parsed = UpdateMeBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-
+  
   const database = await getDatabase();
   if (parsed.data.displayName !== undefined) {
     execute(
@@ -83,7 +84,7 @@ router.patch("/me", async (req, res): Promise<void> => {
     );
   }
   await persistDatabase(database);
-
+  
   const user = getUser(database, currentUserId);
   if (!user) {
     res.status(404).json({ error: "Profile not found" });
@@ -92,7 +93,8 @@ router.patch("/me", async (req, res): Promise<void> => {
   res.json(UpdateMeResponse.parse(user));
 });
 
-router.get("/chats", async (_req, res): Promise<void> => {
+router.get("/chats", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
   const chatRows = queryRows<{
     id: number;
@@ -108,8 +110,8 @@ router.get("/chats", async (_req, res): Promise<void> => {
       (SELECT content FROM messages WHERE chat_id = c.id ORDER BY id DESC LIMIT 1) AS last_message,
       (SELECT created_at FROM messages WHERE chat_id = c.id ORDER BY id DESC LIMIT 1) AS last_message_at,
       (SELECT COUNT(*) FROM messages WHERE chat_id = c.id AND sender_id != ? AND read_by_me = 0) AS unread_count
-    FROM chats c
-    ORDER BY COALESCE(last_message_at, c.created_at) DESC`,
+     FROM chats c
+     ORDER BY COALESCE(last_message_at, c.created_at) DESC`,
     [currentUserId],
   );
 
@@ -121,7 +123,7 @@ router.get("/chats", async (_req, res): Promise<void> => {
         id: Number(row.id),
         participant,
         lastMessage: row.last_message ?? "Start a conversation",
-      lastMessageAt: row.last_message_at ?? row.chat_created_at,
+        lastMessageAt: row.last_message_at ?? row.chat_created_at,
         unreadCount: Number(row.unread_count),
       },
     ];
@@ -131,12 +133,13 @@ router.get("/chats", async (_req, res): Promise<void> => {
 });
 
 router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const parsed = ListMessagesParams.safeParse(req.params);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-
+  
   const database = await getDatabase();
   const messages = queryRows<{
     id: number;
@@ -172,42 +175,42 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
 });
 
 router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const params = CreateMessageParams.safeParse(req.params);
   const body = CreateMessageBody.safeParse(req.body);
+  
   if (!params.success || !body.success) {
     res.status(400).json({
-    error: params.success
-      ? body.success
-        ? "Invalid request"
-        : body.error.message
-      : params.error.message,
+      error: params.success ? body.error.message : params.error.message,
     });
     return;
   }
-
+  
   const database = await getDatabase();
   const chat = queryRows<{ id: number }>(
     database,
     "SELECT id FROM chats WHERE id = ?",
     [params.data.chatId],
   )[0];
+  
   if (!chat) {
     res.status(404).json({ error: "Chat not found" });
     return;
   }
-
+  
   const content = body.data.content.trim();
   if (!content) {
     res.status(400).json({ error: "Message cannot be empty" });
     return;
   }
-
+  
   const createdAt = new Date().toISOString();
   execute(
     database,
     "INSERT INTO messages (chat_id, sender_id, content, created_at, read_by_me) VALUES (?, ?, ?, ?, 1)",
     [params.data.chatId, currentUserId, content, createdAt],
   );
+  
   const message = queryRows<{
     id: number;
     chat_id: number;
@@ -223,6 +226,7 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
      WHERE m.chat_id = ? ORDER BY m.id DESC LIMIT 1`,
     [params.data.chatId],
   )[0];
+  
   await persistDatabase(database);
 
   const response = CreateMessageResponse.parse({
@@ -234,13 +238,15 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
     createdAt: message.created_at,
     isMine: true,
   });
+  
   broadcastToChat(params.data.chatId, response);
   res.status(201).json(response);
 });
 
-router.get("/wall/posts", async (_req, res): Promise<void> => {
+router.get("/wall/posts", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
-  const posts = queryRows<{
+  const postsRows = queryRows<{
     id: number;
     author_id: number;
     content: string;
@@ -248,7 +254,9 @@ router.get("/wall/posts", async (_req, res): Promise<void> => {
   }>(
     database,
     "SELECT id, author_id, content, created_at FROM wall_posts ORDER BY id DESC",
-  ).flatMap((row) => {
+  );
+
+  const posts = postsRows.flatMap((row) => {
     const author = getUser(database, Number(row.author_id));
     if (!author) return [];
     return [
@@ -260,29 +268,33 @@ router.get("/wall/posts", async (_req, res): Promise<void> => {
       },
     ];
   });
+
   res.json(ListWallPostsResponse.parse(posts));
 });
 
 router.post("/wall/posts", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const parsed = CreateWallPostBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-
+  
   const content = parsed.data.content.trim();
   if (!content) {
     res.status(400).json({ error: "Post cannot be empty" });
     return;
   }
-
+  
   const database = await getDatabase();
   const createdAt = new Date().toISOString();
+  
   execute(
     database,
     "INSERT INTO wall_posts (author_id, content, created_at) VALUES (?, ?, ?)",
     [currentUserId, content, createdAt],
   );
+  
   const post = {
     id: Number(
       queryRows<{ id: number }>(
@@ -294,17 +306,19 @@ router.post("/wall/posts", async (req, res): Promise<void> => {
     content,
     createdAt,
   };
+  
   await persistDatabase(database);
 
   const response = CreateWallPostResponse.parse(post);
   broadcastToWall(response);
   res.status(201).json(response);
 });
+
 // Регистрация нового пользователя
 router.post("/register", async (req, res) => {
   const { username, password, displayName, avatarUrl } = req.body;
   const db = await getDatabase();
-  
+
   const existing = getUserByUsername(db, username);
   if (existing) {
     return res.status(400).json({ error: "Пользователь с таким ником уже существует" });
@@ -313,11 +327,11 @@ router.post("/register", async (req, res) => {
   const userId = createUser(db, username, password, displayName || username, avatarUrl || "");
   await persistDatabase(db);
 
-  return res.json({ 
-    id: userId, 
-    username, 
-    displayName: displayName || username, 
-    avatarUrl: avatarUrl || "" 
+  return res.json({
+    id: userId,
+    username,
+    displayName: displayName || username,
+    avatarUrl: avatarUrl || ""
   });
 });
 
@@ -328,7 +342,7 @@ router.post("/login", async (req, res) => {
 
   const user = getUserByUsername(db, username);
   if (!user || user.password !== password) {
-    return res.status(400).json({ error: "Неверный логин или пароль" });
+    return res.status(403).json({ error: "Неверный логин или пароль" });
   }
 
   return res.json({
@@ -341,6 +355,7 @@ router.post("/login", async (req, res) => {
 
 // Поиск пользователей
 router.get("/users/search", async (req, res) => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const query = String(req.query.q || "");
   const db = await getDatabase();
   const users = searchUsers(db, query, currentUserId);
