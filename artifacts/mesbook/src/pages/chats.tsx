@@ -11,9 +11,10 @@ export default function ChatsPage() {
 
   const visibleChats = useMemo(() => {
     if (!Array.isArray(chatsQuery.data)) return [];
-    return chatsQuery.data.filter((chat) => 
-      chat.participant.displayName.toLowerCase().includes(search.toLowerCase())
-    );
+    return chatsQuery.data.filter((chat) => {
+      const name = chat?.participant?.displayName || "";
+      return name.toLowerCase().includes(search.toLowerCase());
+    });
   }, [chatsQuery.data, search]);
 
   const handleSearch = async (value: string) => {
@@ -32,7 +33,7 @@ export default function ChatsPage() {
           setSearchResults(Array.isArray(users) ? users : []);
         }
       } catch (e) {
-        console.error("Ошибка поиска:", e);
+        console.error("Search error:", e);
         setSearchResults([]);
       }
     } else {
@@ -59,40 +60,52 @@ export default function ChatsPage() {
       {chatsQuery.isLoading ? <LoadingList /> : (
         <div className="px-4">
           {/* Существующие чаты */}
-          {visibleChats.map((chat) => (
-            <Link href={`/chat/${chat.id}`} key={chat.id} className="group flex items-center gap-3 rounded-2xl px-2 py-3.5 transition hover:bg-gray-50">
-              <Avatar url={chat.participant.avatarUrl} />
-              <div className="min-w-0 flex-1">
-                <h2 className="truncate font-bold">{chat.participant.displayName}</h2>
-                <p className="truncate text-sm text-gray-500">{chat.lastMessage}</p>
-              </div>
-              <ArrowUpRight size={16} className="text-gray-400" />
-            </Link>
-          ))}
+          {visibleChats.map((chat) => {
+            const participant = chat?.participant || {};
+            const name = participant.displayName || participant.display_name || participant.username || "Пользователь";
+            const avatar = participant.avatarUrl || participant.avatar_url || "";
+            
+            return (
+              <Link href={`/chat/${chat.id}`} key={chat.id} className="group flex items-center gap-3 rounded-2xl px-2 py-3.5 transition hover:bg-gray-50">
+                <Avatar url={avatar} />
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate font-bold">{name}</h2>
+                  <p className="truncate text-sm text-gray-500">{chat.lastMessage || ""}</p>
+                </div>
+                <ArrowUpRight size={16} className="text-gray-400" />
+              </Link>
+            );
+          })}
 
           {/* Глобальный поиск */}
           {search.length > 2 && searchResults.length > 0 && (
             <div className="mt-4 border-t pt-4">
               <h3 className="text-xs font-bold text-gray-400 uppercase px-2 mb-2">Глобальный поиск</h3>
-              {searchResults.map((user) => (
-                <div key={user.id} className="flex items-center gap-3 rounded-2xl px-2 py-3.5">
-                  <Avatar url={user.avatarUrl} />
-                  <div className="min-w-0 flex-1">
-                    <h2 className="font-bold">{user.displayName}</h2>
+              {searchResults.map((user) => {
+                // Бронебойная защита от undefined
+                const name = user?.displayName || user?.display_name || user?.username || "Неизвестный";
+                const avatar = user?.avatarUrl || user?.avatar_url || "";
+                
+                return (
+                  <div key={user.id} className="flex items-center gap-3 rounded-2xl px-2 py-3.5">
+                    <Avatar url={avatar} />
+                    <div className="min-w-0 flex-1">
+                      <h2 className="font-bold">{name}</h2>
+                    </div>
+                    <button 
+                      onClick={() => {
+                          const storedUser = localStorage.getItem("mesbook_user");
+                          const myId = storedUser ? JSON.parse(storedUser).id : 1;
+                          const chatId = Math.min(myId, user.id) * 10000 + Math.max(myId, user.id);
+                          window.location.href = `/chat/${chatId}`;
+                      }}
+                      className="text-blue-500 font-bold text-sm"
+                    >
+                      Начать
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => {
-                        const storedUser = localStorage.getItem("mesbook_user");
-                        const myId = storedUser ? JSON.parse(storedUser).id : 1;
-                        const chatId = Math.min(myId, user.id) * 10000 + Math.max(myId, user.id);
-                        window.location.href = `/chat/${chatId}`;
-                    }}
-                    className="text-blue-500 font-bold text-sm"
-                  >
-                    Начать
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
