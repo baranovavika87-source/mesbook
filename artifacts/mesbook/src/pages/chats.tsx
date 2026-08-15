@@ -2,7 +2,20 @@ import { useState, useMemo } from 'react';
 import { Link } from 'wouter';
 import { Search, ArrowUpRight } from 'lucide-react';
 import { getListChatsQueryKey, useListChats } from '@workspace/api-client-react';
-import { AppShell, Avatar, LoadingList, PageIntro } from '@/components/mesbook-shell';
+// Обрати внимание: мы удалили капризный Avatar из импорта!
+import { AppShell, LoadingList, PageIntro } from '@/components/mesbook-shell';
+
+// НАШ БРОНЕБОЙНЫЙ АВАТАР (Никогда не вызовет ошибку)
+const SafeAvatar = ({ name, url }: { name: string, url?: string }) => {
+  if (url && url.length > 5) {
+    return <img src={url} alt={name} className="w-10 h-10 rounded-full object-cover shrink-0 border border-gray-100" />;
+  }
+  return (
+    <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold uppercase shrink-0">
+      {name ? name.charAt(0) : "U"}
+    </div>
+  );
+};
 
 export default function ChatsPage() {
   const [search, setSearch] = useState('');
@@ -67,7 +80,7 @@ export default function ChatsPage() {
             
             return (
               <Link href={`/chat/${chat.id}`} key={chat.id} className="group flex items-center gap-3 rounded-2xl px-2 py-3.5 transition hover:bg-gray-50">
-                <Avatar url={avatar} />
+                <SafeAvatar name={name} url={avatar} />
                 <div className="min-w-0 flex-1">
                   <h2 className="truncate font-bold">{name}</h2>
                   <p className="truncate text-sm text-gray-500">{chat.lastMessage || ""}</p>
@@ -82,13 +95,12 @@ export default function ChatsPage() {
             <div className="mt-4 border-t pt-4">
               <h3 className="text-xs font-bold text-gray-400 uppercase px-2 mb-2">Глобальный поиск</h3>
               {searchResults.map((user) => {
-                // Бронебойная защита от undefined
                 const name = user?.displayName || user?.display_name || user?.username || "Неизвестный";
                 const avatar = user?.avatarUrl || user?.avatar_url || "";
                 
                 return (
                   <div key={user.id} className="flex items-center gap-3 rounded-2xl px-2 py-3.5">
-                    <Avatar url={avatar} />
+                    <SafeAvatar name={name} url={avatar} />
                     <div className="min-w-0 flex-1">
                       <h2 className="font-bold">{name}</h2>
                     </div>
@@ -99,7 +111,7 @@ export default function ChatsPage() {
                           const chatId = Math.min(myId, user.id) * 10000 + Math.max(myId, user.id);
                           window.location.href = `/chat/${chatId}`;
                       }}
-                      className="text-blue-500 font-bold text-sm"
+                      className="text-blue-500 font-bold text-sm bg-blue-50 px-3 py-1 rounded-full"
                     >
                       Начать
                     </button>
@@ -112,4 +124,4 @@ export default function ChatsPage() {
       )}
     </AppShell>
   );
-}
+  
