@@ -1,15 +1,14 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'wouter';
-import { Search, ArrowUpRight, MessageCircle, UserPlus } from 'lucide-react';
+import { Search, ArrowUpRight } from 'lucide-react';
 import { getListChatsQueryKey, useListChats } from '@workspace/api-client-react';
-import { AppShell, Avatar, EmptyState, ErrorState, LoadingList, PageIntro } from '@/components/mesbook-shell';
+import { AppShell, Avatar, LoadingList, PageIntro } from '@/components/mesbook-shell';
 
 export default function ChatsPage() {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const chatsQuery = useListChats({ query: { queryKey: getListChatsQueryKey() } });
 
-  // Фильтруем существующие чаты
   const visibleChats = useMemo(() => {
     if (!Array.isArray(chatsQuery.data)) return [];
     return chatsQuery.data.filter((chat) => 
@@ -17,15 +16,25 @@ export default function ChatsPage() {
     );
   }, [chatsQuery.data, search]);
 
-  // Функция для глобального поиска пользователей
   const handleSearch = async (value: string) => {
     setSearch(value);
     if (value.length > 2) {
-      const res = await fetch(`/api/users/search?q=${value}`, {
-        headers: { 'Authorization': `Bearer ${JSON.parse(localStorage.getItem("mesbook_user") || "{}").id}` }
-      });
-      const users = await res.json();
-      setSearchResults(users);
+      try {
+        const storedUser = localStorage.getItem("mesbook_user");
+        const userId = storedUser ? JSON.parse(storedUser).id : 1;
+        
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(value)}`, {
+          headers: { 'Authorization': `Bearer ${userId}` }
+        });
+        
+        if (res.ok) {
+          const users = await res.json();
+          setSearchResults(Array.isArray(users) ? users : []);
+        }
+      } catch (e) {
+        console.error("Ошибка поиска:", e);
+        setSearchResults([]);
+      }
     } else {
       setSearchResults([]);
     }
@@ -39,7 +48,6 @@ export default function ChatsPage() {
         <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-lg">
           <Search size={17} className="text-gray-400" />
           <input 
-            id="input-search-chats" 
             value={search} 
             onChange={(e) => handleSearch(e.target.value)} 
             placeholder="Поиск или @имя пользователя..." 
@@ -49,8 +57,8 @@ export default function ChatsPage() {
       </div>
 
       {chatsQuery.isLoading ? <LoadingList /> : (
-        <div className="px-4 data-testid='list-chats'">
-          {/* Список существующих чатов */}
+        <div className="px-4">
+          {/* Существующие чаты */}
           {visibleChats.map((chat) => (
             <Link href={`/chat/${chat.id}`} key={chat.id} className="group flex items-center gap-3 rounded-2xl px-2 py-3.5 transition hover:bg-gray-50">
               <Avatar url={chat.participant.avatarUrl} />
@@ -62,7 +70,7 @@ export default function ChatsPage() {
             </Link>
           ))}
 
-          {/* Глобальный поиск (если ничего не найдено) */}
+          {/* Глобальный поиск */}
           {search.length > 2 && searchResults.length > 0 && (
             <div className="mt-4 border-t pt-4">
               <h3 className="text-xs font-bold text-gray-400 uppercase px-2 mb-2">Глобальный поиск</h3>
@@ -74,8 +82,8 @@ export default function ChatsPage() {
                   </div>
                   <button 
                     onClick={() => {
-                        // Математическая формула ID чата, которую мы заложили в сервер
-                        const myId = Number(JSON.parse(localStorage.getItem("mesbook_user") || "{}").id);
+                        const storedUser = localStorage.getItem("mesbook_user");
+                        const myId = storedUser ? JSON.parse(storedUser).id : 1;
                         const chatId = Math.min(myId, user.id) * 10000 + Math.max(myId, user.id);
                         window.location.href = `/chat/${chatId}`;
                     }}
@@ -92,4 +100,3 @@ export default function ChatsPage() {
     </AppShell>
   );
 }
-
