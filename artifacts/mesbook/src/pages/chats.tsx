@@ -124,4 +124,4 @@ export default function ChatsPage() {
       )}
     </AppShell>
   );
-  
+}
