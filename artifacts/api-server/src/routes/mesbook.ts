@@ -96,37 +96,37 @@ router.patch("/me", async (req, res): Promise<void> => {
 router.get("/chats", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
+  
   const chatRows = queryRows<{
-    id: number;
+    chat_id: number;
     participant_id: number;
-    chat_created_at: string;
-    created_at: string;
-    last_message: string | null;
-    last_message_at: string | null;
+    last_message: string;
+    last_message_at: string;
     unread_count: number;
   }>(
     database,
-    `SELECT c.id, c.participant_id, c.created_at AS chat_created_at,
-      (SELECT content FROM messages WHERE chat_id = c.id ORDER BY id DESC LIMIT 1) AS last_message,
-      (SELECT created_at FROM messages WHERE chat_id = c.id ORDER BY id DESC LIMIT 1) AS last_message_at,
-      (SELECT COUNT(*) FROM messages WHERE chat_id = c.id AND sender_id != ? AND read_by_me = 0) AS unread_count
-     FROM chats c
-     ORDER BY COALESCE(last_message_at, c.created_at) DESC`,
-    [currentUserId],
+    `SELECT 
+        m.chat_id, 
+        (CASE WHEN m.sender_id = ? THEN (SELECT sender_id FROM messages WHERE chat_id = m.chat_id AND sender_id != ? LIMIT 1) ELSE m.sender_id END) as participant_id,
+        m.content as last_message,
+        m.created_at as last_message_at,
+        (SELECT COUNT(*) FROM messages WHERE chat_id = m.chat_id AND sender_id != ? AND read_by_me = 0) AS unread_count
+     FROM messages m
+     WHERE m.id IN (SELECT MAX(id) FROM messages GROUP BY chat_id)
+     AND (m.chat_id / 10000 = ? OR m.chat_id % 10000 = ?)
+     ORDER BY m.created_at DESC`,
+    [currentUserId, currentUserId, currentUserId, currentUserId, currentUserId]
   );
 
-  const chats = chatRows.flatMap((row) => {
+  const chats = chatRows.map((row) => {
     const participant = getUser(database, Number(row.participant_id));
-    if (!participant) return [];
-    return [
-      {
-        id: Number(row.id),
-        participant,
-        lastMessage: row.last_message ?? "Start a conversation",
-        lastMessageAt: row.last_message_at ?? row.chat_created_at,
-        unreadCount: Number(row.unread_count),
-      },
-    ];
+    return {
+        id: Number(row.chat_id),
+        participant: participant || { id: 0, displayName: "Unknown", avatarUrl: "" },
+        lastMessage: row.last_message,
+        lastMessageAt: row.last_message_at,
+        unreadCount: Number(row.unread_count)
+    };
   });
 
   res.json(ListChatsResponse.parse(chats));
@@ -187,16 +187,6 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   }
   
   const database = await getDatabase();
-  const chat = queryRows<{ id: number }>(
-    database,
-    "SELECT id FROM chats WHERE id = ?",
-    [params.data.chatId],
-  )[0];
-  
-  if (!chat) {
-    res.status(404).json({ error: "Chat not found" });
-    return;
-  }
   
   const content = body.data.content.trim();
   if (!content) {
@@ -314,46 +304,28 @@ router.post("/wall/posts", async (req, res): Promise<void> => {
   res.status(201).json(response);
 });
 
-// Регистрация нового пользователя
 router.post("/register", async (req, res) => {
   const { username, password, displayName, avatarUrl } = req.body;
   const db = await getDatabase();
-
   const existing = getUserByUsername(db, username);
   if (existing) {
     return res.status(400).json({ error: "Пользователь с таким ником уже существует" });
   }
-
   const userId = createUser(db, username, password, displayName || username, avatarUrl || "");
   await persistDatabase(db);
-
-  return res.json({
-    id: userId,
-    username,
-    displayName: displayName || username,
-    avatarUrl: avatarUrl || ""
-  });
+  return res.json({ id: userId, username, displayName: displayName || username, avatarUrl: avatarUrl || "" });
 });
 
-// Авторизация (Вход)
 router.post("/login", async (req, res) => {
   const { username, password } = req.body;
   const db = await getDatabase();
-
   const user = getUserByUsername(db, username);
   if (!user || user.password !== password) {
     return res.status(403).json({ error: "Неверный логин или пароль" });
   }
-
-  return res.json({
-    id: user.id,
-    username: user.username,
-    displayName: user.display_name,
-    avatarUrl: user.avatar_url
-  });
+  return res.json({ id: user.id, username: user.username, displayName: user.display_name, avatarUrl: user.avatar_url });
 });
 
-// Поиск пользователей
 router.get("/users/search", async (req, res) => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const query = String(req.query.q || "");
