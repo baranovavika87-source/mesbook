@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Link } from 'wouter';
 import { Search, ArrowUpRight, MessageCircle, UserPlus } from 'lucide-react';
 import { getListChatsQueryKey, useListChats } from '@workspace/api-client-react';
-import { AppShell, Avatar, EmptyState, ErrorState, LoadingList, PageIntro } from '@/components/mesbook';
+import { AppShell, Avatar, EmptyState, ErrorState, LoadingList, PageIntro } from '@/components/mesbook-shell';
 
 export default function ChatsPage() {
   const [search, setSearch] = useState('');
