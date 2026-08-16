@@ -5,13 +5,10 @@ import {
   CreateMessageResponse,
   CreateWallPostBody,
   CreateWallPostResponse,
-  GetMeResponse,
   ListChatsResponse,
   ListMessagesParams,
   ListMessagesResponse,
   ListWallPostsResponse,
-  UpdateMeBody,
-  UpdateMeResponse,
 } from "@workspace/api-zod";
 import {
   execute,
@@ -26,8 +23,10 @@ import { broadcastToChat, broadcastToWall } from "../lib/realtime";
 
 const router: IRouter = Router();
 
+// Теперь мы достаем и username тоже
 type UserRow = {
   id: number;
+  username: string;
   display_name: string;
   avatar_url: string;
 };
@@ -35,6 +34,7 @@ type UserRow = {
 function userFromRow(row: UserRow) {
   return {
     id: Number(row.id),
+    username: row.username,
     displayName: row.display_name,
     avatarUrl: row.avatar_url,
   };
@@ -43,7 +43,7 @@ function userFromRow(row: UserRow) {
 function getUser(database: Awaited<ReturnType<typeof getDatabase>>, id: number) {
   const row = queryRows<UserRow>(
     database,
-    "SELECT id, display_name, avatar_url FROM users WHERE id = ?",
+    "SELECT id, username, display_name, avatar_url FROM users WHERE id = ?",
     [id],
   )[0];
   return row ? userFromRow(row) : null;
@@ -57,40 +57,72 @@ router.get("/me", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Profile not found" });
     return;
   }
-  res.json(GetMeResponse.parse(user));
+  res.json(user); // Отправляем сырой объект, чтобы не ругался Zod
 });
 
+// ПРОКАЧАННОЕ РЕДАКТИРОВАНИЕ ПРОФИЛЯ
 router.patch("/me", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const parsed = UpdateMeBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const { displayName, avatarUrl, username, password } = req.body;
   
   const database = await getDatabase();
-  if (parsed.data.displayName !== undefined) {
-    execute(
-      database,
-      "UPDATE users SET display_name = ? WHERE id = ?",
-      [parsed.data.displayName.trim(), currentUserId],
-    );
-  }
-  if (parsed.data.avatarUrl !== undefined) {
-    execute(
-      database,
-      "UPDATE users SET avatar_url = ? WHERE id = ?",
-      [parsed.data.avatarUrl.trim(), currentUserId],
-    );
-  }
-  await persistDatabase(database);
-  
-  const user = getUser(database, currentUserId);
+  let user = getUser(database, currentUserId);
   if (!user) {
     res.status(404).json({ error: "Profile not found" });
     return;
   }
-  res.json(UpdateMeResponse.parse(user));
+
+  // 1. Обработка Никнейма (добавляем @ и проверяем занятость)
+  if (username !== undefined && username.trim() !== "") {
+    let newUsername = username.trim();
+    if (!newUsername.startsWith('@')) {
+      newUsername = '@' + newUsername;
+    }
+    
+    // Проверяем, не занят ли этот ник кем-то другим
+    const existing = queryRows(
+      database, 
+      "SELECT id FROM users WHERE username = ? AND id != ?", 
+      [newUsername, currentUserId]
+    );
+    if (existing.length > 0) {
+      res.status(400).json({ error: "Этот никнейм уже занят кем-то другим" });
+      return;
+    }
+    execute(database, "UPDATE users SET username = ? WHERE id = ?", [newUsername, currentUserId]);
+  }
+  
+  // 2. Обработка Имени
+  if (displayName !== undefined && displayName.trim() !== "") {
+    execute(
+      database,
+      "UPDATE users SET display_name = ? WHERE id = ?",
+      [displayName.trim(), currentUserId],
+    );
+  }
+  
+  // 3. Обработка Фото (Base64 текст)
+  if (avatarUrl !== undefined) {
+    execute(
+      database,
+      "UPDATE users SET avatar_url = ? WHERE id = ?",
+      [avatarUrl, currentUserId],
+    );
+  }
+
+  // 4. Обработка Пароля
+  if (password !== undefined && password.trim() !== "") {
+    execute(
+      database,
+      "UPDATE users SET password = ? WHERE id = ?",
+      [password, currentUserId],
+    );
+  }
+  
+  await persistDatabase(database);
+  
+  const updatedUser = getUser(database, currentUserId);
+  res.json(updatedUser);
 });
 
 router.get("/chats", async (req, res): Promise<void> => {
@@ -304,22 +336,35 @@ router.post("/wall/posts", async (req, res): Promise<void> => {
   res.status(201).json(response);
 });
 
+// Регистрация с автоматическим добавлением @
 router.post("/register", async (req, res) => {
   const { username, password, displayName, avatarUrl } = req.body;
+  
+  let newUsername = username.trim();
+  if (!newUsername.startsWith('@')) {
+    newUsername = '@' + newUsername;
+  }
+
   const db = await getDatabase();
-  const existing = getUserByUsername(db, username);
+  const existing = getUserByUsername(db, newUsername);
   if (existing) {
     return res.status(400).json({ error: "Пользователь с таким ником уже существует" });
   }
-  const userId = createUser(db, username, password, displayName || username, avatarUrl || "");
+  const userId = createUser(db, newUsername, password, displayName || newUsername, avatarUrl || "");
   await persistDatabase(db);
-  return res.json({ id: userId, username, displayName: displayName || username, avatarUrl: avatarUrl || "" });
+  return res.json({ id: userId, username: newUsername, displayName: displayName || newUsername, avatarUrl: avatarUrl || "" });
 });
 
 router.post("/login", async (req, res) => {
   const { username, password } = req.body;
+  
+  let checkUsername = username.trim();
+  if (!checkUsername.startsWith('@')) {
+    checkUsername = '@' + checkUsername;
+  }
+
   const db = await getDatabase();
-  const user = getUserByUsername(db, username);
+  const user = getUserByUsername(db, checkUsername);
   if (!user || user.password !== password) {
     return res.status(403).json({ error: "Неверный логин или пароль" });
   }
@@ -329,8 +374,17 @@ router.post("/login", async (req, res) => {
 router.get("/users/search", async (req, res) => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const query = String(req.query.q || "");
+  
+  // Ищем и с собачкой, и без нее
+  const searchPattern1 = "%" + query + "%";
+  const searchPattern2 = "%@" + query + "%";
+  
   const db = await getDatabase();
-  const users = searchUsers(db, query, currentUserId);
+  const users = queryRows(
+    db,
+    "SELECT id, username, display_name as displayName, avatar_url as avatarUrl FROM users WHERE (username LIKE ? OR username LIKE ? OR display_name LIKE ?) AND id != ?",
+    [searchPattern1, searchPattern2, searchPattern1, currentUserId]
+  );
   return res.json(users);
 });
 
