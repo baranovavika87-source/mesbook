@@ -58,12 +58,14 @@ export async function persistDatabase(database: Database): Promise<void> {
 }
 
 function seed(database: Database): void {  
+  // ДОБАВЛЕНО: last_seen INTEGER DEFAULT 0
   run(database, `CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     display_name TEXT NOT NULL,
-    avatar_url TEXT DEFAULT ''
+    avatar_url TEXT DEFAULT '',
+    last_seen INTEGER DEFAULT 0
   )`);
 
   run(database, `CREATE TABLE IF NOT EXISTS chats (
@@ -120,17 +122,18 @@ export function getDatabase(): Promise<Database> {
 export function getUserByUsername(db: any, username: string) {
   const rows = queryRows(
     db,
-    "SELECT id, username, password, display_name, avatar_url FROM users WHERE username = ?",
+    "SELECT id, username, password, display_name, avatar_url, last_seen FROM users WHERE username = ?",
     [username]
   );
   return rows[0] || null;
 }
 
 export function createUser(db: any, username: string, password: string, displayName: string, avatarUrl?: string) {
+  // ДОБАВЛЕНО: записываем текущее время при регистрации
   execute(
     db,
-    "INSERT INTO users (username, password, display_name, avatar_url) VALUES (?, ?, ?, ?)",
-    [username, password, displayName, avatarUrl || ""]
+    "INSERT INTO users (username, password, display_name, avatar_url, last_seen) VALUES (?, ?, ?, ?, ?)",
+    [username, password, displayName, avatarUrl || "", Date.now()]
   );
   const rows = queryRows<{ id: number }>(db, "SELECT last_insert_rowid() as id");
   return rows[0]?.id || 1;
@@ -140,7 +143,8 @@ export function searchUsers(db: any, query: string, currentUserId: number) {
   const searchPattern = "%" + query + "%";
   return queryRows(
     db,
-    "SELECT id, display_name as displayName, avatar_url as avatarUrl FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?",
+    "SELECT id, display_name as displayName, avatar_url as avatarUrl, last_seen FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?",
     [searchPattern, searchPattern, currentUserId]
   );
 }
+
