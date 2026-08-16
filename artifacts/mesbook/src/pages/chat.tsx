@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
 import { ArrowLeft, Send } from 'lucide-react';
-import { useListMessages, useCreateMessage, getListChatsQueryKey, useListChats } from '@workspace/api-client-react';
+import { useListMessages, useCreateMessage, useListChats } from '@workspace/api-client-react';
 import { AppShell } from '@/components/mesbook-shell';
 
 const SafeAvatar = ({ name, url, isOnline }: { name: string, url?: string, isOnline?: boolean }) => {
@@ -32,12 +32,10 @@ export default function ChatPage() {
     query: { refetchInterval: 1000 }
   });
 
-  const chatsQuery = useListChats({ 
-    query: { queryKey: getListChatsQueryKey(), refetchInterval: 5000 } 
-  });
-
+  const chatsQuery = useListChats({ query: { refetchInterval: 5000 } });
   const createMessage = useCreateMessage();
 
+  // ПУЛЬС
   useEffect(() => {
     const sendPing = async () => {
       const storedUser = localStorage.getItem("mesbook_user");
@@ -56,16 +54,12 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messagesQuery.data]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
-    
-    // Бросаем вызов отправки
     try {
       await createMessage.mutateAsync({ params: { chatId }, body: { content } });
       setContent('');
@@ -74,22 +68,17 @@ export default function ChatPage() {
     }
   };
 
-  const participant = useMemo(() => {
-    if (!Array.isArray(chatsQuery.data)) return null;
-    return chatsQuery.data.find((c: any) => c.id === chatId)?.participant;
-  }, [chatsQuery.data, chatId]);
-
+  // Ищем участника
+  const chat = Array.isArray(chatsQuery.data) ? chatsQuery.data.find((c: any) => c.id === chatId) : null;
+  const participant = chat?.participant;
   const isOnline = participant?.lastSeen ? (Date.now() - participant.lastSeen) < 60000 : false;
-  // Fallback: если имя не нашли, пишем "Собеседник"
   const name = participant?.displayName || participant?.username || "Собеседник";
   const avatar = participant?.avatarUrl || "";
 
   return (
     <AppShell>
       <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-100 bg-white/80 p-4 backdrop-blur-md">
-        <Link href="/" className="rounded-full p-2 hover:bg-gray-100 transition">
-          <ArrowLeft size={20} />
-        </Link>
+        <Link href="/" className="rounded-full p-2 hover:bg-gray-100 transition"><ArrowLeft size={20} /></Link>
         <SafeAvatar name={name} url={avatar} isOnline={isOnline} />
         <div>
           <h2 className="font-bold capitalize">{name}</h2>
