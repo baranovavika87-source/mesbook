@@ -1,132 +1,149 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useParams } from 'wouter';
-import { ArrowLeft, Send, Wifi, WifiOff } from 'lucide-react';
-import { getListChatsQueryKey, getListMessagesQueryKey, useCreateMessage, useListChats, useListMessages } from '@workspace/api-client-react';
-import type { Message } from '@workspace/api-client-react';
-import { AppShell, Avatar, ErrorState, LoadingList, formatTime } from '@/components/mesbook-shell';
-import { useQueryClient } from '@tanstack/react-query';
-import { io } from 'socket.io-client';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useRoute, Link } from 'wouter';
+import { ArrowLeft, Send } from 'lucide-react';
+import { useListMessages, useCreateMessage, getListChatsQueryKey, useListChats } from '@workspace/api-client-react';
+import { AppShell } from '@/components/mesbook-shell';
+
+// НАШ БРОНЕБОЙНЫЙ АВАТАР С ЗЕЛЕНОЙ ТОЧКОЙ
+const SafeAvatar = ({ name, url, isOnline }: { name: string, url?: string, isOnline?: boolean }) => {
+  return (
+    <div className="relative inline-block shrink-0">
+      {url && url.length > 5 ? (
+        <img src={url} alt={name} className="w-10 h-10 rounded-full object-cover border border-gray-100" />
+      ) : (
+        <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold uppercase">
+          {name ? name.charAt(0) : "U"}
+        </div>
+      )}
+      {isOnline && (
+        <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-green-500 border-2 border-white shadow-sm"></span>
+      )}
+    </div>
+  );
+};
 
 export default function ChatPage() {
-  const params = useParams<{ chatId: string }>();
-  const chatId = Number(params.chatId);
-  const [, setLocation] = useLocation();
-  const queryClient = useQueryClient();
-  const { data: chats } = useListChats({ query: { queryKey: getListChatsQueryKey() } });
-  const messagesQuery = useListMessages(chatId, { query: { queryKey: getListMessagesQueryKey(chatId), enabled: Number.isFinite(chatId) && chatId > 0 } });
-  const sendMessage = useCreateMessage();
+  const [, params] = useRoute('/chat/:id');
+  const chatId = Number(params?.id);
   const [content, setContent] = useState('');
-  const [liveMessages, setLiveMessages] = useState<Message[]>([]);
-  const [socketReady, setSocketReady] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
-  const socketRef = useRef<any>(null);
-  const typingTimeout = useRef<any>(null);
-  const endRef = useRef<HTMLDivElement>(null);
-  const chat = useMemo(() => chats?.find((item) => item.id === chatId), [chats, chatId]);
-  const messages = useMemo(() => {
-    const ids = new Set((messagesQuery.data ?? []).map((message) => message.id));
-    return [...(messagesQuery.data ?? []), ...liveMessages.filter((message) => !ids.has(message.id))].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }, [messagesQuery.data, liveMessages]);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const addLiveMessage = (message: Message) => {
-    setLiveMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
-  };
+  // Получаем сообщения (автоматически обновляются каждую секунду)
+  const messagesQuery = useListMessages({
+    params: { chatId },
+    query: { refetchInterval: 1000 }
+  });
 
+  // Получаем данные о собеседнике (обновляем каждые 5 секунд для проверки его онлайна)
+  const chatsQuery = useListChats({ 
+    query: { queryKey: getListChatsQueryKey(), refetchInterval: 5000 } 
+  });
+
+  const createMessage = useCreateMessage();
+
+  // ПУЛЬС: Отправляем сигнал на сервер даже когда мы внутри чата!
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
-
-     useEffect(() => {
-    const socket = io({
-      path: '/socket.io',
-      transports: ['websocket', 'polling']
-    });
-    socketRef.current = socket; 
-
-    const handler = (message: Message) => {
-      if (message.chatId === chatId) {
-        addLiveMessage(message);
-      }
+    const sendPing = async () => {
+      const storedUser = localStorage.getItem("mesbook_user");
+      if (!storedUser) return;
+      const userId = JSON.parse(storedUser).id;
+      try {
+        await fetch('/api/ping', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${userId}` }
+        });
+      } catch (e) {}
     };
-
-    const handleConnect = () => {
-      setSocketReady(true);
-      socket.emit('join-chat', chatId);
-    };
-
-    const handleDisconnect = () => setSocketReady(false);
-
-    socket.on('connect', handleConnect);
-    socket.on('disconnect', handleDisconnect);
-    socket.on('chat:message', handler);
     
-    // Новые слушатели для индикатора печати
-    socket.on('user:typing', () => setIsTyping(true));
-    socket.on('user:stopTyping', () => setIsTyping(false));
+    sendPing();
+    const interval = setInterval(sendPing, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-    return () => {
-      socket.emit('leave-chat', chatId);
-      socket.off('connect', handleConnect);
-      socket.off('disconnect', handleDisconnect);
-      socket.off('chat:message', handler);
-      socket.off('user:typing');
-      socket.off('user:stopTyping');
-      socket.disconnect();
-    };
-  }, [chatId]);
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    const trimmed = content.trim();
-    if (!trimmed || sendMessage.isPending || !Number.isFinite(chatId)) return;
-    sendMessage.mutate({ chatId, data: { content: trimmed } }, {
-      onSuccess: (message) => {
-        setContent('');
-         addLiveMessage(message);
-        queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(chatId) });
-        queryClient.invalidateQueries({ queryKey: getListChatsQueryKey() });
-      },
-    });
+  // Автопрокрутка вниз при новом сообщении
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messagesQuery.data]);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!content.trim()) return;
+    
+    try {
+      await createMessage.mutateAsync({ params: { chatId }, body: { content } });
+      setContent(''); // Очищаем поле после отправки
+    } catch (error) {
+      console.error("Failed to send message:", error);
+    }
   };
+
+  // Ищем собеседника, чтобы нарисовать его аватарку
+  const participant = useMemo(() => {
+    if (!Array.isArray(chatsQuery.data)) return null;
+    const chat = chatsQuery.data.find((c: any) => c.id === chatId);
+    return chat?.participant;
+  }, [chatsQuery.data, chatId]);
+
+  // Проверка: онлайн ли собеседник?
+  const isOnline = participant?.lastSeen ? (Date.now() - participant.lastSeen) < 60000 : false;
+  const name = participant?.displayName || participant?.username || "Собеседник";
+  const avatar = participant?.avatarUrl || "";
 
   return (
-    <AppShell fullScreen>
-      <div className="flex min-h-[100dvh] flex-col bg-[hsl(var(--card))]">
-        <header className="sticky top-0 z-10 flex h-[76px] items-center gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--card)/.94)] px-5 backdrop-blur-xl">
-          <Link href="/" className="flex h-10 w-10 items-center justify-center rounded-full text-[hsl(var(--foreground))] transition-colors hover:bg-[hsl(var(--background))]" aria-label="Back to chats" data-testid="link-back-chats"><ArrowLeft size={20} /></Link>
-          {chat ? <><Avatar name={chat.participant.displayName} url={chat.participant.avatarUrl} size="sm" testId="img-chat-header-avatar" /><div className="min-w-0 flex-1"><h1 className="truncate font-display text-[15px] font-bold" data-testid="text-chat-header-name">{chat.participant.displayName}</h1><p className="text-[11px] text-[hsl(var(--muted-foreground))]">{socketReady ? 'Live conversation' : 'Private conversation'}</p></div></> : <div className="flex-1"><h1 className="font-display font-bold">Conversation</h1></div>}
-          {socketReady ? <Wifi size={15} className="text-[hsl(var(--accent))]" aria-label="Live connection" data-testid="status-socket-live" /> : <WifiOff size={15} className="text-[hsl(var(--muted-foreground))]" aria-label="API connection" data-testid="status-socket-api" />}
-        </header>
-        <div className="flex-1 overflow-y-auto px-5 py-6">
-          {!messagesQuery.isLoading && messages.length > 0 && <p className="mb-7 text-center text-[11px] font-semibold uppercase tracking-[.16em] text-[hsl(var(--muted-foreground))]">Today</p>}
-          {messagesQuery.isLoading ? <LoadingList count={5} /> : messagesQuery.isError ? <ErrorState onRetry={() => messagesQuery.refetch()} /> : messages.length === 0 ? <div className="flex min-h-[50vh] flex-col items-center justify-center text-center"><div className="mb-4 h-px w-10 bg-[hsl(var(--primary))]" /><h2 className="font-display text-lg font-bold">A blank page, for now.</h2><p className="mt-2 max-w-[230px] text-sm leading-5 text-[hsl(var(--muted-foreground))]">Send the first note and make this space yours.</p></div> : (
-            <div className="space-y-3" data-testid="list-messages">
-              {messages.map((message, index) => <div className={`flex animate-rise-in ${message.isMine ? 'justify-end' : 'justify-start'}`} style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }} data-testid={`message-${message.id}`} key={`${message.id}-${message.createdAt}`}><div className={`max-w-[78%] ${message.isMine ? 'items-end' : 'items-start'} flex flex-col`}><div className={`rounded-[20px] px-4 py-3 text-[14px] leading-5 ${message.isMine ? 'rounded-br-md bg-[hsl(var(--primary))] text-white' : 'rounded-bl-md bg-[hsl(var(--background))] text-[hsl(var(--foreground))]'}`} data-testid={`text-message-content-${message.id}`}>{message.content}</div><time className="mt-1 px-1 text-[10px] text-[hsl(var(--muted-foreground))]" dateTime={message.createdAt}>{formatTime(message.createdAt)}</time></div></div>)}
-              <div ref={endRef} />
-            </div>
-          )}
+    <AppShell>
+      {/* Шапка чата */}
+      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-100 bg-white/80 p-4 backdrop-blur-md">
+        <Link href="/" className="rounded-full p-2 hover:bg-gray-100 transition">
+          <ArrowLeft size={20} />
+        </Link>
+        <SafeAvatar name={name} url={avatar} isOnline={isOnline} />
+        <div>
+          <h2 className="font-bold capitalize">{name}</h2>
+          <p className={`text-xs transition-colors duration-500 ${isOnline ? 'text-green-500 font-bold' : 'text-gray-400'}`}>
+            {isOnline ? 'В сети' : 'Был(а) недавно'}
+          </p>
         </div>
-                {isTyping && (
-          <div className="text-xs text-muted-foreground px-4 py-2 italic animate-pulse">
-            {chat?.participant.displayName} печатает...
-          </div>
-        )}
+      </div>
+
+      {/* Поле с сообщениями */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="text-center text-xs font-bold tracking-widest text-gray-400 uppercase my-6">
+          СЕГОДНЯ
+        </div>
         
-        <form onSubmit={handleSubmit} className="sticky bottom-0 flex gap-2 border-t border-[hsl(var(--border))] bg-[hsl(var(--card)/.96)] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
-          <textarea value={content}             onChange={(event) => {
-              setContent(event.target.value);
-              if (socketRef.current) {
-                socketRef.current.emit('typing', { chatId });
-                if (typingTimeout.current) clearTimeout(typingTimeout.current);
-                typingTimeout.current = setTimeout(() => {
-                  socketRef.current.emit('stopTyping', { chatId });
-                }, 2000);
-              }
-            }}
-            rows={1} maxLength={2000} placeholder="Write something private…" className="max-h-28 min-h-11 flex-1 resize-none rounded-2xl bg-[hsl(var(--background))] px-4 py-3 text-sm leading-5 outline-none placeholder:text-[hsl(var(--muted-foreground))]" aria-label="Message" data-testid="input-message" />
-          <button type="submit" disabled={!content.trim() || sendMessage.isPending} className="flex h-11 w-11 shrink-0 items-center justify-center self-end rounded-full bg-[hsl(var(--primary))] text-white transition-all hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Send message" data-testid="button-send-message"><Send size={17} className={sendMessage.isPending ? 'animate-pulse' : ''} /></button>
-          {sendMessage.isError && <span className="absolute bottom-1 left-5 text-[10px] text-[hsl(var(--destructive))]" data-testid="status-send-error">Could not send. Try again.</span>}
+        {messagesQuery.data?.map((msg: any) => (
+          <div key={msg.id} className={`flex ${msg.isMine ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[75%] rounded-3xl px-5 py-3 shadow-sm ${msg.isMine ? 'bg-[#9c5961] text-white rounded-br-none' : 'bg-white border border-gray-100 text-gray-900 rounded-bl-none'}`}>
+              <p>{msg.content}</p>
+              <p className={`text-[10px] mt-1 text-right ${msg.isMine ? 'text-white/70' : 'text-gray-400'}`}>
+                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Поле ввода */}
+      <div className="border-t border-gray-100 bg-white p-4 pb-8">
+        <form onSubmit={handleSend} className="flex items-center gap-2 rounded-full bg-gray-50 p-2 border border-gray-200">
+          <input
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            placeholder="Write something private..."
+            className="flex-1 bg-transparent px-4 py-2 outline-none"
+          />
+          <button
+            type="submit"
+            disabled={!content.trim() || createMessage.isPending}
+            className="rounded-full bg-[#9c5961] p-3 text-white disabled:opacity-50 transition active:scale-95 shadow-md hover:bg-opacity-90"
+          >
+            <Send size={18} />
+          </button>
         </form>
       </div>
     </AppShell>
   );
 }
+
