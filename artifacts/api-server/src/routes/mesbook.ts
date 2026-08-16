@@ -219,8 +219,8 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
 });
 
 router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
-  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const params = CreateMessageParams.safeParse(req.params);
+    // ИСПРАВЛЕНИЕ: Превращаем chatId в число перед проверкой
+  const params = CreateMessageParams.safeParse({ chatId: Number(req.params.chatId) });
   const body = CreateMessageBody.safeParse(req.body);
   
   if (!params.success || !body.success) {
