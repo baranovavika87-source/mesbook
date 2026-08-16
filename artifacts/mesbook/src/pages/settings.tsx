@@ -10,7 +10,6 @@ export default function SettingsPage() {
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
 
-  // При загрузке страницы достаем данные пользователя из памяти
   useEffect(() => {
     const stored = localStorage.getItem("mesbook_user");
     if (stored) {
@@ -22,15 +21,31 @@ export default function SettingsPage() {
     }
   }, []);
 
-  // МАГИЯ: Конвертация картинки из галереи в текст (Base64)
+  // МАГИЯ 2.0: Сжатие картинки перед отправкой (как в Telegram)
   const handleImageUpload = (e: any) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setAvatarUrl(reader.result as string); // Сохраняем текстовый код картинки
+        const img = new Image();
+        img.onload = () => {
+          // Создаем невидимый холст для сжатия
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 300; // Уменьшаем размер до 300 пикселей (для аватарки идеален)
+          const scaleSize = MAX_WIDTH / img.width;
+          canvas.width = MAX_WIDTH;
+          canvas.height = img.height * scaleSize;
+
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          // Превращаем в легкий JPEG (качество 70%)
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          setAvatarUrl(compressedBase64); // Сохраняем уже сжатую версию
+        };
+        img.src = reader.result as string;
       };
-      reader.readAsDataURL(file); // Запускаем процесс чтения файла
+      reader.readAsDataURL(file);
     }
   };
 
@@ -51,13 +66,12 @@ export default function SettingsPage() {
 
       if (res.ok) {
         const updated = await res.json();
-        // Обновляем память браузера новыми данными
         localStorage.setItem("mesbook_user", JSON.stringify(updated));
         setMessage('Профиль успешно обновлен! 🎉');
-        setPassword(''); // Очищаем поле пароля ради безопасности
+        setPassword(''); 
       } else {
         const err = await res.json();
-        setMessage('Ошибка: ' + err.error);
+        setMessage('Ошибка: ' + (err.error || 'Что-то пошло не так'));
         setIsError(true);
       }
     } catch(e) {
@@ -71,14 +85,12 @@ export default function SettingsPage() {
       <PageIntro eyebrow="Settings" title="Профиль" subtitle="Настройте свой аккаунт" />
       
       <div className="px-5 pb-5 space-y-6">
-        {/* Всплывающее сообщение об успехе или ошибке */}
         {message && (
           <div className={`p-4 font-bold rounded-2xl ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
             {message}
           </div>
         )}
 
-        {/* Блок изменения фото */}
         <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
           <label className="block text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Фото профиля</label>
           <div className="flex items-center gap-5">
@@ -91,13 +103,11 @@ export default function SettingsPage() {
             )}
             <label className="bg-indigo-600 text-white px-5 py-3 rounded-2xl font-bold text-sm cursor-pointer hover:bg-indigo-700 transition active:scale-95 shadow-md">
               Выбрать из галереи
-              {/* Скрытый инпут для вызова галереи телефона */}
               <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
             </label>
           </div>
         </div>
 
-        {/* Блок текстовых данных */}
         <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 space-y-4">
           <div>
             <label className="block text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Имя</label>
