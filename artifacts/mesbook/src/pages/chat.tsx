@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
 import { ArrowLeft, Send } from 'lucide-react';
-import { useListMessages, useCreateMessage, useListChats } from '@workspace/api-client-react';
+import { useListMessages, useListChats } from '@workspace/api-client-react';
 import { AppShell } from '@/components/mesbook-shell';
 
 const SafeAvatar = ({ name, url, isOnline }: { name: string, url?: string, isOnline?: boolean }) => {
@@ -33,7 +33,6 @@ export default function ChatPage() {
   });
 
   const chatsQuery = useListChats({ query: { refetchInterval: 5000 } });
-  const createMessage = useCreateMessage();
 
   // ПУЛЬС
   useEffect(() => {
@@ -57,18 +56,36 @@ export default function ChatPage() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messagesQuery.data]);
 
+  // УЛЬТРА-НАДЕЖНАЯ ОТПРАВКА
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
+    
+    const storedUser = localStorage.getItem("mesbook_user");
+    const userId = storedUser ? JSON.parse(storedUser).id : 1;
+
     try {
-      await createMessage.mutateAsync({ params: { chatId }, body: { content } });
+      const res = await fetch(`/api/chats/${chatId}/messages`, {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${userId}` 
+        },
+        body: JSON.stringify({ content })
+      });
+      
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Ошибка сервера");
+      }
+      
       setContent('');
-    } catch (error) {
-      console.error("Failed to send message:", error);
+    } catch (error: any) {
+      alert("Ошибка отправки: " + error.message);
+      console.error("Failed to send:", error);
     }
   };
 
-  // Ищем участника
   const chat = Array.isArray(chatsQuery.data) ? chatsQuery.data.find((c: any) => c.id === chatId) : null;
   const participant = chat?.participant;
   const isOnline = participant?.lastSeen ? (Date.now() - participant.lastSeen) < 60000 : false;
@@ -117,3 +134,4 @@ export default function ChatPage() {
     </AppShell>
   );
 }
+
