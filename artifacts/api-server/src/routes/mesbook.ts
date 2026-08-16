@@ -23,12 +23,13 @@ import { broadcastToChat, broadcastToWall } from "../lib/realtime";
 
 const router: IRouter = Router();
 
-// Теперь мы достаем и username тоже
+// ДОБАВЛЕНО: last_seen
 type UserRow = {
   id: number;
   username: string;
   display_name: string;
   avatar_url: string;
+  last_seen: number; 
 };
 
 function userFromRow(row: UserRow) {
@@ -37,17 +38,34 @@ function userFromRow(row: UserRow) {
     username: row.username,
     displayName: row.display_name,
     avatarUrl: row.avatar_url,
+    lastSeen: Number(row.last_seen) || 0, // Отдаем время пульса
   };
 }
 
 function getUser(database: Awaited<ReturnType<typeof getDatabase>>, id: number) {
   const row = queryRows<UserRow>(
     database,
-    "SELECT id, username, display_name, avatar_url FROM users WHERE id = ?",
+    "SELECT id, username, display_name, avatar_url, last_seen FROM users WHERE id = ?",
     [id],
   )[0];
   return row ? userFromRow(row) : null;
 }
+
+// НОВЫЙ МАРШРУТ: Прием "Пульса" (Heartbeat) от пользователей
+router.post("/ping", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]);
+  if (!currentUserId) { 
+    res.status(401).json({ error: "Unauthorized" }); 
+    return; 
+  }
+  
+  const database = await getDatabase();
+  // Обновляем время последнего визита на текущую миллисекунду
+  execute(database, "UPDATE users SET last_seen = ? WHERE id = ?", [Date.now(), currentUserId]);
+  await persistDatabase(database);
+  
+  res.json({ success: true });
+});
 
 router.get("/me", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
@@ -57,10 +75,9 @@ router.get("/me", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Profile not found" });
     return;
   }
-  res.json(user); // Отправляем сырой объект, чтобы не ругался Zod
+  res.json(user);
 });
 
-// ПРОКАЧАННОЕ РЕДАКТИРОВАНИЕ ПРОФИЛЯ
 router.patch("/me", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const { displayName, avatarUrl, username, password } = req.body;
@@ -72,14 +89,12 @@ router.patch("/me", async (req, res): Promise<void> => {
     return;
   }
 
-  // 1. Обработка Никнейма (добавляем @ и проверяем занятость)
   if (username !== undefined && username.trim() !== "") {
     let newUsername = username.trim();
     if (!newUsername.startsWith('@')) {
       newUsername = '@' + newUsername;
     }
     
-    // Проверяем, не занят ли этот ник кем-то другим
     const existing = queryRows(
       database, 
       "SELECT id FROM users WHERE username = ? AND id != ?", 
@@ -92,7 +107,6 @@ router.patch("/me", async (req, res): Promise<void> => {
     execute(database, "UPDATE users SET username = ? WHERE id = ?", [newUsername, currentUserId]);
   }
   
-  // 2. Обработка Имени
   if (displayName !== undefined && displayName.trim() !== "") {
     execute(
       database,
@@ -101,7 +115,6 @@ router.patch("/me", async (req, res): Promise<void> => {
     );
   }
   
-  // 3. Обработка Фото (Base64 текст)
   if (avatarUrl !== undefined) {
     execute(
       database,
@@ -110,7 +123,6 @@ router.patch("/me", async (req, res): Promise<void> => {
     );
   }
 
-  // 4. Обработка Пароля
   if (password !== undefined && password.trim() !== "") {
     execute(
       database,
@@ -154,7 +166,7 @@ router.get("/chats", async (req, res): Promise<void> => {
     const participant = getUser(database, Number(row.participant_id));
     return {
         id: Number(row.chat_id),
-        participant: participant || { id: 0, displayName: "Unknown", avatarUrl: "" },
+        participant: participant || { id: 0, displayName: "Unknown", avatarUrl: "", lastSeen: 0 },
         lastMessage: row.last_message,
         lastMessageAt: row.last_message_at,
         unreadCount: Number(row.unread_count)
@@ -336,7 +348,6 @@ router.post("/wall/posts", async (req, res): Promise<void> => {
   res.status(201).json(response);
 });
 
-// Регистрация с автоматическим добавлением @
 router.post("/register", async (req, res) => {
   const { username, password, displayName, avatarUrl } = req.body;
   
@@ -368,6 +379,11 @@ router.post("/login", async (req, res) => {
   if (!user || user.password !== password) {
     return res.status(403).json({ error: "Неверный логин или пароль" });
   }
+  
+  // При входе сразу обновляем онлайн
+  execute(db, "UPDATE users SET last_seen = ? WHERE id = ?", [Date.now(), user.id]);
+  await persistDatabase(db);
+  
   return res.json({ id: user.id, username: user.username, displayName: user.display_name, avatarUrl: user.avatar_url });
 });
 
@@ -375,17 +391,18 @@ router.get("/users/search", async (req, res) => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const query = String(req.query.q || "");
   
-  // Ищем и с собачкой, и без нее
   const searchPattern1 = "%" + query + "%";
   const searchPattern2 = "%@" + query + "%";
   
   const db = await getDatabase();
+  // ДОБАВЛЕНО: Теперь поиск тоже возвращает last_seen
   const users = queryRows(
     db,
-    "SELECT id, username, display_name as displayName, avatar_url as avatarUrl FROM users WHERE (username LIKE ? OR username LIKE ? OR display_name LIKE ?) AND id != ?",
+    "SELECT id, username, display_name as displayName, avatar_url as avatarUrl, last_seen as lastSeen FROM users WHERE (username LIKE ? OR username LIKE ? OR display_name LIKE ?) AND id != ?",
     [searchPattern1, searchPattern2, searchPattern1, currentUserId]
   );
   return res.json(users);
 });
 
 export default router;
+
