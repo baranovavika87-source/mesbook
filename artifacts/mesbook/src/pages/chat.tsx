@@ -43,7 +43,7 @@ export default function ChatPage() {
         setMessages(Array.isArray(data) ? data : []);
       }
     } catch (e) {
-      console.error(e);
+      // Ошибки сети (Failed to fetch) игнорируем, так как через секунду будет новый запрос
     }
   };
 
@@ -100,7 +100,7 @@ export default function ChatPage() {
         loadMessages();
       }
     } catch (error: any) {
-      console.error(error);
+      // Игнорируем прерывания при отправке
     }
   };
 
