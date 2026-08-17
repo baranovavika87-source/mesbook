@@ -174,6 +174,8 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   }
   
   const database = await getDatabase();
+  
+  // Достаем статус read_by_me из БД
   const messages = queryRows<{
     id: number;
     chat_id: number;
@@ -181,10 +183,11 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
     sender_name: string;
     content: string;
     created_at: string;
+    read_by_me: number;
   }>(
     database,
     `SELECT m.id, m.chat_id, m.sender_id, u.display_name AS sender_name,
-      m.content, m.created_at
+      m.content, m.created_at, m.read_by_me
      FROM messages m JOIN users u ON u.id = m.sender_id
      WHERE m.chat_id = ? ORDER BY m.id ASC`,
     [chatId],
@@ -196,8 +199,10 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
     content: row.content,
     createdAt: row.created_at,
     isMine: Number(row.sender_id) === currentUserId,
+    isRead: Number(row.read_by_me) === 1, // Отдаем статус на фронтенд
   }));
 
+  // Когда мы открываем чат, помечаем чужие сообщения прочитанными
   execute(
     database,
     "UPDATE messages SET read_by_me = 1 WHERE chat_id = ? AND sender_id != ?",
@@ -220,9 +225,10 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const database = await getDatabase();
   const createdAt = new Date().toISOString();
   
+  // ИСПРАВЛЕНИЕ: новые сообщения теперь со статусом 0 (непрочитано)
   execute(
     database,
-    "INSERT INTO messages (chat_id, sender_id, content, created_at, read_by_me) VALUES (?, ?, ?, ?, 1)",
+    "INSERT INTO messages (chat_id, sender_id, content, created_at, read_by_me) VALUES (?, ?, ?, ?, 0)",
     [chatId, currentUserId, content, createdAt],
   );
   
@@ -233,10 +239,11 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
     sender_name: string;
     content: string;
     created_at: string;
+    read_by_me: number;
   }>(
     database,
     `SELECT m.id, m.chat_id, m.sender_id, u.display_name AS sender_name,
-      m.content, m.created_at
+      m.content, m.created_at, m.read_by_me
      FROM messages m JOIN users u ON u.id = m.sender_id
      WHERE m.chat_id = ? ORDER BY m.id DESC LIMIT 1`,
     [chatId],
@@ -252,6 +259,7 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
     content: message.content,
     createdAt: message.created_at,
     isMine: true,
+    isRead: Number(message.read_by_me) === 1,
   };
   
   broadcastToChat(chatId, response);
@@ -375,3 +383,4 @@ router.get("/users/search", async (req, res) => {
 });
 
 export default router;
+
