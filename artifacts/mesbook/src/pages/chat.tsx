@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
 import { ArrowLeft, Send } from 'lucide-react';
 import { useListMessages, useListChats } from '@workspace/api-client-react';
-import { AppShell } from '@/components/mesbook-shell';
 
 const SafeAvatar = ({ name, url, isOnline }: { name: string, url?: string, isOnline?: boolean }) => {
   return (
@@ -32,9 +31,9 @@ export default function ChatPage() {
     query: { refetchInterval: 1000 }
   });
 
-  const chatsQuery = useListChats({ query: { refetchInterval: 5000 } });
+  const chatsQuery = useListChats({ query: { refetchInterval: 4000 } });
 
-  // ПУЛЬС
+  // Пульс онлайна
   useEffect(() => {
     const sendPing = async () => {
       const storedUser = localStorage.getItem("mesbook_user");
@@ -52,11 +51,13 @@ export default function ChatPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Автопрокрутка вниз при новом сообщении
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [messagesQuery.data]);
 
-  // УЛЬТРА-НАДЕЖНАЯ ОТПРАВКА
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
@@ -76,13 +77,13 @@ export default function ChatPage() {
       
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "Ошибка сервера");
+        throw new Error(err.error || "Ошибка отправки");
       }
       
       setContent('');
+      messagesQuery.refetch();
     } catch (error: any) {
-      alert("Ошибка отправки: " + error.message);
-      console.error("Failed to send:", error);
+      alert("Ошибка: " + error.message);
     }
   };
 
@@ -93,45 +94,57 @@ export default function ChatPage() {
   const avatar = participant?.avatarUrl || "";
 
   return (
-    <AppShell>
-      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-100 bg-white/80 p-4 backdrop-blur-md">
-        <Link href="/" className="rounded-full p-2 hover:bg-gray-100 transition"><ArrowLeft size={20} /></Link>
+    <div className="flex h-screen flex-col bg-[#faf8f6]">
+      {/* Шапка чата */}
+      <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-gray-200 bg-white/90 px-4 py-3 backdrop-blur-md">
+        <Link href="/" className="rounded-full p-2 text-gray-600 hover:bg-gray-100 transition">
+          <ArrowLeft size={20} />
+        </Link>
         <SafeAvatar name={name} url={avatar} isOnline={isOnline} />
-        <div>
-          <h2 className="font-bold capitalize">{name}</h2>
-          <p className={`text-xs ${isOnline ? 'text-green-500 font-bold' : 'text-gray-400'}`}>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate font-bold text-gray-900">{name}</h2>
+          <p className={`text-xs ${isOnline ? 'text-green-500 font-semibold' : 'text-gray-400'}`}>
             {isOnline ? 'В сети' : 'Был(а) недавно'}
           </p>
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Список сообщений на весь экран */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="text-center text-[11px] font-bold tracking-widest text-gray-400 uppercase my-4">
+          СЕГОДНЯ
+        </div>
+
         {messagesQuery.data?.map((msg: any) => (
           <div key={msg.id} className={`flex ${msg.isMine ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[75%] rounded-3xl px-5 py-3 shadow-sm ${msg.isMine ? 'bg-[#9c5961] text-white rounded-br-none' : 'bg-white border border-gray-100 text-gray-900 rounded-bl-none'}`}>
-              <p>{msg.content}</p>
+            <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 shadow-sm text-sm ${msg.isMine ? 'bg-[#9c5961] text-white rounded-br-none' : 'bg-white border border-gray-100 text-gray-900 rounded-bl-none'}`}>
+              <p className="break-words">{msg.content}</p>
+              <p className={`text-[10px] mt-1 text-right ${msg.isMine ? 'text-white/70' : 'text-gray-400'}`}>
+                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="border-t border-gray-100 bg-white p-4 pb-8">
-        <form onSubmit={handleSend} className="flex items-center gap-2 rounded-full bg-gray-50 p-2 border border-gray-200">
+      {/* Поле ввода строго внизу экрана */}
+      <div className="border-t border-gray-200 bg-white p-3 pb-6">
+        <form onSubmit={handleSend} className="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 border border-gray-200">
           <input
             value={content}
             onChange={e => setContent(e.target.value)}
-            placeholder="Пиши сообщение..."
-            className="flex-1 bg-transparent px-4 py-2 outline-none"
+            placeholder="Сообщение..."
+            className="flex-1 bg-transparent px-2 py-2 text-sm outline-none"
           />
           <button
             type="submit"
-            className="rounded-full bg-[#9c5961] p-3 text-white transition active:scale-95 shadow-md hover:bg-opacity-90"
+            disabled={!content.trim()}
+            className="rounded-full bg-[#9c5961] p-2.5 text-white disabled:opacity-40 transition active:scale-95 shadow-sm"
           >
-            <Send size={18} />
+            <Send size={16} />
           </button>
         </form>
       </div>
-    </AppShell>
+    </div>
   );
 }
-
