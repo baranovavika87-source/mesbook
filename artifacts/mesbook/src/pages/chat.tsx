@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Send, Check, CheckCheck } from 'lucide-react';
+import { ArrowLeft, Send, Check, CheckCheck, Trash2 } from 'lucide-react';
 import { useListChats } from '@workspace/api-client-react';
 
 const SafeAvatar = ({ name, url, isOnline }: { name: string, url?: string, isOnline?: boolean }) => {
@@ -42,9 +42,7 @@ export default function ChatPage() {
         const data = await res.json();
         setMessages(Array.isArray(data) ? data : []);
       }
-    } catch (e) {
-      // Ошибки сети (Failed to fetch) игнорируем, так как через секунду будет новый запрос
-    }
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -99,8 +97,28 @@ export default function ChatPage() {
         setContent('');
         loadMessages();
       }
+    } catch (error: any) {}
+  };
+
+  // НОВАЯ ФУНКЦИЯ: Удаление сообщения
+  const handleDelete = async (msgId: number) => {
+    const confirmDelete = window.confirm("Точно удалить сообщение?");
+    if (!confirmDelete) return;
+
+    const storedUser = localStorage.getItem("mesbook_user");
+    const userId = storedUser ? JSON.parse(storedUser).id : 1;
+
+    try {
+      const res = await fetch(`/api/chats/${chatId}/messages/${msgId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${userId}` }
+      });
+      
+      if (res.ok) {
+        loadMessages(); // Сразу обновляем список после удаления
+      }
     } catch (error: any) {
-      // Игнорируем прерывания при отправке
+      console.error("Ошибка удаления:", error);
     }
   };
 
@@ -126,7 +144,7 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Сообщения с галочками */}
+      {/* Сообщения с галочками и кнопкой удаления */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         <div className="text-center text-[11px] font-bold tracking-widest text-gray-400 uppercase my-4">
           СЕГОДНЯ
@@ -137,15 +155,23 @@ export default function ChatPage() {
             <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 shadow-sm text-sm ${msg.isMine ? 'bg-[#9c5961] text-white rounded-br-none' : 'bg-white border border-gray-100 text-gray-900 rounded-bl-none'}`}>
               <p className="break-words">{msg.content}</p>
               
-              {/* Контейнер для времени и галочек */}
-              <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${msg.isMine ? 'text-white/80' : 'text-gray-400'}`}>
+              {/* Контейнер для времени, галочек и корзины */}
+              <div className={`flex items-center justify-end gap-1.5 mt-1 text-[10px] ${msg.isMine ? 'text-white/80' : 'text-gray-400'}`}>
                 <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 
-                {/* Галочки рисуются только для своих сообщений */}
+                {/* Галочки и корзина только для своих сообщений */}
                 {msg.isMine && (
-                  <span className="opacity-90">
-                    {msg.isRead ? <CheckCheck size={14} /> : <Check size={14} />}
-                  </span>
+                  <>
+                    <span className="opacity-90">
+                      {msg.isRead ? <CheckCheck size={14} /> : <Check size={14} />}
+                    </span>
+                    <button 
+                      onClick={() => handleDelete(msg.id)} 
+                      className="opacity-70 hover:opacity-100 hover:text-red-200 active:scale-90 transition-all ml-0.5"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </>
                 )}
               </div>
 
