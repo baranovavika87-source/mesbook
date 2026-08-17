@@ -175,7 +175,6 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   
   const database = await getDatabase();
   
-  // Достаем статус read_by_me из БД
   const messages = queryRows<{
     id: number;
     chat_id: number;
@@ -199,10 +198,9 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
     content: row.content,
     createdAt: row.created_at,
     isMine: Number(row.sender_id) === currentUserId,
-    isRead: Number(row.read_by_me) === 1, // Отдаем статус на фронтенд
+    isRead: Number(row.read_by_me) === 1,
   }));
 
-  // Когда мы открываем чат, помечаем чужие сообщения прочитанными
   execute(
     database,
     "UPDATE messages SET read_by_me = 1 WHERE chat_id = ? AND sender_id != ?",
@@ -225,7 +223,6 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const database = await getDatabase();
   const createdAt = new Date().toISOString();
   
-  // ИСПРАВЛЕНИЕ: новые сообщения теперь со статусом 0 (непрочитано)
   execute(
     database,
     "INSERT INTO messages (chat_id, sender_id, content, created_at, read_by_me) VALUES (?, ?, ?, ?, 0)",
@@ -264,6 +261,29 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   
   broadcastToChat(chatId, response);
   res.status(201).json(response);
+});
+
+// НОВЫЙ МАРШРУТ: Удаление сообщения
+router.delete("/chats/:chatId/messages/:messageId", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
+  const chatId = Number(req.params.chatId);
+  const messageId = Number(req.params.messageId);
+
+  if (!chatId || !messageId) {
+    res.status(400).json({ error: "Invalid parameters" });
+    return;
+  }
+
+  const database = await getDatabase();
+  // Удаляем сообщение только если оно принадлежит текущему пользователю
+  execute(
+    database,
+    "DELETE FROM messages WHERE id = ? AND chat_id = ? AND sender_id = ?",
+    [messageId, chatId, currentUserId]
+  );
+  await persistDatabase(database);
+
+  res.json({ success: true });
 });
 
 router.get("/wall/posts", async (req, res): Promise<void> => {
@@ -383,4 +403,3 @@ router.get("/users/search", async (req, res) => {
 });
 
 export default router;
-
