@@ -23,7 +23,6 @@ import { broadcastToChat, broadcastToWall } from "../lib/realtime";
 
 const router: IRouter = Router();
 
-// ДОБАВЛЕНО: last_seen
 type UserRow = {
   id: number;
   username: string;
@@ -38,7 +37,7 @@ function userFromRow(row: UserRow) {
     username: row.username,
     displayName: row.display_name,
     avatarUrl: row.avatar_url,
-    lastSeen: Number(row.last_seen) || 0, // Отдаем время пульса
+    lastSeen: Number(row.last_seen) || 0,
   };
 }
 
@@ -51,7 +50,6 @@ function getUser(database: Awaited<ReturnType<typeof getDatabase>>, id: number) 
   return row ? userFromRow(row) : null;
 }
 
-// НОВЫЙ МАРШРУТ: Прием "Пульса" (Heartbeat) от пользователей
 router.post("/ping", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]);
   if (!currentUserId) { 
@@ -60,7 +58,6 @@ router.post("/ping", async (req, res): Promise<void> => {
   }
   
   const database = await getDatabase();
-  // Обновляем время последнего визита на текущую миллисекунду
   execute(database, "UPDATE users SET last_seen = ? WHERE id = ?", [Date.now(), currentUserId]);
   await persistDatabase(database);
   
@@ -219,7 +216,10 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
 });
 
 router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
-    // ИСПРАВЛЕНИЕ: Превращаем chatId в число перед проверкой
+  // 1. ПОЛУЧАЕМ currentUserId
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
+  
+  // 2. ИСПРАВЛЯЕМ chatId (превращаем в число)
   const params = CreateMessageParams.safeParse({ chatId: Number(req.params.chatId) });
   const body = CreateMessageBody.safeParse(req.body);
   
@@ -380,7 +380,6 @@ router.post("/login", async (req, res) => {
     return res.status(403).json({ error: "Неверный логин или пароль" });
   }
   
-  // При входе сразу обновляем онлайн
   execute(db, "UPDATE users SET last_seen = ? WHERE id = ?", [Date.now(), user.id]);
   await persistDatabase(db);
   
@@ -395,7 +394,6 @@ router.get("/users/search", async (req, res) => {
   const searchPattern2 = "%@" + query + "%";
   
   const db = await getDatabase();
-  // ДОБАВЛЕНО: Теперь поиск тоже возвращает last_seen
   const users = queryRows(
     db,
     "SELECT id, username, display_name as displayName, avatar_url as avatarUrl, last_seen as lastSeen FROM users WHERE (username LIKE ? OR username LIKE ? OR display_name LIKE ?) AND id != ?",
@@ -405,4 +403,3 @@ router.get("/users/search", async (req, res) => {
 });
 
 export default router;
-
