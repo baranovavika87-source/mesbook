@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Send } from 'lucide-react';
+import { ArrowLeft, Send, Check, CheckCheck } from 'lucide-react';
 import { useListChats } from '@workspace/api-client-react';
 
 const SafeAvatar = ({ name, url, isOnline }: { name: string, url?: string, isOnline?: boolean }) => {
@@ -29,7 +29,7 @@ export default function ChatPage() {
 
   const chatsQuery = useListChats({ query: { refetchInterval: 4000 } });
 
-  // Прямая загрузка сообщений с точным токеном авторизации
+  // Загрузка сообщений и статусов
   const loadMessages = async () => {
     if (!chatId) return;
     const storedUser = localStorage.getItem("mesbook_user");
@@ -107,7 +107,7 @@ export default function ChatPage() {
   const chat = Array.isArray(chatsQuery.data) ? chatsQuery.data.find((c: any) => c.id === chatId) : null;
   const participant = chat?.participant;
   const isOnline = participant?.lastSeen ? (Date.now() - participant.lastSeen) < 60000 : false;
-  const name = participant?.displayName || participant?.username || "тест";
+  const name = participant?.displayName || participant?.username || "Собеседник";
   const avatar = participant?.avatarUrl || "";
 
   return (
@@ -126,7 +126,7 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Сообщения */}
+      {/* Сообщения с галочками */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         <div className="text-center text-[11px] font-bold tracking-widest text-gray-400 uppercase my-4">
           СЕГОДНЯ
@@ -136,9 +136,19 @@ export default function ChatPage() {
           <div key={msg.id} className={`flex ${msg.isMine ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 shadow-sm text-sm ${msg.isMine ? 'bg-[#9c5961] text-white rounded-br-none' : 'bg-white border border-gray-100 text-gray-900 rounded-bl-none'}`}>
               <p className="break-words">{msg.content}</p>
-              <p className={`text-[10px] mt-1 text-right ${msg.isMine ? 'text-white/70' : 'text-gray-400'}`}>
-                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
+              
+              {/* Контейнер для времени и галочек */}
+              <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${msg.isMine ? 'text-white/80' : 'text-gray-400'}`}>
+                <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                
+                {/* Галочки рисуются только для своих сообщений */}
+                {msg.isMine && (
+                  <span className="opacity-90">
+                    {msg.isRead ? <CheckCheck size={14} /> : <Check size={14} />}
+                  </span>
+                )}
+              </div>
+
             </div>
           </div>
         ))}
