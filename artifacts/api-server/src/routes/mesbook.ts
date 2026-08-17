@@ -140,7 +140,6 @@ router.get("/chats", async (req, res): Promise<void> => {
   
   const chatRows = queryRows<{
     chat_id: number;
-    participant_id: number;
     last_message: string;
     last_message_at: string;
     unread_count: number;
@@ -148,22 +147,26 @@ router.get("/chats", async (req, res): Promise<void> => {
     database,
     `SELECT 
         m.chat_id, 
-        (CASE WHEN m.sender_id = ? THEN (SELECT sender_id FROM messages WHERE chat_id = m.chat_id AND sender_id != ? LIMIT 1) ELSE m.sender_id END) as participant_id,
         m.content as last_message,
         m.created_at as last_message_at,
         (SELECT COUNT(*) FROM messages WHERE chat_id = m.chat_id AND sender_id != ? AND read_by_me = 0) AS unread_count
      FROM messages m
      WHERE m.id IN (SELECT MAX(id) FROM messages GROUP BY chat_id)
-     AND (m.chat_id / 10000 = ? OR m.chat_id % 10000 = ?)
+     AND (CAST(m.chat_id / 10000 AS INT) = ? OR m.chat_id % 10000 = ?)
      ORDER BY m.created_at DESC`,
-    [currentUserId, currentUserId, currentUserId, currentUserId, currentUserId]
+    [currentUserId, currentUserId, currentUserId]
   );
 
   const chats = chatRows.map((row) => {
-    const participant = getUser(database, Number(row.participant_id));
+    const cId = Number(row.chat_id);
+    const u1 = Math.floor(cId / 10000);
+    const u2 = cId % 10000;
+    const otherUserId = (u1 === currentUserId) ? u2 : u1;
+    const participant = getUser(database, otherUserId);
+
     return {
-        id: Number(row.chat_id),
-        participant: participant || { id: 0, displayName: "Unknown", avatarUrl: "", lastSeen: 0 },
+        id: cId,
+        participant: participant || { id: otherUserId, username: "Пользователь", displayName: "Пользователь", avatarUrl: "", lastSeen: 0 },
         lastMessage: row.last_message,
         lastMessageAt: row.last_message_at,
         unreadCount: Number(row.unread_count)
@@ -175,9 +178,9 @@ router.get("/chats", async (req, res): Promise<void> => {
 
 router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const parsed = ListMessagesParams.safeParse(req.params);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+  const params = ListMessagesParams.safeParse({ chatId: Number(req.params.chatId) });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
     return;
   }
   
@@ -195,7 +198,7 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
       m.content, m.created_at
      FROM messages m JOIN users u ON u.id = m.sender_id
      WHERE m.chat_id = ? ORDER BY m.id ASC`,
-    [parsed.data.chatId],
+    [params.data.chatId],
   ).map((row) => ({
     id: Number(row.id),
     chatId: Number(row.chat_id),
@@ -209,17 +212,14 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   execute(
     database,
     "UPDATE messages SET read_by_me = 1 WHERE chat_id = ? AND sender_id != ?",
-    [parsed.data.chatId, currentUserId],
+    [params.data.chatId, currentUserId],
   );
   await persistDatabase(database);
   res.json(ListMessagesResponse.parse(messages));
 });
 
 router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
-  // 1. ПОЛУЧАЕМ currentUserId
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  
-  // 2. ИСПРАВЛЯЕМ chatId (превращаем в число)
   const params = CreateMessageParams.safeParse({ chatId: Number(req.params.chatId) });
   const body = CreateMessageBody.safeParse(req.body);
   
