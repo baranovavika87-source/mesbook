@@ -1,16 +1,5 @@
 import { Router, type IRouter } from "express";
 import {
-  CreateMessageBody,
-  CreateMessageParams,
-  CreateMessageResponse,
-  CreateWallPostBody,
-  CreateWallPostResponse,
-  ListChatsResponse,
-  ListMessagesParams,
-  ListMessagesResponse,
-  ListWallPostsResponse,
-} from "@workspace/api-zod";
-import {
   execute,
   getDatabase,
   persistDatabase,
@@ -60,7 +49,6 @@ router.post("/ping", async (req, res): Promise<void> => {
   const database = await getDatabase();
   execute(database, "UPDATE users SET last_seen = ? WHERE id = ?", [Date.now(), currentUserId]);
   await persistDatabase(database);
-  
   res.json({ success: true });
 });
 
@@ -173,14 +161,15 @@ router.get("/chats", async (req, res): Promise<void> => {
     };
   });
 
-  res.json(ListChatsResponse.parse(chats));
+  res.json(chats);
 });
 
 router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const params = ListMessagesParams.safeParse({ chatId: Number(req.params.chatId) });
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+  const chatId = Number(req.params.chatId);
+  
+  if (!chatId) {
+    res.status(400).json({ error: "Invalid chatId" });
     return;
   }
   
@@ -198,12 +187,12 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
       m.content, m.created_at
      FROM messages m JOIN users u ON u.id = m.sender_id
      WHERE m.chat_id = ? ORDER BY m.id ASC`,
-    [params.data.chatId],
+    [chatId],
   ).map((row) => ({
     id: Number(row.id),
     chatId: Number(row.chat_id),
     senderId: Number(row.sender_id),
-    senderName: row.sender_name,
+    senderName: row.sender_name || "Пользователь",
     content: row.content,
     createdAt: row.created_at,
     isMine: Number(row.sender_id) === currentUserId,
@@ -212,37 +201,29 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   execute(
     database,
     "UPDATE messages SET read_by_me = 1 WHERE chat_id = ? AND sender_id != ?",
-    [params.data.chatId, currentUserId],
+    [chatId, currentUserId],
   );
   await persistDatabase(database);
-  res.json(ListMessagesResponse.parse(messages));
+  res.json(messages);
 });
 
 router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const params = CreateMessageParams.safeParse({ chatId: Number(req.params.chatId) });
-  const body = CreateMessageBody.safeParse(req.body);
+  const chatId = Number(req.params.chatId);
+  const content = String(req.body?.content || "").trim();
   
-  if (!params.success || !body.success) {
-    res.status(400).json({
-      error: params.success ? body.error.message : params.error.message,
-    });
+  if (!chatId || !content) {
+    res.status(400).json({ error: "Message and valid chat ID required" });
     return;
   }
   
   const database = await getDatabase();
-  
-  const content = body.data.content.trim();
-  if (!content) {
-    res.status(400).json({ error: "Message cannot be empty" });
-    return;
-  }
-  
   const createdAt = new Date().toISOString();
+  
   execute(
     database,
     "INSERT INTO messages (chat_id, sender_id, content, created_at, read_by_me) VALUES (?, ?, ?, ?, 1)",
-    [params.data.chatId, currentUserId, content, createdAt],
+    [chatId, currentUserId, content, createdAt],
   );
   
   const message = queryRows<{
@@ -258,12 +239,12 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
       m.content, m.created_at
      FROM messages m JOIN users u ON u.id = m.sender_id
      WHERE m.chat_id = ? ORDER BY m.id DESC LIMIT 1`,
-    [params.data.chatId],
+    [chatId],
   )[0];
   
   await persistDatabase(database);
 
-  const response = CreateMessageResponse.parse({
+  const response = {
     id: Number(message.id),
     chatId: Number(message.chat_id),
     senderId: Number(message.sender_id),
@@ -271,14 +252,13 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
     content: message.content,
     createdAt: message.created_at,
     isMine: true,
-  });
+  };
   
-  broadcastToChat(params.data.chatId, response);
+  broadcastToChat(chatId, response);
   res.status(201).json(response);
 });
 
 router.get("/wall/posts", async (req, res): Promise<void> => {
-  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
   const postsRows = queryRows<{
     id: number;
@@ -303,18 +283,12 @@ router.get("/wall/posts", async (req, res): Promise<void> => {
     ];
   });
 
-  res.json(ListWallPostsResponse.parse(posts));
+  res.json(posts);
 });
 
 router.post("/wall/posts", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const parsed = CreateWallPostBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  
-  const content = parsed.data.content.trim();
+  const content = String(req.body?.content || "").trim();
   if (!content) {
     res.status(400).json({ error: "Post cannot be empty" });
     return;
@@ -342,10 +316,8 @@ router.post("/wall/posts", async (req, res): Promise<void> => {
   };
   
   await persistDatabase(database);
-
-  const response = CreateWallPostResponse.parse(post);
-  broadcastToWall(response);
-  res.status(201).json(response);
+  broadcastToWall(post);
+  res.status(201).json(post);
 });
 
 router.post("/register", async (req, res) => {
