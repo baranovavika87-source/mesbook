@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
 import { ArrowLeft, Send } from 'lucide-react';
-import { useListMessages, useListChats } from '@workspace/api-client-react';
+import { useListChats } from '@workspace/api-client-react';
 
 const SafeAvatar = ({ name, url, isOnline }: { name: string, url?: string, isOnline?: boolean }) => {
   return (
@@ -24,14 +24,34 @@ export default function ChatPage() {
   const [, params] = useRoute('/chat/:id');
   const chatId = Number(params?.id);
   const [content, setContent] = useState('');
+  const [messages, setMessages] = useState<any[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const messagesQuery = useListMessages({
-    params: { chatId },
-    query: { refetchInterval: 1000 }
-  });
-
   const chatsQuery = useListChats({ query: { refetchInterval: 4000 } });
+
+  // Прямая загрузка сообщений с точным токеном авторизации
+  const loadMessages = async () => {
+    if (!chatId) return;
+    const storedUser = localStorage.getItem("mesbook_user");
+    const userId = storedUser ? JSON.parse(storedUser).id : 1;
+    try {
+      const res = await fetch(`/api/chats/${chatId}/messages`, {
+        headers: { 'Authorization': `Bearer ${userId}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    loadMessages();
+    const interval = setInterval(loadMessages, 1000);
+    return () => clearInterval(interval);
+  }, [chatId]);
 
   // Пульс онлайна
   useEffect(() => {
@@ -51,12 +71,12 @@ export default function ChatPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Автопрокрутка вниз при новом сообщении
+  // Автопрокрутка вниз
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messagesQuery.data]);
+  }, [messages]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,27 +95,24 @@ export default function ChatPage() {
         body: JSON.stringify({ content })
       });
       
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Ошибка отправки");
+      if (res.ok) {
+        setContent('');
+        loadMessages();
       }
-      
-      setContent('');
-      messagesQuery.refetch();
     } catch (error: any) {
-      alert("Ошибка: " + error.message);
+      console.error(error);
     }
   };
 
   const chat = Array.isArray(chatsQuery.data) ? chatsQuery.data.find((c: any) => c.id === chatId) : null;
   const participant = chat?.participant;
   const isOnline = participant?.lastSeen ? (Date.now() - participant.lastSeen) < 60000 : false;
-  const name = participant?.displayName || participant?.username || "Собеседник";
+  const name = participant?.displayName || participant?.username || "тест";
   const avatar = participant?.avatarUrl || "";
 
   return (
     <div className="flex h-screen flex-col bg-[#faf8f6]">
-      {/* Шапка чата */}
+      {/* Шапка */}
       <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-gray-200 bg-white/90 px-4 py-3 backdrop-blur-md">
         <Link href="/" className="rounded-full p-2 text-gray-600 hover:bg-gray-100 transition">
           <ArrowLeft size={20} />
@@ -109,13 +126,13 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Список сообщений на весь экран */}
+      {/* Сообщения */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         <div className="text-center text-[11px] font-bold tracking-widest text-gray-400 uppercase my-4">
           СЕГОДНЯ
         </div>
 
-        {messagesQuery.data?.map((msg: any) => (
+        {messages.map((msg: any) => (
           <div key={msg.id} className={`flex ${msg.isMine ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 shadow-sm text-sm ${msg.isMine ? 'bg-[#9c5961] text-white rounded-br-none' : 'bg-white border border-gray-100 text-gray-900 rounded-bl-none'}`}>
               <p className="break-words">{msg.content}</p>
@@ -127,7 +144,7 @@ export default function ChatPage() {
         ))}
       </div>
 
-      {/* Поле ввода строго внизу экрана */}
+      {/* Ввод */}
       <div className="border-t border-gray-200 bg-white p-3 pb-6">
         <form onSubmit={handleSend} className="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 border border-gray-200">
           <input
