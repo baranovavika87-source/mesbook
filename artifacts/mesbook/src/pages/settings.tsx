@@ -1,152 +1,148 @@
 import { useState, useEffect } from 'react';
-import { AppShell, PageIntro } from '@/components/mesbook-shell';
+import { Link, useLocation } from 'wouter';
+import { MessageSquare, User, Settings as SettingsIcon, LogOut, Check } from 'lucide-react';
 
 export default function SettingsPage() {
-  const [user, setUser] = useState<any>(null);
+  const [, setLocation] = useLocation();
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
-  const [message, setMessage] = useState('');
-  const [isError, setIsError] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("mesbook_user");
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      setUser(parsed);
-      setDisplayName(parsed.displayName || '');
-      setUsername(parsed.username || '');
-      setAvatarUrl(parsed.avatarUrl || '');
-    }
+    const fetchUser = async () => {
+      const storedUser = localStorage.getItem("mesbook_user");
+      const userId = storedUser ? JSON.parse(storedUser).id : 1;
+      try {
+        const res = await fetch('/api/me', {
+          headers: { 'Authorization': `Bearer ${userId}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setDisplayName(data.displayName || '');
+          setUsername(data.username?.replace('@', '') || '');
+        }
+      } catch (e) {}
+    };
+    fetchUser();
   }, []);
 
-  // МАГИЯ 2.0: Сжатие картинки перед отправкой (как в Telegram)
-  const handleImageUpload = (e: any) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const img = new Image();
-        img.onload = () => {
-          // Создаем невидимый холст для сжатия
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 300; // Уменьшаем размер до 300 пикселей (для аватарки идеален)
-          const scaleSize = MAX_WIDTH / img.width;
-          canvas.width = MAX_WIDTH;
-          canvas.height = img.height * scaleSize;
-
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-          // Превращаем в легкий JPEG (качество 70%)
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-          setAvatarUrl(compressedBase64); // Сохраняем уже сжатую версию
-        };
-        img.src = reader.result as string;
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!user) return;
-    setMessage('Сохраняем...');
-    setIsError(false);
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const storedUser = localStorage.getItem("mesbook_user");
+    const userId = storedUser ? JSON.parse(storedUser).id : 1;
 
     try {
       const res = await fetch('/api/me', {
         method: 'PATCH',
-        headers: {
+        headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.id}`
+          'Authorization': `Bearer ${userId}` 
         },
-        body: JSON.stringify({ displayName, username, password, avatarUrl })
+        body: JSON.stringify({ 
+          displayName, 
+          username: username ? `@${username}` : undefined,
+          password: password || undefined 
+        })
       });
-
+      
       if (res.ok) {
-        const updated = await res.json();
-        localStorage.setItem("mesbook_user", JSON.stringify(updated));
-        setMessage('Профиль успешно обновлен! 🎉');
-        setPassword(''); 
-      } else {
-        const err = await res.json();
-        setMessage('Ошибка: ' + (err.error || 'Что-то пошло не так'));
-        setIsError(true);
+        setSaved(true);
+        setPassword('');
+        setTimeout(() => setSaved(false), 2000);
       }
-    } catch(e) {
-      setMessage('Ошибка соединения с сервером');
-      setIsError(true);
-    }
+    } catch (error) {}
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("mesbook_user");
+    window.location.href = "/"; // Перезагружаем на главную для сброса сессии
   };
 
   return (
-    <AppShell>
-      <PageIntro eyebrow="Settings" title="Профиль" subtitle="Настройте свой аккаунт" />
-      
-      <div className="px-5 pb-5 space-y-6">
-        {message && (
-          <div className={`p-4 font-bold rounded-2xl ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-            {message}
-          </div>
-        )}
+    <div className="flex h-screen flex-col bg-white">
+      <header className="px-6 pt-10 pb-4">
+        <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">Профиль</h1>
+      </header>
 
-        <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-          <label className="block text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Фото профиля</label>
-          <div className="flex items-center gap-5">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="Avatar" className="w-20 h-20 rounded-full object-cover border-2 border-indigo-100 shrink-0" />
-            ) : (
-              <div className="w-20 h-20 rounded-full bg-indigo-50 flex items-center justify-center font-bold text-indigo-300 text-2xl shrink-0">
-                {displayName ? displayName.charAt(0).toUpperCase() : "U"}
-              </div>
-            )}
-            <label className="bg-indigo-600 text-white px-5 py-3 rounded-2xl font-bold text-sm cursor-pointer hover:bg-indigo-700 transition active:scale-95 shadow-md">
-              Выбрать из галереи
-              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-            </label>
+      <main className="flex-1 overflow-y-auto px-6">
+        {/* Аватар */}
+        <div className="flex justify-center my-6">
+          <div className="w-24 h-24 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-4xl shadow-sm">
+            {displayName ? displayName.charAt(0).toUpperCase() : "U"}
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 space-y-4">
+        {/* Форма редактирования */}
+        <form onSubmit={handleSave} className="space-y-5">
           <div>
-            <label className="block text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Имя</label>
-            <input 
-              value={displayName} 
-              onChange={e => setDisplayName(e.target.value)} 
-              className="w-full bg-gray-50 border-transparent rounded-2xl p-4 font-medium outline-none focus:border-indigo-500 focus:bg-white transition border-2" 
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Имя в чате</label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              className="w-full bg-gray-100 border-none rounded-xl px-4 py-3.5 text-sm focus:ring-2 focus:ring-blue-500 transition outline-none text-gray-900"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Никнейм</label>
-            <input 
-              value={username} 
-              onChange={e => setUsername(e.target.value)} 
-              className="w-full bg-gray-50 border-transparent rounded-2xl p-4 font-medium outline-none focus:border-indigo-500 focus:bg-white transition border-2" 
-              placeholder="@nickname" 
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Никнейм (@)</label>
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              className="w-full bg-gray-100 border-none rounded-xl px-4 py-3.5 text-sm focus:ring-2 focus:ring-blue-500 transition outline-none text-gray-900"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Новый пароль</label>
-            <input 
-              type="password" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              className="w-full bg-gray-50 border-transparent rounded-2xl p-4 font-medium outline-none focus:border-indigo-500 focus:bg-white transition border-2" 
-              placeholder="Оставь пустым, если не меняешь" 
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Сменить пароль</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Оставьте пустым, если не меняете"
+              className="w-full bg-gray-100 border-none rounded-xl px-4 py-3.5 text-sm focus:ring-2 focus:ring-blue-500 transition outline-none text-gray-900 placeholder:text-gray-400"
             />
           </div>
-        </div>
 
-        <button 
-          onClick={handleSave} 
-          className="w-full bg-black text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-gray-800 transition active:scale-95 text-lg"
+          <button
+            type="submit"
+            className="w-full mt-2 flex items-center justify-center gap-2 bg-blue-600 text-white font-bold rounded-xl py-4 active:scale-95 transition shadow-sm"
+          >
+            {saved ? <><Check size={20} /> Сохранено</> : "Сохранить изменения"}
+          </button>
+        </form>
+
+        <button
+          onClick={handleLogout}
+          className="w-full mt-8 mb-8 flex items-center justify-center gap-2 bg-red-50 text-red-500 font-bold rounded-xl py-4 active:scale-95 transition"
         >
-          Сохранить изменения
+          <LogOut size={20} /> Выйти из аккаунта
         </button>
-      </div>
-    </AppShell>
+      </main>
+
+      {/* Нижняя навигация */}
+      <nav className="border-t border-gray-100 flex justify-around p-4 bg-white mt-auto">
+        <Link href="/chats">
+          <a className="flex flex-col items-center text-gray-400 hover:text-blue-600 transition">
+            <MessageSquare size={24} />
+            <span className="text-[10px] font-medium mt-1">Чаты</span>
+          </a>
+        </Link>
+        <Link href="/wall">
+          <a className="flex flex-col items-center text-gray-400 hover:text-blue-600 transition">
+            <User size={24} />
+            <span className="text-[10px] font-medium mt-1">Стена</span>
+          </a>
+        </Link>
+        <Link href="/settings">
+          <a className="flex flex-col items-center text-blue-600">
+            <SettingsIcon size={24} />
+            <span className="text-[10px] font-medium mt-1">Настройки</span>
+          </a>
+        </Link>
+      </nav>
+    </div>
   );
 }
