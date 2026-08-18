@@ -96,7 +96,7 @@ export default function ChatsPage() {
       </main>
 
       <nav className="border-t border-gray-100 flex justify-around p-4 bg-white">
-        <Link href="/chats">
+        <Link href="/">
           <a className="flex flex-col items-center text-blue-600">
             <MessageSquare size={24} />
             <span className="text-[10px] font-medium mt-1">Чаты</span>
