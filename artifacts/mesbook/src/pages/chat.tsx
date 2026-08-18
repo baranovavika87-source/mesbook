@@ -15,17 +15,36 @@ export default function ChatPage() {
 
   const loadData = async () => {
     try {
-      const infoRes = await fetch(`/api/chats`, {
-        headers: { 'Authorization': `Bearer ${currentUserId}` }
+      await fetch('/api/chats/' + chatId + '/read', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + currentUserId }
+      });
+    } catch (e) {}
+
+    try {
+      const infoRes = await fetch('/api/chats', {
+        headers: { 'Authorization': 'Bearer ' + currentUserId }
       });
       if (infoRes.ok) {
         const allChats = await infoRes.json();
-        const currentChat = allChats.find((c: any) => String(c.id) === String(chatId));
+        let currentChat = allChats.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId));
+
+        if (!currentChat) {
+          const userRes = await fetch('/api/users/' + chatId, {
+            headers: { 'Authorization': 'Bearer ' + currentUserId }
+          });
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            currentChat = { participant: userData };
+          }
+        }
         if (currentChat) setChatInfo(currentChat);
       }
+    } catch (e) {}
 
-      const msgRes = await fetch(`/api/chats/${chatId}/messages`, {
-        headers: { 'Authorization': `Bearer ${currentUserId}` }
+    try {
+      const msgRes = await fetch('/api/chats/' + chatId + '/messages', {
+        headers: { 'Authorization': 'Bearer ' + currentUserId }
       });
       if (msgRes.ok) {
         const data = await msgRes.json();
@@ -49,7 +68,7 @@ export default function ChatPage() {
       try {
         await fetch('/api/ping', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${currentUserId}` }
+          headers: { 'Authorization': 'Bearer ' + currentUserId }
         });
       } catch (e) {}
     };
@@ -81,9 +100,9 @@ export default function ChatPage() {
     setContent('');
 
     try {
-      const res = await fetch(`/api/chats/${chatId}/messages`, {
+      const res = await fetch('/api/chats/' + chatId + '/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUserId}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
         body: JSON.stringify({ content: tempContent })
       });
       if (res.ok) {
@@ -100,9 +119,9 @@ export default function ChatPage() {
   const handleDelete = async (msgId: number) => {
     if (!window.confirm("Точно удалить сообщение?")) return;
     try {
-      const res = await fetch(`/api/chats/${chatId}/messages/${msgId}`, {
+      const res = await fetch('/api/chats/' + chatId + '/messages/' + msgId, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${currentUserId}` }
+        headers: { 'Authorization': 'Bearer ' + currentUserId }
       });
       if (res.ok) loadData();
     } catch (error) {}
@@ -112,12 +131,18 @@ export default function ChatPage() {
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
       <header className="px-4 pt-10 pb-4 border-b border-gray-200 dark:border-gray-800/50 flex items-center gap-3 bg-white dark:bg-gray-950 z-10 shadow-sm">
         <Link href="/">
-          <a className="p-2 -ml-2 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition rounded-full"><ArrowLeft size={24} /></a>
+          <a className="p-2 -ml-2 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition rounded-full">
+            <ArrowLeft size={24} />
+          </a>
         </Link>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold uppercase">{chatInfo?.participant?.displayName?.charAt(0) || "U"}</div>
+          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold uppercase">
+            {chatInfo?.participant?.displayName?.charAt(0) || chatInfo?.participant?.name?.charAt(0) || "U"}
+          </div>
           <div>
-            <h2 className="font-bold text-gray-900 dark:text-white text-base leading-tight">{chatInfo?.participant?.displayName || "Собеседник"}</h2>
+            <h2 className="font-bold text-gray-900 dark:text-white text-base leading-tight">
+              {chatInfo?.participant?.displayName || chatInfo?.participant?.name || "Собеседник"}
+            </h2>
             <p className="text-xs text-blue-500 dark:text-blue-400 font-medium mt-0.5">в сети</p>
           </div>
         </div>
@@ -128,12 +153,15 @@ export default function ChatPage() {
           const msgAuthorId = msg.senderId || msg.authorId || msg.userId || msg.author?.id;
           const isMe = String(msgAuthorId) === String(currentUserId);
           return (
-            <div key={msg.id} className={`flex flex-col max-w-[80%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
-              <div className={`px-4 py-2.5 rounded-2xl shadow-sm ${isMe ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-sm'}`}>
+            <div key={msg.id} className={'flex flex-col max-w-[80%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')}>
+              <div className={'px-4 py-2.5 rounded-2xl shadow-sm ' + (isMe ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-sm')}>
                 <p className="text-[15px] leading-relaxed">{msg.content}</p>
               </div>
               <div className="flex items-center gap-1.5 mt-1 px-1">
-                <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">
+                  {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                </span>
+                
                 {isMe && (
                   <div className="flex items-center gap-2 ml-1">
                     {msg.isSending ? (
@@ -141,11 +169,15 @@ export default function ChatPage() {
                     ) : (
                       <div className="flex -space-x-1.5">
                         <Check size={14} className="text-blue-500 dark:text-blue-400" />
-                        {msg.readAt && <Check size={14} className="text-blue-500 dark:text-blue-400" />}
+                        {(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && (
+                          <Check size={14} className="text-blue-500 dark:text-blue-400" />
+                        )}
                       </div>
                     )}
                     {!msg.isSending && (
-                      <button onClick={() => handleDelete(msg.id)} className="text-gray-300 dark:text-gray-600 hover:text-red-500"><Trash2 size={12} /></button>
+                      <button onClick={() => handleDelete(msg.id)} className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition">
+                        <Trash2 size={12} />
+                      </button>
                     )}
                   </div>
                 )}
@@ -164,4 +196,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
