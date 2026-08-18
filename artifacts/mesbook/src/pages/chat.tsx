@@ -6,20 +6,29 @@ export default function ChatPage() {
   const [match, params] = useRoute("/chat/:chatId");
   const chatId = params?.chatId;
   const [messages, setMessages] = useState<any[]>([]);
+  const [chatInfo, setChatInfo] = useState<any>(null);
   const [content, setContent] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const storedUser = localStorage.getItem("mesbook_user");
   const currentUserId = storedUser ? JSON.parse(storedUser).id : 1;
 
-  const loadMessages = async () => {
+  const loadData = async () => {
     try {
-      const res = await fetch(`/api/chats/${chatId}/messages`, {
+      // 1. Возвращаем загрузку информации о собеседнике для шапки
+      const infoRes = await fetch(`/api/chats/${chatId}`, {
         headers: { 'Authorization': `Bearer ${currentUserId}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        // Оставляем локальные сообщения (с флагом isSending), пока они не пришли с сервера
+      if (infoRes.ok) {
+        setChatInfo(await infoRes.json());
+      }
+
+      // 2. Загружаем сообщения
+      const msgRes = await fetch(`/api/chats/${chatId}/messages`, {
+        headers: { 'Authorization': `Bearer ${currentUserId}` }
+      });
+      if (msgRes.ok) {
+        const data = await msgRes.json();
         setMessages(prev => {
           const sendingMsgs = prev.filter(m => m.isSending);
           const serverMsgs = data.filter((dm: any) => !sendingMsgs.find(sm => sm.content === dm.content));
@@ -30,8 +39,8 @@ export default function ChatPage() {
   };
 
   useEffect(() => {
-    loadMessages();
-    const interval = setInterval(loadMessages, 2000);
+    loadData();
+    const interval = setInterval(loadData, 2000);
     return () => clearInterval(interval);
   }, [chatId]);
 
@@ -56,26 +65,23 @@ export default function ChatPage() {
     }
   }, [messages]);
 
-  // ОПТИМИСТИЧНАЯ ОТПРАВКА
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
 
     const tempContent = content;
     
-    // 1. Мгновенно добавляем сообщение в UI
     const tempMsg = { 
       id: Date.now(), 
       content: tempContent, 
-      isSending: true, // Флаг: сообщение в процессе отправки
-      authorId: currentUserId,
+      isSending: true, 
+      senderId: currentUserId, // Для мгновенного отображения справа
       createdAt: new Date().toISOString()
     };
     
     setMessages(prev => [...prev, tempMsg]);
-    setContent(''); // Мгновенно очищаем поле ввода
+    setContent('');
 
-    // 2. Отправляем на сервер в фоне
     try {
       const res = await fetch(`/api/chats/${chatId}/messages`, {
         method: 'POST',
@@ -87,11 +93,10 @@ export default function ChatPage() {
       });
       
       if (res.ok) {
-        // Убираем флаг isSending, чтобы появилась галочка
         setMessages(prev => prev.map(m => m.id === tempMsg.id ? { ...m, isSending: false } : m));
-        loadMessages(); 
+        loadData(); 
       } else {
-        setMessages(prev => prev.filter(m => m.id !== tempMsg.id)); // Ошибка - убираем
+        setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
       }
     } catch (error) {
       setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
@@ -108,30 +113,43 @@ export default function ChatPage() {
         headers: { 'Authorization': `Bearer ${currentUserId}` }
       });
       if (res.ok) {
-        loadMessages();
+        loadData();
       }
     } catch (error) {}
   };
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
-      {/* Шапка чата */}
+      {/* ВОЗВРАЩЕННАЯ ШАПКА: Имя, Аватарка и Статус */}
       <header className="px-4 pt-10 pb-4 border-b border-gray-200 dark:border-gray-800/50 flex items-center gap-3 bg-white dark:bg-gray-950 z-10 shadow-sm">
         <Link href="/">
           <a className="p-2 -ml-2 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition rounded-full active:bg-gray-100 dark:active:bg-gray-900">
             <ArrowLeft size={24} />
           </a>
         </Link>
-        <div className="flex-1">
-          <h2 className="font-bold text-gray-900 dark:text-white text-lg">Диалог</h2>
+        
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold uppercase border border-transparent dark:border-blue-800/50">
+            {chatInfo?.participant?.displayName?.charAt(0) || "U"}
+          </div>
+          <div>
+            <h2 className="font-bold text-gray-900 dark:text-white text-base leading-tight">
+              {chatInfo?.participant?.displayName || "Загрузка..."}
+            </h2>
+            <p className="text-xs text-blue-500 dark:text-blue-400 font-medium mt-0.5">
+              в сети
+            </p>
+          </div>
         </div>
       </header>
 
       {/* Лента сообщений */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((msg: any) => {
-          const isMe = String(msg.author?.id || msg.authorId) === String(currentUserId);
-
+          // Убойная проверка ID отправителя на все случаи жизни сервера
+          const msgAuthorId = msg.senderId || msg.authorId || msg.userId || msg.author?.id;
+          const isMe = String(msgAuthorId) === String(currentUserId);
+          
           return (
             <div key={msg.id} className={`flex flex-col max-w-[80%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
               <div 
@@ -149,7 +167,6 @@ export default function ChatPage() {
                   {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                 </span>
                 
-                {/* Иконки статуса отправки и удаления */}
                 {isMe && (
                   <div className="flex items-center gap-2 ml-1">
                     {msg.isSending ? (
@@ -194,7 +211,7 @@ export default function ChatPage() {
             disabled={!content.trim()}
             className="w-12 h-12 flex-shrink-0 rounded-full bg-blue-600 dark:bg-blue-500 flex items-center justify-center text-white disabled:opacity-40 transition active:scale-90 shadow-sm"
           >
-            <Send size={18} className="ml-1" /> {/* ml-1 немного центрирует иконку самолетика */}
+            <Send size={18} className="ml-1" />
           </button>
         </form>
       </div>
