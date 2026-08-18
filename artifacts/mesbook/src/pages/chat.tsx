@@ -130,7 +130,8 @@ export default function ChatPage() {
       {/* Лента сообщений */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((msg: any) => {
-          const isMe = msg.authorId === currentUserId;
+          const isMe = String(msg.author?.id || msg.authorId) === String(currentUserId);
+
           return (
             <div key={msg.id} className={`flex flex-col max-w-[80%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
               <div 
