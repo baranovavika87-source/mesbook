@@ -2,6 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
 import { ArrowLeft, Send, Trash2, Loader2, Check } from 'lucide-react';
 
+const getUserId = () => {
+  try {
+    const u = JSON.parse(localStorage.getItem("mesbook_user") || '{}');
+    return u.id || u.userId || u._id || 1;
+  } catch (e) {
+    return 1;
+  }
+};
+
 export default function ChatPage() {
   const [match, params] = useRoute("/chat/:chatId");
   const chatId = params?.chatId;
@@ -9,9 +18,7 @@ export default function ChatPage() {
   const [chatInfo, setChatInfo] = useState<any>(null);
   const [content, setContent] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const storedUser = localStorage.getItem("mesbook_user");
-  const currentUserId = storedUser ? JSON.parse(storedUser).id : 1;
+  const currentUserId = getUserId();
 
   const loadData = async () => {
     try {
@@ -23,22 +30,26 @@ export default function ChatPage() {
 
     try {
       const infoRes = await fetch('/api/chats', {
-        headers: { 'Authorization': 'Bearer ' + currentUserId }
+        headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' }
       });
       if (infoRes.ok) {
         const allChats = await infoRes.json();
-        let currentChat = allChats.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId));
+        let arr = [];
+        if (Array.isArray(allChats)) arr = allChats;
+        else if (allChats && Array.isArray(allChats.chats)) arr = allChats.chats;
+        else if (allChats && Array.isArray(allChats.data)) arr = allChats.data;
 
-        if (!currentChat) {
-          const userRes = await fetch('/api/users/' + chatId, {
-            headers: { 'Authorization': 'Bearer ' + currentUserId }
-          });
-          if (userRes.ok) {
-            const userData = await userRes.json();
-            currentChat = { participant: userData };
+        // ЭТА СТРОКА БЫЛА ОБРЕЗАНА
+        let currentChat = arr.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId));
+
+        if (currentChat) {
+          setChatInfo(currentChat);
+        } else {
+          const savedName = sessionStorage.getItem('chat_name_' + chatId);
+          if (savedName) {
+            setChatInfo({ participant: { displayName: savedName } });
           }
         }
-        if (currentChat) setChatInfo(currentChat);
       }
     } catch (e) {}
 
@@ -75,7 +86,7 @@ export default function ChatPage() {
     sendPing();
     const interval = setInterval(sendPing, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUserId]);
 
   useEffect(() => {
     if (scrollRef.current) {
