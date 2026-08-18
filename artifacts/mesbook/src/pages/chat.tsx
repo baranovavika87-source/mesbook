@@ -15,12 +15,17 @@ export default function ChatPage() {
 
   const loadData = async () => {
     try {
-      // 1. Возвращаем загрузку информации о собеседнике для шапки
-      const infoRes = await fetch(`/api/chats/${chatId}`, {
+      // 1. Берем информацию о собеседнике из ОБЩЕГО списка чатов (чтобы не было ошибки 404)
+      const infoRes = await fetch(`/api/chats`, {
         headers: { 'Authorization': `Bearer ${currentUserId}` }
       });
       if (infoRes.ok) {
-        setChatInfo(await infoRes.json());
+        const allChats = await infoRes.json();
+        // Находим нужный чат по ID
+        const currentChat = allChats.find((c: any) => String(c.id) === String(chatId));
+        if (currentChat) {
+          setChatInfo(currentChat);
+        }
       }
 
       // 2. Загружаем сообщения
@@ -75,7 +80,7 @@ export default function ChatPage() {
       id: Date.now(), 
       content: tempContent, 
       isSending: true, 
-      senderId: currentUserId, // Для мгновенного отображения справа
+      senderId: currentUserId, 
       createdAt: new Date().toISOString()
     };
     
@@ -120,7 +125,7 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
-      {/* ВОЗВРАЩЕННАЯ ШАПКА: Имя, Аватарка и Статус */}
+      {/* Шапка */}
       <header className="px-4 pt-10 pb-4 border-b border-gray-200 dark:border-gray-800/50 flex items-center gap-3 bg-white dark:bg-gray-950 z-10 shadow-sm">
         <Link href="/">
           <a className="p-2 -ml-2 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition rounded-full active:bg-gray-100 dark:active:bg-gray-900">
@@ -134,7 +139,7 @@ export default function ChatPage() {
           </div>
           <div>
             <h2 className="font-bold text-gray-900 dark:text-white text-base leading-tight">
-              {chatInfo?.participant?.displayName || "Загрузка..."}
+              {chatInfo?.participant?.displayName || "Собеседник"}
             </h2>
             <p className="text-xs text-blue-500 dark:text-blue-400 font-medium mt-0.5">
               в сети
@@ -146,7 +151,6 @@ export default function ChatPage() {
       {/* Лента сообщений */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((msg: any) => {
-          // Убойная проверка ID отправителя на все случаи жизни сервера
           const msgAuthorId = msg.senderId || msg.authorId || msg.userId || msg.author?.id;
           const isMe = String(msgAuthorId) === String(currentUserId);
           
