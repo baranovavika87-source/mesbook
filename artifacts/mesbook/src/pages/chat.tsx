@@ -15,12 +15,12 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [chatInfo, setChatInfo] = useState<any>(null);
   const [content, setContent] = useState('');
-  const [readFailed, setReadFailed] = useState(false); // Чтобы не спамить 404
+  const [readFailed, setReadFailed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentUserId = getUserId();
 
   const loadData = async () => {
-    // 1. Попытка отметить прочитанным (только если не падал с 404)
+    // 1. Попытка отметить прочитанным
     if (!readFailed) {
       try {
         const res = await fetch('/api/chats/' + chatId + '/read', {
@@ -31,20 +31,22 @@ export default function ChatPage() {
       } catch (e) {}
     }
 
-    // 2. Получение информации о чате и имени
+    // 2. Получение инфо о чате
     try {
-      const savedName = sessionStorage.getItem('chat_name_' + chatId);
-      if (savedName) {
-        setChatInfo({ participant: { displayName: savedName } });
-      }
-
       const infoRes = await fetch('/api/chats', {
         headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' }
       });
       if (infoRes.ok) {
         const allChats = await infoRes.json();
-        const chat = allChats.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId));
-        if (chat) setChatInfo(chat);
+        const arr = Array.isArray(allChats) ? allChats : (allChats.chats || allChats.data || []);
+        const currentChat = arr.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId));
+
+        if (currentChat) {
+          setChatInfo(currentChat);
+        } else {
+          const savedName = sessionStorage.getItem('chat_name_' + chatId);
+          if (savedName) setChatInfo({ participant: { displayName: savedName } });
+        }
       }
     } catch (e) {}
 
@@ -55,12 +57,7 @@ export default function ChatPage() {
       });
       if (msgRes.ok) {
         const data = await msgRes.json();
-        setMessages(prev => {
-          const sendingMsgs = prev.filter(m => m.isSending);
-          // Объединяем, не теряя отправляемые сообщения
-          const serverMsgs = data.filter((dm: any) => !sendingMsgs.find(sm => sm.id === dm.id));
-          return [...serverMsgs, ...sendingMsgs].sort((a, b) => a.id - b.id);
-        });
+        setMessages(Array.isArray(data) ? data.sort((a: any, b: any) => a.id - b.id) : []);
       }
     } catch (e) {}
   };
@@ -71,6 +68,21 @@ export default function ChatPage() {
     return () => clearInterval(interval);
   }, [chatId]);
 
+  // ВОТ ОН, ВОЗВРАЩЕННЫЙ ПИНГ
+  useEffect(() => {
+    const sendPing = async () => {
+      try {
+        await fetch('/api/ping', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + currentUserId }
+        });
+      } catch (e) {}
+    };
+    sendPing();
+    const interval = setInterval(sendPing, 30000);
+    return () => clearInterval(interval);
+  }, [currentUserId]);
+
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
@@ -79,9 +91,10 @@ export default function ChatPage() {
     e.preventDefault();
     if (!content.trim()) return;
 
+    const tempContent = content;
     const tempMsg = { 
-      id: Date.now(), 
-      content: content, 
+      id: 'temp-' + Date.now(), 
+      content: tempContent, 
       isSending: true, 
       senderId: currentUserId, 
       createdAt: new Date().toISOString()
@@ -94,14 +107,14 @@ export default function ChatPage() {
       const res = await fetch('/api/chats/' + chatId + '/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
-        body: JSON.stringify({ content: tempMsg.content })
+        body: JSON.stringify({ content: tempContent })
       });
       if (res.ok) {
-        loadData();
+        loadData(); 
       } else {
         setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
       }
-    } catch (e) {
+    } catch (error) {
       setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
     }
   };
@@ -118,8 +131,8 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950">
-      <header className="px-4 pt-10 pb-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-3 bg-white dark:bg-gray-950">
+    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
+      <header className="px-4 pt-10 pb-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-3 bg-white dark:bg-gray-950 shadow-sm">
         <Link href="/"><a className="p-2 -ml-2 text-gray-500 hover:text-blue-600"><ArrowLeft size={24} /></a></Link>
         <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold uppercase">
           {(chatInfo?.participant?.displayName || 'U').charAt(0)}
@@ -134,7 +147,7 @@ export default function ChatPage() {
           const isMe = String(msg.senderId || msg.authorId) === String(currentUserId);
           return (
             <div key={msg.id} className={'flex flex-col max-w-[80%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')}>
-              <div className={'px-4 py-2.5 rounded-2xl ' + (isMe ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white border border-gray-200 text-gray-900 rounded-bl-sm')}>
+              <div className={'px-4 py-2.5 rounded-2xl shadow-sm ' + (isMe ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white border text-gray-900 rounded-bl-sm')}>
                 <p>{msg.content}</p>
               </div>
               <div className="flex items-center gap-1 mt-1">
