@@ -9,7 +9,7 @@ const SafeAvatar = ({ name, url, isOnline }: { name: string, url?: string, isOnl
       {url && url.length > 5 ? (
         <img src={url} alt={name} className="w-10 h-10 rounded-full object-cover border border-gray-100" />
       ) : (
-        <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold uppercase">
+        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold uppercase">
           {name ? name.charAt(0) : "U"}
         </div>
       )}
@@ -29,7 +29,6 @@ export default function ChatPage() {
 
   const chatsQuery = useListChats({ query: { refetchInterval: 4000 } });
 
-  // Загрузка сообщений и статусов
   const loadMessages = async () => {
     if (!chatId) return;
     const storedUser = localStorage.getItem("mesbook_user");
@@ -51,7 +50,6 @@ export default function ChatPage() {
     return () => clearInterval(interval);
   }, [chatId]);
 
-  // Пульс онлайна
   useEffect(() => {
     const sendPing = async () => {
       const storedUser = localStorage.getItem("mesbook_user");
@@ -69,7 +67,6 @@ export default function ChatPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Автопрокрутка вниз
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -100,7 +97,6 @@ export default function ChatPage() {
     } catch (error: any) {}
   };
 
-  // НОВАЯ ФУНКЦИЯ: Удаление сообщения
   const handleDelete = async (msgId: number) => {
     const confirmDelete = window.confirm("Точно удалить сообщение?");
     if (!confirmDelete) return;
@@ -115,11 +111,9 @@ export default function ChatPage() {
       });
       
       if (res.ok) {
-        loadMessages(); // Сразу обновляем список после удаления
+        loadMessages();
       }
-    } catch (error: any) {
-      console.error("Ошибка удаления:", error);
-    }
+    } catch (error: any) {}
   };
 
   const chat = Array.isArray(chatsQuery.data) ? chatsQuery.data.find((c: any) => c.id === chatId) : null;
@@ -129,37 +123,31 @@ export default function ChatPage() {
   const avatar = participant?.avatarUrl || "";
 
   return (
-    <div className="flex h-screen flex-col bg-[#faf8f6]">
+    <div className="flex h-screen flex-col bg-white">
       {/* Шапка */}
-      <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-gray-200 bg-white/90 px-4 py-3 backdrop-blur-md">
-        <Link href="/" className="rounded-full p-2 text-gray-600 hover:bg-gray-100 transition">
+      <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-md">
+        <Link href="/chats" className="rounded-full p-2 text-gray-600 hover:bg-gray-100 transition">
           <ArrowLeft size={20} />
         </Link>
         <SafeAvatar name={name} url={avatar} isOnline={isOnline} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-bold text-gray-900">{name}</h2>
-          <p className={`text-xs ${isOnline ? 'text-green-500 font-semibold' : 'text-gray-400'}`}>
+          <p className={`text-xs ${isOnline ? 'text-blue-600 font-semibold' : 'text-gray-400'}`}>
             {isOnline ? 'В сети' : 'Был(а) недавно'}
           </p>
         </div>
       </div>
 
-      {/* Сообщения с галочками и кнопкой удаления */}
+      {/* Сообщения */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-        <div className="text-center text-[11px] font-bold tracking-widest text-gray-400 uppercase my-4">
-          СЕГОДНЯ
-        </div>
-
         {messages.map((msg: any) => (
           <div key={msg.id} className={`flex ${msg.isMine ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 shadow-sm text-sm ${msg.isMine ? 'bg-[#9c5961] text-white rounded-br-none' : 'bg-white border border-gray-100 text-gray-900 rounded-bl-none'}`}>
+            <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 shadow-sm text-sm ${msg.isMine ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-100 border border-gray-200 text-gray-900 rounded-bl-none'}`}>
               <p className="break-words">{msg.content}</p>
               
-              {/* Контейнер для времени, галочек и корзины */}
-              <div className={`flex items-center justify-end gap-1.5 mt-1 text-[10px] ${msg.isMine ? 'text-white/80' : 'text-gray-400'}`}>
+              <div className={`flex items-center justify-end gap-1.5 mt-1 text-[10px] ${msg.isMine ? 'text-blue-100' : 'text-gray-400'}`}>
                 <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 
-                {/* Галочки и корзина только для своих сообщений */}
                 {msg.isMine && (
                   <>
                     <span className="opacity-90">
@@ -167,21 +155,20 @@ export default function ChatPage() {
                     </span>
                     <button 
                       onClick={() => handleDelete(msg.id)} 
-                      className="opacity-70 hover:opacity-100 hover:text-red-200 active:scale-90 transition-all ml-0.5"
+                      className="opacity-70 hover:opacity-100 hover:text-blue-200 active:scale-90 transition-all ml-0.5"
                     >
                       <Trash2 size={13} />
                     </button>
                   </>
                 )}
               </div>
-
             </div>
           </div>
         ))}
       </div>
 
       {/* Ввод */}
-      <div className="border-t border-gray-200 bg-white p-3 pb-6">
+      <div className="border-t border-gray-100 bg-white p-3 pb-6">
         <form onSubmit={handleSend} className="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 border border-gray-200">
           <input
             value={content}
@@ -192,7 +179,7 @@ export default function ChatPage() {
           <button
             type="submit"
             disabled={!content.trim()}
-            className="rounded-full bg-[#9c5961] p-2.5 text-white disabled:opacity-40 transition active:scale-95 shadow-sm"
+            className="rounded-full bg-blue-600 p-2.5 text-white disabled:opacity-40 transition active:scale-95 shadow-sm"
           >
             <Send size={16} />
           </button>
