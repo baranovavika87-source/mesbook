@@ -124,7 +124,7 @@ export default function SettingsPage() {
 
       {/* Нижняя навигация */}
       <nav className="border-t border-gray-100 flex justify-around p-4 bg-white mt-auto">
-        <Link href="/chats">
+        <Link href="/">
           <a className="flex flex-col items-center text-gray-400 hover:text-blue-600 transition">
             <MessageSquare size={24} />
             <span className="text-[10px] font-medium mt-1">Чаты</span>
