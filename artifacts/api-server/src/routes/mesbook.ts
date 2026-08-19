@@ -39,6 +39,15 @@ function getUser(database: Awaited<ReturnType<typeof getDatabase>>, id: number) 
   return row ? userFromRow(row) : null;
 }
 
+// МАГИЧЕСКАЯ ФУНКЦИЯ ДЛЯ ИСПРАВЛЕНИЯ БАГА С ПРОПАДАНИЕМ ЧАТОВ У ОДНОГО ИЗ ЮЗЕРОВ
+function getActualChatId(currentUserId: number, paramId: number) {
+  if (paramId >= 10000) return paramId; // Если ID уже склеенный
+  // Иначе склеиваем ID двух юзеров в один уникальный ID чата (например, 1 и 2 -> 10002)
+  const min = Math.min(currentUserId, paramId);
+  const max = Math.max(currentUserId, paramId);
+  return min * 10000 + max;
+}
+
 router.post("/ping", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]);
   if (!currentUserId) { 
@@ -117,9 +126,20 @@ router.patch("/me", async (req, res): Promise<void> => {
   }
   
   await persistDatabase(database);
-  
   const updatedUser = getUser(database, currentUserId);
   res.json(updatedUser);
+});
+
+// НОВЫЙ МАРШРУТ: Отдаем профиль юзера (чтобы в шапке было имя, а не 404 ошибка)
+router.get("/users/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const database = await getDatabase();
+  const user = getUser(database, id);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  res.json(user);
 });
 
 router.get("/chats", async (req, res): Promise<void> => {
@@ -164,15 +184,37 @@ router.get("/chats", async (req, res): Promise<void> => {
   res.json(chats);
 });
 
-router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
+// НОВЫЙ МАРШРУТ: Обработка двойных галочек
+router.post("/chats/:chatId/read", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const chatId = Number(req.params.chatId);
-  
-  if (!chatId) {
+  const rawChatId = Number(req.params.chatId);
+  if (!rawChatId) {
     res.status(400).json({ error: "Invalid chatId" });
     return;
   }
   
+  const chatId = getActualChatId(currentUserId, rawChatId);
+  const database = await getDatabase();
+  
+  execute(
+    database,
+    "UPDATE messages SET read_by_me = 1 WHERE chat_id = ? AND sender_id != ?",
+    [chatId, currentUserId],
+  );
+  await persistDatabase(database);
+  res.json({ success: true });
+});
+
+router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
+  const rawChatId = Number(req.params.chatId);
+  
+  if (!rawChatId) {
+    res.status(400).json({ error: "Invalid chatId" });
+    return;
+  }
+  
+  const chatId = getActualChatId(currentUserId, rawChatId);
   const database = await getDatabase();
   
   const messages = queryRows<{
@@ -212,14 +254,15 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
 
 router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const chatId = Number(req.params.chatId);
+  const rawChatId = Number(req.params.chatId);
   const content = String(req.body?.content || "").trim();
   
-  if (!chatId || !content) {
+  if (!rawChatId || !content) {
     res.status(400).json({ error: "Message and valid chat ID required" });
     return;
   }
   
+  const chatId = getActualChatId(currentUserId, rawChatId);
   const database = await getDatabase();
   const createdAt = new Date().toISOString();
   
@@ -263,19 +306,19 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   res.status(201).json(response);
 });
 
-// НОВЫЙ МАРШРУТ: Удаление сообщения
 router.delete("/chats/:chatId/messages/:messageId", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const chatId = Number(req.params.chatId);
+  const rawChatId = Number(req.params.chatId);
   const messageId = Number(req.params.messageId);
 
-  if (!chatId || !messageId) {
+  if (!rawChatId || !messageId) {
     res.status(400).json({ error: "Invalid parameters" });
     return;
   }
 
+  const chatId = getActualChatId(currentUserId, rawChatId);
   const database = await getDatabase();
-  // Удаляем сообщение только если оно принадлежит текущему пользователю
+  
   execute(
     database,
     "DELETE FROM messages WHERE id = ? AND chat_id = ? AND sender_id = ?",
