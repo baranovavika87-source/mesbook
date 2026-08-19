@@ -39,10 +39,9 @@ function getUser(database: Awaited<ReturnType<typeof getDatabase>>, id: number) 
   return row ? userFromRow(row) : null;
 }
 
-// МАГИЧЕСКАЯ ФУНКЦИЯ ДЛЯ ИСПРАВЛЕНИЯ БАГА С ПРОПАДАНИЕМ ЧАТОВ У ОДНОГО ИЗ ЮЗЕРОВ
+// МАГИЧЕСКАЯ ФУНКЦИЯ ДЛЯ ИСПРАВЛЕНИЯ БАГА С ПРОПАДАНИЕМ ЧАТОВ
 function getActualChatId(currentUserId: number, paramId: number) {
-  if (paramId >= 10000) return paramId; // Если ID уже склеенный
-  // Иначе склеиваем ID двух юзеров в один уникальный ID чата (например, 1 и 2 -> 10002)
+  if (paramId >= 10000) return paramId; 
   const min = Math.min(currentUserId, paramId);
   const max = Math.max(currentUserId, paramId);
   return min * 10000 + max;
@@ -130,7 +129,24 @@ router.patch("/me", async (req, res): Promise<void> => {
   res.json(updatedUser);
 });
 
-// НОВЫЙ МАРШРУТ: Отдаем профиль юзера (чтобы в шапке было имя, а не 404 ошибка)
+// ИСПРАВЛЕНИЕ: МАРШРУТ ПОИСКА ТЕПЕРЬ ВЫШЕ, ЧЕМ /users/:id
+router.get("/users/search", async (req, res) => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
+  const query = String(req.query.q || "");
+  
+  const searchPattern1 = "%" + query + "%";
+  const searchPattern2 = "%@" + query + "%";
+  
+  const db = await getDatabase();
+  const users = queryRows(
+    db,
+    "SELECT id, username, display_name as displayName, avatar_url as avatarUrl, last_seen as lastSeen FROM users WHERE (username LIKE ? OR username LIKE ? OR display_name LIKE ?) AND id != ?",
+    [searchPattern1, searchPattern2, searchPattern1, currentUserId]
+  );
+  return res.json(users);
+});
+
+// МАРШРУТ ПРОФИЛЯ СТОИТ НИЖЕ, ЧТОБЫ НЕ ПЕРЕХВАТЫВАТЬ ПОИСК
 router.get("/users/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const database = await getDatabase();
@@ -184,7 +200,6 @@ router.get("/chats", async (req, res): Promise<void> => {
   res.json(chats);
 });
 
-// НОВЫЙ МАРШРУТ: Обработка двойных галочек
 router.post("/chats/:chatId/read", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const rawChatId = Number(req.params.chatId);
@@ -427,22 +442,6 @@ router.post("/login", async (req, res) => {
   await persistDatabase(db);
   
   return res.json({ id: user.id, username: user.username, displayName: user.display_name, avatarUrl: user.avatar_url });
-});
-
-router.get("/users/search", async (req, res) => {
-  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const query = String(req.query.q || "");
-  
-  const searchPattern1 = "%" + query + "%";
-  const searchPattern2 = "%@" + query + "%";
-  
-  const db = await getDatabase();
-  const users = queryRows(
-    db,
-    "SELECT id, username, display_name as displayName, avatar_url as avatarUrl, last_seen as lastSeen FROM users WHERE (username LIKE ? OR username LIKE ? OR display_name LIKE ?) AND id != ?",
-    [searchPattern1, searchPattern2, searchPattern1, currentUserId]
-  );
-  return res.json(users);
 });
 
 export default router;
