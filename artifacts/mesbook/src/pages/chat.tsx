@@ -19,8 +19,10 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentUserId = getUserId();
 
+  const savedName = typeof window !== 'undefined' ? sessionStorage.getItem('chat_name_' + chatId) : null;
+  const displayName = chatInfo?.participant?.displayName || chatInfo?.participant?.name || savedName || 'Собеседник';
+
   const loadData = async () => {
-    // 1. Отправляем статус прочтения (не спамим, если сервер отвечает 404)
     if (!readFailed) {
       try {
         const res = await fetch('/api/chats/' + chatId + '/read', {
@@ -31,56 +33,33 @@ export default function ChatPage() {
       } catch (e) {}
     }
 
-    // 2. ИЩЕМ ИМЯ (С БРОНЕБОЙНЫМ ЗАПАСНЫМ ПЛАНОМ)
     try {
       const infoRes = await fetch('/api/chats', {
         headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' }
       });
-      
-      let foundChat = null;
       if (infoRes.ok) {
         const allChats = await infoRes.json();
         const arr = Array.isArray(allChats) ? allChats : (allChats.chats || allChats.data || []);
-        foundChat = arr.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId));
-      }
-
-      if (foundChat) {
-        setChatInfo(foundChat);
-      } else {
-        // ЕСЛИ ЧАТА НЕТ В СПИСКЕ (как у 2-го аккаунта), КАЧАЕМ ПРОФИЛЬ НАПРЯМУЮ!
-        const userRes = await fetch('/api/users/' + chatId, {
-          headers: { 'Authorization': 'Bearer ' + currentUserId }
-        });
-        if (userRes.ok) {
-          const userData = await userRes.json();
-          setChatInfo({ participant: userData });
-        } else {
-          // На крайний случай берем из памяти
-          const savedName = sessionStorage.getItem('chat_name_' + chatId);
-          if (savedName) setChatInfo({ participant: { displayName: savedName } });
-        }
+        const currentChat = arr.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId));
+        if (currentChat) setChatInfo(currentChat);
       }
     } catch (e) {}
 
-    // 3. Загружаем сообщения без дубликатов
     try {
       const msgRes = await fetch('/api/chats/' + chatId + '/messages', {
         headers: { 'Authorization': 'Bearer ' + currentUserId }
       });
       if (msgRes.ok) {
         const data = await msgRes.json();
-        const serverMsgs = Array.isArray(data) ? data : [];
-        
         setMessages(prev => {
           const sendingMsgs = prev.filter(m => m.isSending);
-          // Убираем временное сообщение, если сервер уже прислал его копию
+          const serverMsgs = Array.isArray(data) ? data : [];
+          
+          // Оставляем ВСЕ серверные сообщения.
+          // Удаляем только те временные (sendingMsgs), которые уже дошли до сервера
           const filteredSending = sendingMsgs.filter(sm => !serverMsgs.find((dm: any) => dm.content === sm.content));
           
-          return [...serverMsgs, ...filteredSending].sort((a: any, b: any) => {
-            const idA = typeof a.id === 'string' ? Infinity : a.id;
-            const idB = typeof b.id === 'string' ? Infinity : b.id;
-            return idA - idB;
-          });
+          return [...serverMsgs, ...filteredSending].sort((a: any, b: any) => a.id - b.id);
         });
       }
     } catch (e) {}
@@ -114,9 +93,10 @@ export default function ChatPage() {
     e.preventDefault();
     if (!content.trim()) return;
 
-    const tempContent = content;
+    // ИСПРАВЛЕНИЕ: Жестко обрезаем случайные пробелы от клавиатуры!
+    const tempContent = content.trim(); 
     const tempMsg = { 
-      id: 'temp-' + Date.now(), 
+      id: Date.now(), 
       content: tempContent, 
       isSending: true, 
       senderId: currentUserId, 
@@ -142,7 +122,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleDelete = async (msgId: number | string) => {
+  const handleDelete = async (msgId: number) => {
     if (!window.confirm("Удалить сообщение?")) return;
     try {
       await fetch('/api/chats/' + chatId + '/messages/' + msgId, {
@@ -153,12 +133,9 @@ export default function ChatPage() {
     } catch (e) {}
   };
 
-  const displayName = chatInfo?.participant?.displayName || chatInfo?.participant?.name || 'Пользователь';
-
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
       
-      {/* --- ИДЕАЛЬНАЯ ШАПКА ИЗ ПРОШЛОГО --- */}
       <header className="px-4 pt-10 pb-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-4 bg-white dark:bg-gray-950 shadow-sm z-10">
         <Link href="/">
           <a className="p-2 -ml-2 text-gray-500 hover:text-blue-600 transition"><ArrowLeft size={24} /></a>
@@ -183,7 +160,6 @@ export default function ChatPage() {
           return (
             <div key={msg.id} className={'flex flex-col max-w-[85%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')}>
               
-              {/* --- ДИЗАЙН ПУЗЫРЯ (ВРЕМЯ И ГАЛОЧКИ ВНУТРИ) --- */}
               <div className={'px-4 py-2.5 shadow-sm relative min-w-[90px] ' + (isMe ? 'bg-blue-600 text-white rounded-2xl rounded-br-sm' : 'bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-gray-900 dark:text-gray-100 rounded-2xl rounded-bl-sm')}>
                 <p className="text-[15px] leading-relaxed break-words pb-3">{msg.content}</p>
                 
