@@ -6,7 +6,9 @@ const getUserId = () => {
   try {
     const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
     return u.id || u.userId || u._id || 1;
-  } catch (e) { return 1; }
+  } catch (e) {
+    return 1;
+  }
 };
 
 export default function ChatPage() {
@@ -51,14 +53,10 @@ export default function ChatPage() {
       });
       if (msgRes.ok) {
         const data = await msgRes.json();
-        setMessages(prev => {
-          const sendingMsgs = prev.filter(m => m.isSending);
+        setMessages((prev: any) => {
+          const sendingMsgs = prev.filter((m: any) => m.isSending);
           const serverMsgs = Array.isArray(data) ? data : [];
-          
-          // Оставляем ВСЕ серверные сообщения.
-          // Удаляем только те временные (sendingMsgs), которые уже дошли до сервера
-          const filteredSending = sendingMsgs.filter(sm => !serverMsgs.find((dm: any) => dm.content === sm.content));
-          
+          const filteredSending = sendingMsgs.filter((sm: any) => !serverMsgs.find((dm: any) => dm.content === sm.content));
           return [...serverMsgs, ...filteredSending].sort((a: any, b: any) => a.id - b.id);
         });
       }
@@ -93,17 +91,16 @@ export default function ChatPage() {
     e.preventDefault();
     if (!content.trim()) return;
 
-    // ИСПРАВЛЕНИЕ: Жестко обрезаем случайные пробелы от клавиатуры!
-    const tempContent = content.trim(); 
-    const tempMsg = { 
-      id: Date.now(), 
-      content: tempContent, 
-      isSending: true, 
-      senderId: currentUserId, 
+    const tempContent = content.trim();
+    const tempMsg = {
+      id: Date.now(),
+      content: tempContent,
+      isSending: true,
+      senderId: currentUserId,
       createdAt: new Date().toISOString()
     };
-    
-    setMessages(prev => [...prev, tempMsg]);
+
+    setMessages((prev: any) => [...prev, tempMsg]);
     setContent('');
 
     try {
@@ -113,12 +110,12 @@ export default function ChatPage() {
         body: JSON.stringify({ content: tempContent })
       });
       if (res.ok) {
-        loadData(); 
+        loadData();
       } else {
-        setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+        setMessages((prev: any) => prev.filter((m: any) => m.id !== tempMsg.id));
       }
     } catch (error) {
-      setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+      setMessages((prev: any) => prev.filter((m: any) => m.id !== tempMsg.id));
     }
   };
 
@@ -134,23 +131,25 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
+    <div className="flex flex-col h-screen bg-white dark:bg-black transition-colors duration-300">
       
-      <header className="px-4 pt-10 pb-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-4 bg-white dark:bg-gray-950 shadow-sm z-10">
+      <header className="px-4 pt-10 pb-4 border-b border-gray-100 dark:border-zinc-900 flex items-center gap-4 bg-white dark:bg-black">
         <Link href="/">
-          <a className="p-2 -ml-2 text-gray-500 hover:text-blue-600 transition"><ArrowLeft size={24} /></a>
+          <a className="p-2 -ml-2 text-gray-500 hover:text-black dark:hover:text-white transition-colors">
+            <ArrowLeft size={24} />
+          </a>
         </Link>
         <div className="relative">
-          <div className="w-11 h-11 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold uppercase text-lg">
+          <div className="w-11 h-11 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center text-black dark:text-white font-semibold text-lg">
             {displayName.charAt(0)}
           </div>
-          <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-gray-950 rounded-full"></div>
+          <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>
         </div>
         <div className="flex flex-col">
-          <h2 className="font-bold text-gray-900 dark:text-white text-base leading-tight">
+          <h2 className="font-bold text-black dark:text-white text-base leading-tight">
             {displayName}
           </h2>
-          <p className="text-[13px] text-green-500 font-medium mt-0.5">В сети</p>
+          <p className="text-[13px] text-gray-500 dark:text-zinc-500 font-medium mt-0.5">В сети</p>
         </div>
       </header>
 
@@ -160,13 +159,11 @@ export default function ChatPage() {
           return (
             <div key={msg.id} className={'flex flex-col max-w-[85%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')}>
               
-              <div className={'px-4 py-2.5 shadow-sm relative min-w-[90px] ' + (isMe ? 'bg-blue-600 text-white rounded-2xl rounded-br-sm' : 'bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-gray-900 dark:text-gray-100 rounded-2xl rounded-bl-sm')}>
-                <p className="text-[15px] leading-relaxed break-words pb-3">{msg.content}</p>
+              <div className={'px-4 pt-2.5 pb-6 shadow-none relative min-w-[90px] rounded-2xl ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-none' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white rounded-tl-none')}>
+                <p className="text-[15px] leading-relaxed break-words">{msg.content}</p>
                 
-                <div className={'absolute bottom-1.5 right-3 flex items-center justify-end gap-1 mt-1 text-[10px] ' + (isMe ? 'text-blue-100' : 'text-gray-400')}>
-                  <span>
-                    {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                  </span>
+                <div className={'absolute bottom-1.5 right-3 flex items-center justify-end gap-1 mt-1 text-[10px] ' + (isMe ? 'text-gray-300 dark:text-zinc-600' : 'text-gray-400 dark:text-zinc-500')}>
+                  <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                   
                   {isMe && (
                     <div className="flex items-center ml-0.5">
@@ -181,7 +178,7 @@ export default function ChatPage() {
                         </div>
                       )}
                       {!msg.isSending && (
-                        <button onClick={() => handleDelete(msg.id)} className="hover:text-red-300 ml-1.5 transition-colors">
+                        <button onClick={() => handleDelete(msg.id)} className="hover:text-red-500 ml-1.5 transition-colors">
                           <Trash2 size={11} />
                         </button>
                       )}
@@ -195,23 +192,24 @@ export default function ChatPage() {
         })}
       </main>
 
-      <div className="p-4 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 pb-8">
+      <div className="p-4 bg-white dark:bg-black border-t border-gray-100 dark:border-zinc-900 pb-8">
         <form onSubmit={handleSend} className="flex items-center gap-3">
-          <input 
-            className="flex-1 bg-gray-100 dark:bg-gray-900 border-none rounded-full px-5 py-3.5 outline-none text-gray-900 dark:text-white placeholder-gray-500" 
-            value={content} 
-            onChange={e => setContent(e.target.value)} 
-            placeholder="Сообщение..." 
+          <input
+            className="flex-1 bg-gray-100 dark:bg-zinc-900 border-none rounded-full px-5 py-3.5 outline-none text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Сообщение..."
           />
-          <button 
-            type="submit" 
-            disabled={!content.trim()} 
-            className="w-12 h-12 flex-shrink-0 rounded-full bg-blue-600 text-white flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"
+          <button
+            type="submit"
+            disabled={!content.trim()}
+            className="w-12 h-12 flex-shrink-0 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:opacity-40 transition-all active:scale-95"
           >
             <Send size={18} className="ml-1" />
           </button>
         </form>
       </div>
+
     </div>
   );
 }
