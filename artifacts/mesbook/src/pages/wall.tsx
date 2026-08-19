@@ -8,7 +8,6 @@ const SafeAvatar = ({ name, url }: { name: string, url?: string }) => {
       {url && url.length > 5 ? (
         <img src={url} alt={name} className="w-10 h-10 rounded-full object-cover border border-gray-100 dark:border-zinc-800" />
       ) : (
-        {/* Убрали синий фон аватара, сделали строгий монохромный */}
         <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-zinc-900 text-black dark:text-white flex items-center justify-center font-semibold text-lg">
           {name ? name.charAt(0).toUpperCase() : "U"}
         </div>
@@ -62,7 +61,6 @@ export default function WallPage() {
   };
 
   return (
-    {/* Главный фон: заменен dark:bg-gray-950 на dark:bg-black */}
     <div className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300">
       <header className="px-6 pt-10 pb-4">
         <h1 className="text-4xl font-extrabold text-black dark:text-white tracking-tight mb-2">Стена</h1>
@@ -70,7 +68,6 @@ export default function WallPage() {
       </header>
 
       <main className="flex-1 overflow-y-auto">
-        {/* Форма создания поста */}
         <div className="px-6 pb-6 border-b border-gray-100 dark:border-zinc-900">
           <form onSubmit={handlePost} className="flex gap-2">
             <input
@@ -78,13 +75,11 @@ export default function WallPage() {
               placeholder="Что у вас нового?"
               value={content}
               onChange={e => setContent(e.target.value)}
-              {/* Кольцо фокуса стало черным/белым вместо синего */}
               className="flex-1 bg-gray-100 dark:bg-zinc-900 border-none rounded-xl px-4 py-3 text-sm text-black dark:text-white outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all placeholder-gray-400 dark:placeholder-zinc-500"
             />
             <button
               type="submit"
               disabled={!content.trim()}
-              {/* Кнопка отправки теперь черная в светлой теме, белая в темной */}
               className="rounded-xl bg-black dark:bg-white text-white dark:text-black px-4 flex items-center justify-center disabled:opacity-40 transition-all active:scale-95"
             >
               <Send size={18} />
@@ -92,7 +87,6 @@ export default function WallPage() {
           </form>
         </div>
 
-        {/* Список постов */}
         <div className="divide-y divide-gray-100 dark:divide-zinc-900">
           {posts.map((post: any) => (
             <div key={post.id} className="px-6 py-5 hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors">
@@ -119,7 +113,6 @@ export default function WallPage() {
         </div>
       </main>
 
-      {/* Нижняя навигация */}
       <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black">
         <Link href="/">
           <a className="flex flex-col items-center text-gray-400 dark:text-zinc-600 hover:text-black dark:hover:text-white transition-colors">
@@ -128,7 +121,6 @@ export default function WallPage() {
           </a>
         </Link>
         <Link href="/wall">
-          {/* Активная вкладка - строгий контраст вместо синего */}
           <a className="flex flex-col items-center text-black dark:text-white transition-colors">
             <User size={24} />
             <span className="text-[10px] font-medium mt-1">Стена</span>
@@ -144,4 +136,3 @@ export default function WallPage() {
     </div>
   );
 }
-
