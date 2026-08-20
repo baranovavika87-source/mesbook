@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'wouter';
-import { Search, MessageSquare, User, Settings, Plus } from 'lucide-react';
+import { Link, useLocation } from 'wouter';
+import { Search, MessageSquare, User, Plus, X, Moon, Sun, LogOut, Users } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -15,7 +15,28 @@ export default function ChatsPage() {
   const [search, setSearch] = useState('');
   const [chats, setChats] = useState<any[]>([]);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  
+  // Состояния для бокового меню (сайдбара)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isDark, setIsDark] = useState(false);
+  const [, setLocation] = useLocation();
 
+  // Загрузка данных текущего юзера для бокового меню
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains('dark'));
+    const fetchMe = async () => {
+      try {
+        const res = await fetch('/api/me', {
+          headers: { 'Authorization': 'Bearer ' + getUserId() }
+        });
+        if (res.ok) setCurrentUser(await res.json());
+      } catch (e) {}
+    };
+    fetchMe();
+  }, []);
+
+  // Загрузка чатов
   useEffect(() => {
     const loadChats = async () => {
       try {
@@ -37,6 +58,7 @@ export default function ChatsPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Поиск пользователей
   useEffect(() => {
     if (search.length < 2) {
       setSearchResults([]);
@@ -60,10 +82,82 @@ export default function ChatsPage() {
     (c.participant?.displayName || '').toLowerCase().includes(search.toLowerCase())
   ) : [];
 
+  const toggleTheme = () => {
+    const isNowDark = document.documentElement.classList.toggle('dark');
+    setIsDark(isNowDark);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('mesbook_user');
+    setLocation('/login');
+  };
+
   return (
-    <div className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300">
+    <div className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300 relative overflow-hidden">
+      
+      {/* --- БОКОВОЕ МЕНЮ (САЙДБАР) --- */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 transition-opacity" 
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+      
+      <div className={'fixed top-0 left-0 h-full w-[80%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 shadow-2xl flex flex-col ' + (isSidebarOpen ? 'translate-x-0' : '-translate-x-full')}>
+        
+        <div className="p-4 flex justify-end">
+          <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-black dark:text-white rounded-full hover:bg-gray-100 dark:hover:bg-zinc-900 transition">
+            <X size={26} />
+          </button>
+        </div>
+
+        <div className="px-6 pb-6 border-b border-gray-100 dark:border-zinc-900 flex flex-col items-center text-center">
+          <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-3xl font-bold text-black dark:text-white mb-4">
+            {currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'U'}
+          </div>
+          <h2 className="text-2xl font-bold text-black dark:text-white leading-tight mb-1">
+            {currentUser?.displayName || 'Пользователь'}
+          </h2>
+          <p className="text-gray-500 dark:text-zinc-400">
+            {currentUser?.username || '@username'}
+          </p>
+        </div>
+
+        <div className="flex flex-col py-4">
+          <Link href="/settings">
+            <a className="flex items-center gap-5 px-8 py-4 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900 transition-colors">
+              <User size={24} />
+              <span className="text-lg font-medium">Мой профиль</span>
+            </a>
+          </Link>
+          <button onClick={toggleTheme} className="flex items-center gap-5 px-8 py-4 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900 transition-colors w-full text-left">
+            {isDark ? <Sun size={24} /> : <Moon size={24} />}
+            <span className="text-lg font-medium">Тема</span>
+          </button>
+        </div>
+
+        <div className="mt-auto mb-6">
+          <button onClick={handleLogout} className="flex items-center gap-5 px-8 py-4 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors w-full text-left">
+            <LogOut size={24} />
+            <span className="text-lg font-medium">Выйти</span>
+          </button>
+        </div>
+      </div>
+      {/* --- КОНЕЦ САЙДБАРА --- */}
+
+
+      {/* --- ШАПКА И ПОИСК --- */}
       <header className="px-6 pt-10 pb-4">
-        <h1 className="text-4xl font-extrabold text-black dark:text-white tracking-tight mb-2">Чаты</h1>
+        <div className="flex justify-between items-center mb-6">
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="w-12 h-12 rounded-full border-2 border-black dark:border-white flex items-center justify-center text-black dark:text-white transition-transform active:scale-95"
+          >
+            <User size={24} />
+          </button>
+          <h1 className="text-4xl font-extrabold text-black dark:text-white tracking-tight">Чаты</h1>
+        </div>
+
         <div className="relative">
           <Search className="absolute left-3 top-3.5 text-gray-400 dark:text-zinc-500" size={18} />
           <input
@@ -76,6 +170,7 @@ export default function ChatsPage() {
         </div>
       </header>
 
+      {/* --- ОСНОВНОЙ КОНТЕНТ (РЕЗУЛЬТАТЫ И ЧАТЫ) --- */}
       <main className="flex-1 overflow-y-auto">
         {searchResults.length > 0 && (
           <div className="px-6 py-2 border-b border-gray-100 dark:border-zinc-900">
@@ -127,6 +222,7 @@ export default function ChatsPage() {
         </div>
       </main>
 
+      {/* --- НИЖНЯЯ ПАНЕЛЬ (Теперь 2 кнопки) --- */}
       <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black">
         <Link href="/">
           <a className="flex flex-col items-center text-black dark:text-white transition-colors">
@@ -136,14 +232,8 @@ export default function ChatsPage() {
         </Link>
         <Link href="/wall">
           <a className="flex flex-col items-center text-gray-400 dark:text-zinc-600 hover:text-black dark:hover:text-white transition-colors">
-            <User size={24} />
+            <Users size={24} />
             <span className="text-[10px] font-medium mt-1">Стена</span>
-          </a>
-        </Link>
-        <Link href="/settings">
-          <a className="flex flex-col items-center text-gray-400 dark:text-zinc-600 hover:text-black dark:hover:text-white transition-colors">
-            <Settings size={24} />
-            <span className="text-[10px] font-medium mt-1">Настройки</span>
           </a>
         </Link>
       </nav>
