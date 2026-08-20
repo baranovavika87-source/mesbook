@@ -16,14 +16,12 @@ export default function ChatsPage() {
   const [chats, setChats] = useState<any[]>([]);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   
-  // Состояния для бокового меню и нового поиска
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isDark, setIsDark] = useState(false);
   const [, setLocation] = useLocation();
 
-  // Загрузка данных текущего юзера для бокового меню
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
     const fetchMe = async () => {
@@ -37,7 +35,6 @@ export default function ChatsPage() {
     fetchMe();
   }, []);
 
-  // Загрузка чатов
   useEffect(() => {
     const loadChats = async () => {
       try {
@@ -59,7 +56,6 @@ export default function ChatsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Поиск пользователей
   useEffect(() => {
     if (search.length < 2) {
       setSearchResults([]);
@@ -96,7 +92,6 @@ export default function ChatsPage() {
   return (
     <div className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300 relative overflow-hidden">
       
-      {/* --- БОКОВОЕ МЕНЮ (САЙДБАР) --- */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 transition-opacity" 
@@ -113,8 +108,12 @@ export default function ChatsPage() {
         </div>
 
         <div className="px-6 pb-6 border-b border-gray-100 dark:border-zinc-900 flex flex-col items-center text-center">
-          <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-3xl font-bold text-black dark:text-white mb-4">
-            {currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'U'}
+          <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-3xl font-bold text-black dark:text-white mb-4 overflow-hidden">
+            {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
+              <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'U'
+            )}
           </div>
           <h2 className="text-2xl font-bold text-black dark:text-white leading-tight mb-1">
             {currentUser?.displayName || 'Пользователь'}
@@ -144,18 +143,20 @@ export default function ChatsPage() {
           </button>
         </div>
       </div>
-      {/* --- КОНЕЦ САЙДБАРА --- */}
 
-
-      {/* --- НОВАЯ ШАПКА MESBOOK --- */}
       <header className="px-6 pt-10 pb-4 h-24">
         {!isSearchOpen ? (
           <div className="flex justify-between items-center h-full">
+            {/* ИЗМЕНЕНА КНОПКА: ТЕПЕРЬ ТУТ АВАТАРКА */}
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="w-12 h-12 shrink-0 rounded-full border-[2.5px] border-black dark:border-white flex items-center justify-center text-black dark:text-white transition-transform active:scale-95"
+              className="w-12 h-12 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-black dark:text-white font-bold text-xl transition-transform active:scale-95 overflow-hidden"
             >
-              <User size={26} strokeWidth={2.5} />
+              {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
+                <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'U'
+              )}
             </button>
             
             <h1 className="text-3xl font-normal tracking-[0.05em] text-black dark:text-white uppercase px-2">
@@ -195,7 +196,6 @@ export default function ChatsPage() {
         )}
       </header>
 
-      {/* --- ОСНОВНОЙ КОНТЕНТ (РЕЗУЛЬТАТЫ И ЧАТЫ) --- */}
       <main className="flex-1 overflow-y-auto">
         {searchResults.length > 0 && (
           <div className="px-6 py-2 border-b border-gray-100 dark:border-zinc-900">
@@ -207,8 +207,12 @@ export default function ChatsPage() {
                   className="flex items-center justify-between py-3 hover:bg-gray-50 dark:hover:bg-zinc-900/50 px-2 rounded-xl transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-black dark:text-white font-semibold text-xs">
-                      {user.displayName?.charAt(0) || 'U'}
+                    <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-black dark:text-white font-semibold text-xs overflow-hidden">
+                      {user.avatarUrl && user.avatarUrl.length > 5 ? (
+                        <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        user.displayName?.charAt(0) || 'U'
+                      )}
                     </div>
                     <span className="font-medium text-black dark:text-white text-sm">{user.displayName}</span>
                   </div>
@@ -220,23 +224,30 @@ export default function ChatsPage() {
         )}
 
         <div className="divide-y divide-gray-100 dark:divide-zinc-900">
-          {filteredChats.map((chat: any) => (
-            <Link key={chat.id} href={'/chat/' + chat.id}>
-              <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors">
-                <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center text-black dark:text-white font-semibold text-lg shrink-0">
-                  {chat.participant?.displayName?.charAt(0) || 'U'}
-                </div>
-                <div className="ml-4 flex-1 overflow-hidden">
-                  <h3 className="font-semibold text-black dark:text-white truncate">
-                    {chat.participant?.displayName || 'Собеседник'}
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-zinc-400 truncate">
-                    {chat.lastMessage || 'Нет сообщений'}
-                  </p>
-                </div>
-              </a>
-            </Link>
-          ))}
+          {filteredChats.map((chat: any) => {
+            const participant = chat.participant || {};
+            return (
+              <Link key={chat.id} href={'/chat/' + chat.id}>
+                <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center text-black dark:text-white font-semibold text-lg shrink-0 overflow-hidden">
+                    {participant.avatarUrl && participant.avatarUrl.length > 5 ? (
+                      <img src={participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      participant.displayName?.charAt(0) || 'U'
+                    )}
+                  </div>
+                  <div className="ml-4 flex-1 overflow-hidden">
+                    <h3 className="font-semibold text-black dark:text-white truncate">
+                      {participant.displayName || 'Собеседник'}
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-zinc-400 truncate">
+                      {chat.lastMessage || 'Нет сообщений'}
+                    </p>
+                  </div>
+                </a>
+              </Link>
+            );
+          })}
 
           {filteredChats.length === 0 && searchResults.length === 0 && (
             <div className="text-center py-20 text-gray-400 dark:text-zinc-600">
@@ -247,7 +258,6 @@ export default function ChatsPage() {
         </div>
       </main>
 
-      {/* --- НИЖНЯЯ ПАНЕЛЬ (Только 2 кнопки) --- */}
       <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black z-10">
         <Link href="/">
           <a className="flex flex-col items-center text-black dark:text-white transition-colors">
