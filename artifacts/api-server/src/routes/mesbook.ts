@@ -17,6 +17,7 @@ type UserRow = {
   username: string;
   display_name: string;
   avatar_url: string;
+  bio: string; // <-- ДОБАВИЛИ ПОЛЕ BIO
   last_seen: number; 
 };
 
@@ -26,6 +27,7 @@ function userFromRow(row: UserRow) {
     username: row.username,
     displayName: row.display_name,
     avatarUrl: row.avatar_url,
+    bio: row.bio || "", // <-- ДОБАВИЛИ В ВЫВОД
     lastSeen: Number(row.last_seen) || 0,
   };
 }
@@ -33,7 +35,7 @@ function userFromRow(row: UserRow) {
 function getUser(database: Awaited<ReturnType<typeof getDatabase>>, id: number) {
   const row = queryRows<UserRow>(
     database,
-    "SELECT id, username, display_name, avatar_url, last_seen FROM users WHERE id = ?",
+    "SELECT id, username, display_name, avatar_url, bio, last_seen FROM users WHERE id = ?", // <-- ДОБАВИЛИ BIO В ПОИСК
     [id],
   )[0];
   return row ? userFromRow(row) : null;
@@ -73,7 +75,7 @@ router.get("/me", async (req, res): Promise<void> => {
 
 router.patch("/me", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const { displayName, avatarUrl, username, password } = req.body;
+  const { displayName, avatarUrl, username, password, bio } = req.body; // <-- ДОБАВИЛИ BIO СЮДА
   
   const database = await getDatabase();
   let user = getUser(database, currentUserId);
@@ -116,6 +118,15 @@ router.patch("/me", async (req, res): Promise<void> => {
     );
   }
 
+  // --- СОХРАНЯЕМ BIO В БАЗУ ДАННЫХ ---
+  if (bio !== undefined) {
+    execute(
+      database,
+      "UPDATE users SET bio = ? WHERE id = ?",
+      [bio, currentUserId],
+    );
+  }
+
   if (password !== undefined && password.trim() !== "") {
     execute(
       database,
@@ -140,7 +151,7 @@ router.get("/users/search", async (req, res) => {
   const db = await getDatabase();
   const users = queryRows(
     db,
-    "SELECT id, username, display_name as displayName, avatar_url as avatarUrl, last_seen as lastSeen FROM users WHERE (username LIKE ? OR username LIKE ? OR display_name LIKE ?) AND id != ?",
+    "SELECT id, username, display_name as displayName, avatar_url as avatarUrl, bio, last_seen as lastSeen FROM users WHERE (username LIKE ? OR username LIKE ? OR display_name LIKE ?) AND id != ?", // <-- ДОБАВИЛИ BIO И В ПОИСК
     [searchPattern1, searchPattern2, searchPattern1, currentUserId]
   );
   return res.json(users);
