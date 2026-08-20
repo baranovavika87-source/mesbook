@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Send, Trash2, Loader2, Check } from 'lucide-react';
+import { ArrowLeft, Send, Trash2, Loader2, Check, X } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -18,6 +18,7 @@ export default function ChatPage() {
   const [chatInfo, setChatInfo] = useState<any>(null);
   const [content, setContent] = useState('');
   const [readFailed, setReadFailed] = useState(false);
+  const [showProfile, setShowProfile] = useState(false); // <-- Состояние для карточки профиля
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentUserId = getUserId();
 
@@ -130,26 +131,46 @@ export default function ChatPage() {
     } catch (e) {}
   };
 
+  // Вычисляем статус онлайна (если был активен менее 3 минут назад)
+  const lastSeen = chatInfo?.participant?.lastSeen;
+  const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
+  const lastSeenText = isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно");
+
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-black transition-colors duration-300">
+    <div className="flex flex-col h-screen bg-white dark:bg-black transition-colors duration-300 relative">
       
-      <header className="px-4 pt-10 pb-4 border-b border-gray-100 dark:border-zinc-900 flex items-center gap-4 bg-white dark:bg-black">
+      <header className="px-4 pt-10 pb-4 border-b border-gray-100 dark:border-zinc-900 flex items-center gap-4 bg-white dark:bg-black relative z-10">
         <Link href="/">
           <a className="p-2 -ml-2 text-gray-500 hover:text-black dark:hover:text-white transition-colors">
             <ArrowLeft size={24} />
           </a>
         </Link>
-        <div className="relative">
-          <div className="w-11 h-11 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center text-black dark:text-white font-semibold text-lg">
-            {displayName.charAt(0)}
+        
+        {/* КЛИКАБЕЛЬНАЯ ШАПКА ДЛЯ ОТКРЫТИЯ ПРОФИЛЯ */}
+        <div 
+          className="flex items-center gap-3 cursor-pointer flex-1"
+          onClick={() => setShowProfile(true)}
+        >
+          <div className="relative">
+            <div className="w-11 h-11 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center text-black dark:text-white font-semibold text-lg overflow-hidden">
+              {chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? (
+                <img src={chatInfo?.participant?.avatarUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                displayName.charAt(0).toUpperCase()
+              )}
+            </div>
+            {isOnline && (
+              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>
+            )}
           </div>
-          <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>
-        </div>
-        <div className="flex flex-col">
-          <h2 className="font-bold text-black dark:text-white text-base leading-tight">
-            {displayName}
-          </h2>
-          <p className="text-[13px] text-gray-500 dark:text-zinc-500 font-medium mt-0.5">В сети</p>
+          <div className="flex flex-col">
+            <h2 className="font-bold text-black dark:text-white text-base leading-tight">
+              {displayName}
+            </h2>
+            <p className={`text-[13px] font-medium mt-0.5 ${isOnline ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500'}`}>
+              {lastSeenText}
+            </p>
+          </div>
         </div>
       </header>
 
@@ -192,7 +213,7 @@ export default function ChatPage() {
         })}
       </main>
 
-      <div className="p-4 bg-white dark:bg-black border-t border-gray-100 dark:border-zinc-900 pb-8">
+      <div className="p-4 bg-white dark:bg-black border-t border-gray-100 dark:border-zinc-900 pb-8 relative z-10">
         <form onSubmit={handleSend} className="flex items-center gap-3">
           <input
             className="flex-1 bg-gray-100 dark:bg-zinc-900 border-none rounded-full px-5 py-3.5 outline-none text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
@@ -210,6 +231,50 @@ export default function ChatPage() {
         </form>
       </div>
 
+      {/* --- МОДАЛЬНОЕ ОКНО ПРОФИЛЯ --- */}
+      {showProfile && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm transition-opacity">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setShowProfile(false)}
+              className="absolute top-4 right-4 p-2 bg-gray-100 dark:bg-black rounded-full text-gray-500 hover:text-black dark:hover:text-white transition-colors"
+            >
+              <X size={20} />
+            </button>
+            
+            <div className="p-8 flex flex-col items-center">
+              <div className="w-28 h-28 rounded-full bg-gray-100 dark:bg-black flex items-center justify-center text-black dark:text-white text-4xl font-semibold mb-4 overflow-hidden border-4 border-white dark:border-zinc-800 shadow-sm">
+                {chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? (
+                  <img src={chatInfo?.participant?.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
+              </div>
+              
+              <h2 className="text-2xl font-bold text-black dark:text-white text-center">{displayName}</h2>
+              
+              {chatInfo?.participant?.username && (
+                <p className="text-gray-500 dark:text-zinc-400 text-sm mt-1">{chatInfo?.participant?.username}</p>
+              )}
+              
+              <div className={`mt-3 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide ${isOnline ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-black text-gray-500 dark:text-zinc-400'}`}>
+                {lastSeenText}
+              </div>
+
+              {chatInfo?.participant?.bio && (
+                <div className="mt-8 w-full text-center">
+                  <p className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase mb-2 tracking-wider">О себе</p>
+                  <p className="text-black dark:text-white text-sm bg-gray-50 dark:bg-black rounded-2xl p-4 leading-relaxed">
+                    {chatInfo?.participant?.bio}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+
