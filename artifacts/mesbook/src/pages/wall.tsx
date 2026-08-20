@@ -116,8 +116,12 @@ export default function WallPage() {
         </div>
 
         <div className="px-6 pb-6 border-b border-gray-100 dark:border-zinc-900 flex flex-col items-center text-center">
-          <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-3xl font-bold text-black dark:text-white mb-4">
-            {currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'U'}
+          <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-3xl font-bold text-black dark:text-white mb-4 overflow-hidden">
+            {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
+              <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'U'
+            )}
           </div>
           <h2 className="text-2xl font-bold text-black dark:text-white leading-tight mb-1">
             {currentUser?.displayName || 'Пользователь'}
@@ -150,14 +154,20 @@ export default function WallPage() {
       {/* --- КОНЕЦ САЙДБАРА --- */}
 
       {/* --- ОБНОВЛЕННАЯ ШАПКА --- */}
-      <header className="px-6 pt-10 pb-4">
-        <div className="flex justify-between items-center mb-4">
+      <header className="px-6 pt-10 pb-4 h-24">
+        <div className="flex justify-between items-center h-full">
+          {/* ИЗМЕНЕНА КНОПКА: ТЕПЕРЬ ТУТ АВАТАРКА */}
           <button 
             onClick={() => setIsSidebarOpen(true)}
-            className="w-12 h-12 shrink-0 rounded-full border-2 border-black dark:border-white flex items-center justify-center text-black dark:text-white transition-transform active:scale-95"
+            className="w-12 h-12 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-black dark:text-white font-bold text-xl transition-transform active:scale-95 overflow-hidden"
           >
-            <User size={24} />
+            {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
+              <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'U'
+            )}
           </button>
+          
           <div className="text-right">
             <h1 className="text-4xl font-extrabold text-black dark:text-white tracking-tight leading-tight">Стена</h1>
             <p className="text-sm text-gray-500 dark:text-zinc-500">Глобальная лента сообщений</p>
@@ -211,7 +221,6 @@ export default function WallPage() {
         </div>
       </main>
 
-      {/* --- ОБНОВЛЕННАЯ НИЖНЯЯ ПАНЕЛЬ (Только 2 кнопки) --- */}
       <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black z-10">
         <Link href="/">
           <a className="flex flex-col items-center text-gray-400 dark:text-zinc-600 hover:text-black dark:hover:text-white transition-colors">
