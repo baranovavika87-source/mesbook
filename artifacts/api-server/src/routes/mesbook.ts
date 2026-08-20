@@ -454,5 +454,26 @@ router.post("/login", async (req, res) => {
   
   return res.json({ id: user.id, username: user.username, displayName: user.display_name, avatarUrl: user.avatar_url });
 });
+router.delete("/wall/posts/:postId", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
+  const postId = Number(req.params.postId);
+
+  if (!postId) {
+    res.status(400).json({ error: "Invalid post ID" });
+    return;
+  }
+
+  const database = await getDatabase();
+  
+  // Удаляем только если ID поста и ID автора совпадают
+  execute(
+    database,
+    "DELETE FROM wall_posts WHERE id = ? AND author_id = ?",
+    [postId, currentUserId]
+  );
+  await persistDatabase(database);
+
+  res.json({ success: true });
+});
 
 export default router;
