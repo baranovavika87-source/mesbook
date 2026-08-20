@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
-import { MessageSquare, User, Send, Users, X, Moon, Sun, LogOut } from 'lucide-react';
+import { MessageSquare, User, Send, Users, X, Moon, Sun, LogOut, Trash2 } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -29,14 +29,14 @@ export default function WallPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [content, setContent] = useState('');
   
-  // Состояния для бокового меню (сайдбара)
+  // Состояния для бокового меню и модалки профиля
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isDark, setIsDark] = useState(false);
   const [, setLocation] = useLocation();
   const currentUserId = getUserId();
 
-  // Подгрузка профиля для бокового меню
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
     const fetchMe = async () => {
@@ -87,12 +87,25 @@ export default function WallPage() {
     } catch (error) {}
   };
 
+  const handleDeletePost = async (postId: number) => {
+    if (!window.confirm("Удалить этот пост?")) return;
+    try {
+      const res = await fetch('/api/wall/posts/' + postId, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + currentUserId }
+      });
+      if (res.ok) {
+        loadPosts();
+      }
+    } catch (e) {}
+  };
+
   const toggleTheme = () => {
     const isNowDark = document.documentElement.classList.toggle('dark');
     setIsDark(isNowDark);
   };
 
-    const handleLogout = () => {
+  const handleLogout = () => {
     localStorage.removeItem('mesbook_user');
     window.location.href = '/';
   };
@@ -153,10 +166,8 @@ export default function WallPage() {
       </div>
       {/* --- КОНЕЦ САЙДБАРА --- */}
 
-      {/* --- ОБНОВЛЕННАЯ ШАПКА --- */}
-      <header className="px-6 pt-10 pb-4 h-24">
+      <header className="px-6 pt-10 pb-4 h-24 relative z-10">
         <div className="flex justify-between items-center h-full">
-          {/* ИЗМЕНЕНА КНОПКА: ТЕПЕРЬ ТУТ АВАТАРКА */}
           <button 
             onClick={() => setIsSidebarOpen(true)}
             className="w-12 h-12 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-black dark:text-white font-bold text-xl transition-transform active:scale-95 overflow-hidden"
@@ -197,11 +208,26 @@ export default function WallPage() {
 
         <div className="divide-y divide-gray-100 dark:divide-zinc-900">
           {posts.map((post: any) => (
-            <div key={post.id} className="px-6 py-5 hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors">
-              <div className="flex items-center gap-3 mb-3">
+            <div key={post.id} className="px-6 py-5 hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors relative">
+              
+              {/* Кнопка удаления поста (только для автора) */}
+              {String(post.author?.id) === String(currentUserId) && (
+                <button 
+                  onClick={() => handleDeletePost(post.id)}
+                  className="absolute top-5 right-6 text-gray-400 hover:text-red-500 transition-colors p-1"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+
+              {/* Кликабельный блок автора */}
+              <div 
+                className="flex items-center gap-3 mb-3 cursor-pointer inline-flex" 
+                onClick={() => setSelectedUser(post.author)}
+              >
                 <SafeAvatar name={post.author?.displayName || 'U'} url={post.author?.avatarUrl} />
                 <div>
-                  <h3 className="font-semibold text-black dark:text-white text-sm">
+                  <h3 className="font-semibold text-black dark:text-white text-sm hover:underline">
                     {post.author?.displayName || 'Пользователь'}
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-zinc-500">
@@ -209,7 +235,8 @@ export default function WallPage() {
                   </p>
                 </div>
               </div>
-              <p className="text-gray-800 dark:text-zinc-300 text-sm leading-relaxed">{post.content}</p>
+              
+              <p className="text-gray-800 dark:text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap pr-6">{post.content}</p>
             </div>
           ))}
 
@@ -235,8 +262,55 @@ export default function WallPage() {
           </a>
         </Link>
       </nav>
+
+      {/* --- МОДАЛЬНОЕ ОКНО ПРОФИЛЯ --- */}
+      {selectedUser && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm transition-opacity">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setSelectedUser(null)}
+              className="absolute top-4 right-4 p-2 bg-gray-100 dark:bg-black rounded-full text-gray-500 hover:text-black dark:hover:text-white transition-colors"
+            >
+              <X size={20} />
+            </button>
+            
+            <div className="p-8 flex flex-col items-center">
+              <div className="w-28 h-28 rounded-full bg-gray-100 dark:bg-black flex items-center justify-center text-black dark:text-white text-4xl font-semibold mb-4 overflow-hidden border-4 border-white dark:border-zinc-800 shadow-sm">
+                {selectedUser?.avatarUrl && selectedUser.avatarUrl.length > 5 ? (
+                  <img src={selectedUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  (selectedUser?.displayName ? selectedUser.displayName.charAt(0).toUpperCase() : 'U')
+                )}
+              </div>
+              
+              <h2 className="text-2xl font-bold text-black dark:text-white text-center">
+                {selectedUser?.displayName || 'Пользователь'}
+              </h2>
+              
+              {selectedUser?.username && (
+                <p className="text-gray-500 dark:text-zinc-400 text-sm mt-1">{selectedUser.username}</p>
+              )}
+              
+              <div className={`mt-3 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide ${selectedUser?.lastSeen && (Date.now() - selectedUser.lastSeen < 3 * 60 * 1000) ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-black text-gray-500 dark:text-zinc-400'}`}>
+                {selectedUser?.lastSeen && (Date.now() - selectedUser.lastSeen < 3 * 60 * 1000)
+                  ? 'В сети' 
+                  : (selectedUser?.lastSeen ? `Был(а) в ${new Date(selectedUser.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Недавно')}
+              </div>
+
+              {selectedUser?.bio && (
+                <div className="mt-8 w-full text-center">
+                  <p className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase mb-2 tracking-wider">О себе</p>
+                  <p className="text-black dark:text-white text-sm bg-gray-50 dark:bg-black rounded-2xl p-4 leading-relaxed">
+                    {selectedUser.bio}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
-
 
