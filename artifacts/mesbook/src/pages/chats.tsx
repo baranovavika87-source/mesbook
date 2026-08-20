@@ -16,8 +16,9 @@ export default function ChatsPage() {
   const [chats, setChats] = useState<any[]>([]);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   
-  // Состояния для бокового меню (сайдбара)
+  // Состояния для бокового меню и нового поиска
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isDark, setIsDark] = useState(false);
   const [, setLocation] = useLocation();
@@ -146,28 +147,52 @@ export default function ChatsPage() {
       {/* --- КОНЕЦ САЙДБАРА --- */}
 
 
-      {/* --- ШАПКА И ПОИСК --- */}
-      <header className="px-6 pt-10 pb-4">
-        <div className="flex justify-between items-center mb-6">
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="w-12 h-12 rounded-full border-2 border-black dark:border-white flex items-center justify-center text-black dark:text-white transition-transform active:scale-95"
-          >
-            <User size={24} />
-          </button>
-          <h1 className="text-4xl font-extrabold text-black dark:text-white tracking-tight">Чаты</h1>
-        </div>
+      {/* --- НОВАЯ ШАПКА MESBOOK --- */}
+      <header className="px-6 pt-10 pb-4 h-24">
+        {!isSearchOpen ? (
+          <div className="flex justify-between items-center h-full">
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="w-12 h-12 shrink-0 rounded-full border-[2.5px] border-black dark:border-white flex items-center justify-center text-black dark:text-white transition-transform active:scale-95"
+            >
+              <User size={26} strokeWidth={2.5} />
+            </button>
+            
+            <h1 className="text-3xl font-normal tracking-[0.05em] text-black dark:text-white uppercase px-2">
+              Mesbook
+            </h1>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-3.5 text-gray-400 dark:text-zinc-500" size={18} />
-          <input
-            type="text"
-            placeholder="Поиск или @имя..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full bg-gray-100 dark:bg-zinc-900 border-none rounded-xl pl-10 pr-4 py-3 text-sm text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
-          />
-        </div>
+            <button 
+              onClick={() => setIsSearchOpen(true)}
+              className="w-12 h-12 shrink-0 flex items-center justify-center text-black dark:text-white transition-transform active:scale-95"
+            >
+              <Search size={30} strokeWidth={2} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 h-full animate-in fade-in slide-in-from-right-4 duration-200">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3.5 text-gray-400 dark:text-zinc-500" size={18} />
+              <input
+                autoFocus
+                type="text"
+                placeholder="Поиск или @имя..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full bg-gray-100 dark:bg-zinc-900 border-none rounded-xl pl-10 pr-4 py-3 text-sm text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
+              />
+            </div>
+            <button 
+              onClick={() => {
+                setIsSearchOpen(false);
+                setSearch('');
+              }}
+              className="text-black dark:text-white font-medium text-sm px-2 hover:opacity-70 transition-opacity"
+            >
+              Отмена
+            </button>
+          </div>
+        )}
       </header>
 
       {/* --- ОСНОВНОЙ КОНТЕНТ (РЕЗУЛЬТАТЫ И ЧАТЫ) --- */}
@@ -222,8 +247,8 @@ export default function ChatsPage() {
         </div>
       </main>
 
-      {/* --- НИЖНЯЯ ПАНЕЛЬ (Теперь 2 кнопки) --- */}
-      <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black">
+      {/* --- НИЖНЯЯ ПАНЕЛЬ (Только 2 кнопки) --- */}
+      <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black z-10">
         <Link href="/">
           <a className="flex flex-col items-center text-black dark:text-white transition-colors">
             <MessageSquare size={24} />
