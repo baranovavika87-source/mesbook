@@ -58,7 +58,7 @@ export async function persistDatabase(database: Database): Promise<void> {
 }
 
 function seed(database: Database): void {  
-  // ДОБАВЛЕНО: last_seen INTEGER DEFAULT 0
+  // 1. Создаем таблицу (если это первый запуск)
   run(database, `CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
@@ -67,6 +67,13 @@ function seed(database: Database): void {
     avatar_url TEXT DEFAULT '',
     last_seen INTEGER DEFAULT 0
   )`);
+
+  // 2. БЕЗОПАСНАЯ МИГРАЦИЯ: Добавляем колонку bio в уже существующую базу
+  try {
+    run(database, "ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''");
+  } catch (e) {
+    // Если колонка уже добавлена, SQL выдаст ошибку, но мы ее просто проигнорируем
+  }
 
   run(database, `CREATE TABLE IF NOT EXISTS chats (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,22 +125,20 @@ export function getDatabase(): Promise<Database> {
     return databasePromise;
 }
 
-// Регистрация нового пользователя
 export function getUserByUsername(db: any, username: string) {
   const rows = queryRows(
     db,
-    "SELECT id, username, password, display_name, avatar_url, last_seen FROM users WHERE username = ?",
+    "SELECT id, username, password, display_name, avatar_url, bio, last_seen FROM users WHERE username = ?", 
     [username]
   );
   return rows[0] || null;
 }
 
 export function createUser(db: any, username: string, password: string, displayName: string, avatarUrl?: string) {
-  // ДОБАВЛЕНО: записываем текущее время при регистрации
   execute(
     db,
-    "INSERT INTO users (username, password, display_name, avatar_url, last_seen) VALUES (?, ?, ?, ?, ?)",
-    [username, password, displayName, avatarUrl || "", Date.now()]
+    "INSERT INTO users (username, password, display_name, avatar_url, bio, last_seen) VALUES (?, ?, ?, ?, ?, ?)", 
+    [username, password, displayName, avatarUrl || "", "", Date.now()]
   );
   const rows = queryRows<{ id: number }>(db, "SELECT last_insert_rowid() as id");
   return rows[0]?.id || 1;
@@ -143,8 +148,7 @@ export function searchUsers(db: any, query: string, currentUserId: number) {
   const searchPattern = "%" + query + "%";
   return queryRows(
     db,
-    "SELECT id, display_name as displayName, avatar_url as avatarUrl, last_seen FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?",
+    "SELECT id, display_name as displayName, avatar_url as avatarUrl, bio, last_seen FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?", 
     [searchPattern, searchPattern, currentUserId]
   );
 }
-
