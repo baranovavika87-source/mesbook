@@ -84,9 +84,9 @@ export default function ChatsPage() {
     setIsDark(isNowDark);
   };
 
-  const handleLogout = () => {
+    const handleLogout = () => {
     localStorage.removeItem('mesbook_user');
-    setLocation('/login');
+    window.location.href = '/';
   };
 
   return (
