@@ -1,22 +1,17 @@
 import { createClient } from "@libsql/client";
 import { logger } from "./logger";
 
-// Подключение безопасно берет ключи из Environment в Render
+// 1. ПОДКЛЮЧЕНИЕ К TURSO
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL as string,
   authToken: process.env.TURSO_AUTH_TOKEN as string
 });
 
-// Мы оставляем getDatabase() для совместимости с остальным кодом,
-// но теперь она просто возвращает готовый клиент Turso
-export async function getDatabase() {
-  return db;
-}
+let isInitialized = false;
 
-// 2. ИНИЦИАЛИЗАЦИЯ И МИГРАЦИИ (Выполняется при запуске сервера)
+// 2. ИНИЦИАЛИЗАЦИЯ И МИГРАЦИИ
 export async function initializeDatabase() {
   try {
-    // Таблица пользователей
     await db.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,7 +24,6 @@ export async function initializeDatabase() {
       )
     `);
 
-    // Таблица чатов
     await db.execute(`
       CREATE TABLE IF NOT EXISTS chats (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,7 +32,6 @@ export async function initializeDatabase() {
       )
     `);
       
-    // Таблица сообщений
     await db.execute(`
       CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,7 +43,6 @@ export async function initializeDatabase() {
       )
     `);
       
-    // Таблица постов на стене
     await db.execute(`
       CREATE TABLE IF NOT EXISTS wall_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,8 +60,16 @@ export async function initializeDatabase() {
   }
 }
 
-// 3. ФУНКЦИИ ДЛЯ РАБОТЫ С ДАННЫМИ (Адаптированы под Turso)
+// ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ: Теперь таблицы создаются автоматически при первом запросе!
+export async function getDatabase() {
+  if (!isInitialized) {
+    await initializeDatabase();
+    isInitialized = true;
+  }
+  return db;
+}
 
+// 3. ФУНКЦИИ ДЛЯ РАБОТЫ С ДАННЫМИ
 export async function getUserByUsername(database: any, username: string) {
   const result = await database.execute({
     sql: "SELECT id, username, password, display_name, avatar_url, bio, last_seen FROM users WHERE username = ?",
@@ -79,13 +79,11 @@ export async function getUserByUsername(database: any, username: string) {
 }
 
 export async function createUser(database: any, username: string, password: string, displayName: string, avatarUrl?: string) {
-  // Добавляем пользователя
   await database.execute({
     sql: "INSERT INTO users (username, password, display_name, avatar_url, bio, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
     args: [username, password, displayName, avatarUrl || "", "", Date.now()]
   });
   
-  // Получаем ID только что созданного пользователя
   const result = await database.execute("SELECT last_insert_rowid() as id");
   return result.rows[0]?.id || 1;
 }
@@ -98,4 +96,3 @@ export async function searchUsers(database: any, query: string, currentUserId: n
   });
   return result.rows;
 }
-
