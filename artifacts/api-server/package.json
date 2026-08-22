@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@libsql/client": "^0.6.0",
-    "@libsql/linux-x64-gnu": "^0.6.0",
+    "@libsql/linux-x64-gnu": "*",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "cookie-parser": "^1.4.7",
@@ -33,3 +33,4 @@
     "thread-stream": "3.1.0"
   }
 }
+
