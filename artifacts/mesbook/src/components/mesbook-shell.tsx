@@ -47,7 +47,7 @@ export function AppShell({ children, fullScreen = false }: { children: ReactNode
         {children}
       </main>
       {!fullScreen && <BottomNav />}
-      <span className="sr-only" data-testid="text-current-user">{me?.displayName ?? 'Mesbook member'}</span>
+      <span className="sr-only" data-testid="text-current-user">{me?.displayName ?? 'Mesogram member'}</span>
     </div>
   );
 }
