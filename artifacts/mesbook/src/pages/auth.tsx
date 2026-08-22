@@ -42,7 +42,7 @@ export default function AuthPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-100 dark:bg-black p-4 transition-colors duration-300">
       <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-zinc-900 p-6 shadow-lg dark:shadow-none relative">
         <h1 className="mb-6 text-center text-2xl font-bold text-gray-900 dark:text-white">
-          {isLogin ? "Вход в Mesbook" : "Регистрация"}
+          {isLogin ? "Вход в Mesogram" : "Регистрация в Mesogram"}
         </h1>
 
         {error && (
