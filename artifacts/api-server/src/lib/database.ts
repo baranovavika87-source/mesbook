@@ -3,8 +3,26 @@ import { logger } from "./logger";
 const url = process.env.TURSO_DATABASE_URL?.replace("libsql://", "https://") as string;
 const authToken = process.env.TURSO_AUTH_TOKEN as string;
 
-// Прямой универсальный запрос к Turso через стандартный fetch
+// Функция для правильной типизации аргументов под требования Turso API
+function formatArg(arg: any) {
+  if (arg === null || arg === undefined) {
+    return { type: "null" };
+  }
+  if (typeof arg === "number") {
+    if (Number.isInteger(arg)) {
+      return { type: "integer", value: String(arg) };
+    }
+    return { type: "float", value: arg };
+  }
+  if (typeof arg === "boolean") {
+    return { type: "integer", value: arg ? "1" : "0" };
+  }
+  return { type: "text", value: String(arg) };
+}
+
 async function tursoQuery(sql: string, args: any[] = []) {
+  const formattedArgs = args.map(formatArg);
+  
   const response = await fetch(`${url}/v2/pipeline`, {
     method: "POST",
     headers: {
@@ -13,7 +31,7 @@ async function tursoQuery(sql: string, args: any[] = []) {
     },
     body: JSON.stringify({
       requests: [
-        { type: "execute", stmt: { sql, args } },
+        { type: "execute", stmt: { sql, args: formattedArgs } },
         { type: "close" }
       ]
     }),
@@ -35,7 +53,6 @@ async function tursoQuery(sql: string, args: any[] = []) {
   const rows = result.response.result.rows.map((row: any[]) => {
     const obj: any = {};
     cols.forEach((col: string, idx: number) => {
-      // Преобразуем формат значений Turso в обычные типы
       const val = row[idx];
       obj[col] = val !== null && val !== undefined ? (val.value !== undefined ? val.value : val) : null;
     });
@@ -60,7 +77,6 @@ export async function initializeDatabase() {
 
 initializeDatabase();
 
-// Эмулируем объект базы для совместимости с остальным кодом
 const dbAdapter = {
   execute: async (stmt: any) => {
     const sql = typeof stmt === "string" ? stmt : stmt.sql;
@@ -99,4 +115,3 @@ export async function searchUsers(database: any, query: string, currentUserId: n
   });
   return result.rows;
 }
-
