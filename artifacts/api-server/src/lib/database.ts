@@ -1,32 +1,76 @@
-import { createClient } from "@libsql/client";
 import { logger } from "./logger";
 
-// Создаем подключение с явным отключением миграций
-const db = createClient({
-  url: process.env.TURSO_DATABASE_URL as string,
-  authToken: process.env.TURSO_AUTH_TOKEN as string,
-  intMode: "number"
-});
+const url = process.env.TURSO_DATABASE_URL?.replace("libsql://", "https://") as string;
+const authToken = process.env.TURSO_AUTH_TOKEN as string;
+
+// Прямой универсальный запрос к Turso через стандартный fetch
+async function tursoQuery(sql: string, args: any[] = []) {
+  const response = await fetch(`${url}/v2/pipeline`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      requests: [
+        { type: "execute", stmt: { sql, args } },
+        { type: "close" }
+      ]
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Turso HTTP error: ${response.status} - ${errText}`);
+  }
+
+  const data: any = await response.json();
+  const result = data.results[0];
+  
+  if (result.type === "error") {
+    throw new Error(`Turso SQL error: ${result.error.message}`);
+  }
+
+  const cols = result.response.result.cols.map((c: any) => c.name);
+  const rows = result.response.result.rows.map((row: any[]) => {
+    const obj: any = {};
+    cols.forEach((col: string, idx: number) => {
+      // Преобразуем формат значений Turso в обычные типы
+      const val = row[idx];
+      obj[col] = val !== null && val !== undefined ? (val.value !== undefined ? val.value : val) : null;
+    });
+    return obj;
+  });
+
+  return { rows };
+}
 
 export async function initializeDatabase() {
   try {
-    // Используем прямой сырой запрос через внутренний fetch, если libsql упрямится, 
-    // но сначала попробуем стандартный метод без триггеров миграций
-    await db.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, display_name TEXT NOT NULL, avatar_url TEXT DEFAULT '', bio TEXT DEFAULT '', last_seen INTEGER DEFAULT 0)");
-    await db.execute("CREATE TABLE IF NOT EXISTS chats (id INTEGER PRIMARY KEY AUTOINCREMENT, participant_id INTEGER NOT NULL, created_at TEXT NOT NULL)");
-    await db.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, sender_id INTEGER NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL, read_by_me INTEGER NOT NULL DEFAULT 0)");
-    await db.execute("CREATE TABLE IF NOT EXISTS wall_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, author_id INTEGER NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)");
+    await tursoQuery(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, display_name TEXT NOT NULL, avatar_url TEXT DEFAULT '', bio TEXT DEFAULT '', last_seen INTEGER DEFAULT 0)`);
+    await tursoQuery(`CREATE TABLE IF NOT EXISTS chats (id INTEGER PRIMARY KEY AUTOINCREMENT, participant_id INTEGER NOT NULL, created_at TEXT NOT NULL)`);
+    await tursoQuery(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, sender_id INTEGER NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL, read_by_me INTEGER NOT NULL DEFAULT 0)`);
+    await tursoQuery(`CREATE TABLE IF NOT EXISTS wall_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, author_id INTEGER NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)`);
 
-    logger.info("✅ Таблицы в Turso успешно проверены/созданы");
+    logger.info("✅ Таблицы в Turso успешно созданы через HTTP API");
   } catch (error: any) {
-    logger.error({ message: error?.message }, "❌ Ошибка инициализации Turso");
+    logger.error({ message: error?.message }, "❌ Ошибка инициализации Turso HTTP");
   }
 }
 
 initializeDatabase();
 
+// Эмулируем объект базы для совместимости с остальным кодом
+const dbAdapter = {
+  execute: async (stmt: any) => {
+    const sql = typeof stmt === "string" ? stmt : stmt.sql;
+    const args = typeof stmt === "string" ? [] : (stmt.args || []);
+    return await tursoQuery(sql, args);
+  }
+};
+
 export async function getDatabase() {
-  return db;
+  return dbAdapter;
 }
 
 export async function getUserByUsername(database: any, username: string) {
@@ -55,3 +99,4 @@ export async function searchUsers(database: any, query: string, currentUserId: n
   });
   return result.rows;
 }
+
