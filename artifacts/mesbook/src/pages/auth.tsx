@@ -39,14 +39,14 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-lg">
-        <h1 className="mb-6 text-center text-2xl font-bold text-gray-900">
+    <div className="flex min-h-screen items-center justify-center bg-gray-100 dark:bg-black p-4 transition-colors duration-300">
+      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-zinc-900 p-6 shadow-lg dark:shadow-none relative">
+        <h1 className="mb-6 text-center text-2xl font-bold text-gray-900 dark:text-white">
           {isLogin ? "Вход в Mesbook" : "Регистрация"}
         </h1>
 
         {error && (
-          <div className="mb-4 rounded-xl bg-red-50 p-3 text-center text-xs font-medium text-red-600">
+          <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-950/30 p-3 text-center text-xs font-medium text-red-600 dark:text-red-400">
             {error}
           </div>
         )}
@@ -54,38 +54,38 @@ export default function AuthPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Отображаемое имя</label>
+              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-zinc-400">Отображаемое имя</label>
               <input
                 type="text"
                 required
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-                placeholder="Игорь"
+                className="w-full rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-black px-3 py-2 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors"
+                placeholder="Ваше имя"
               />
             </div>
           )}
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">Никнейм (@username)</label>
+            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-zinc-400">Никнейм (@username)</label>
             <input
               type="text"
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-              placeholder="igor_baranov"
+              className="w-full rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-black px-3 py-2 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors"
+              placeholder="username"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">Пароль</label>
+            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-zinc-400">Пароль</label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+              className="w-full rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-black px-3 py-2 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors"
               placeholder="••••••••"
             />
           </div>
@@ -102,7 +102,7 @@ export default function AuthPage() {
           <button
             type="button"
             onClick={() => { setIsLogin(!isLogin); setError(""); }}
-            className="text-xs text-blue-600 hover:underline"
+            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
           >
             {isLogin ? "Ещё нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
           </button>
