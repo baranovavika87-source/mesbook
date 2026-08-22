@@ -51,8 +51,8 @@ export async function initializeDatabase() {
     `);
 
     logger.info("✅ Таблицы в Turso успешно проверены/созданы");
-  } catch (error) {
-    logger.error({ error }, "❌ Ошибка инициализации таблиц Turso");
+  } catch (error: any) {
+    logger.error({ err: error, message: error?.message, stack: error?.stack }, "❌ Подробная ошибка инициализации Turso");
   }
 }
 
@@ -89,3 +89,4 @@ export async function searchUsers(database: any, query: string, currentUserId: n
   });
   return result.rows;
 }
+
