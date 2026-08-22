@@ -1,11 +1,10 @@
 import { createClient } from "@libsql/client";
 import { logger } from "./logger";
 
-// 1. ПОДКЛЮЧЕНИЕ К TURSO
-// Используем ключи, которые ты создал
+// Подключение безопасно берет ключи из Environment в Render
 const db = createClient({
-  url: "libsql://mesogram-db-baranovavika87-source.aws-ap-northeast-1.turso.io",
-  authToken: "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODc0MDQyNjEsImlkIjoiMDFhMDI5OTYtOWMwMS03ODE4LTg0YmEtYmNkYzdjZTdmZTBiIiwia2lkIjoiMWhJWFVDa1Bha2syZzJtcFRTQUpJWHVzN1MwZ0tkeHJ3WGZnMDU5WEdmNCIsInJpZCI6IjA3YjVkZWZkLTI5OTEtNGVjYy04YjNmLWZmOTVhYTdhOWFlYiJ9._GDzhNHDomTdJ34s5rAcES02afJ81kuSAS1z04hnCNmo5pELc8tNRaJjfwJDzNFjZnnMg49mdzsid2vksCJRDQ"
+  url: process.env.TURSO_DATABASE_URL as string,
+  authToken: process.env.TURSO_AUTH_TOKEN as string
 });
 
 // Мы оставляем getDatabase() для совместимости с остальным кодом,
