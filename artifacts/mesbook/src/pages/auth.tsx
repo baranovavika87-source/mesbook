@@ -39,70 +39,76 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100 dark:bg-black p-4 transition-colors duration-300">
-      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-zinc-900 p-6 shadow-lg dark:shadow-none relative">
-        <h1 className="mb-6 text-center text-2xl font-bold text-gray-900 dark:text-white">
-          {isLogin ? "Вход в Mesogram" : "Регистрация в Mesogram"}
+    <div className="flex min-h-screen items-center justify-center bg-white dark:bg-black p-4 transition-colors duration-300">
+      <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-black p-8 border border-gray-200 dark:border-zinc-900 relative">
+        <h1 className="mb-8 text-center text-3xl font-bold tracking-tight text-black dark:text-white uppercase">
+          {isLogin ? "Вход" : "Регистрация"}
         </h1>
 
         {error && (
-          <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-950/30 p-3 text-center text-xs font-medium text-red-600 dark:text-red-400">
+          <div className="mb-6 rounded-2xl bg-gray-100 dark:bg-zinc-900 p-4 text-center text-sm font-medium text-red-500 dark:text-red-400">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {!isLogin && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-zinc-400">Отображаемое имя</label>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-zinc-500">
+                Имя в Mesogram
+              </label>
               <input
                 type="text"
                 required
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-black px-3 py-2 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors"
-                placeholder="Ваше имя"
+                className="w-full rounded-2xl border-none bg-gray-100 dark:bg-zinc-900 px-4 py-4 text-sm text-black dark:text-white outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
+                placeholder="Как вас называть?"
               />
             </div>
           )}
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-zinc-400">Никнейм (@username)</label>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-zinc-500">
+              Никнейм (@)
+            </label>
             <input
               type="text"
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-black px-3 py-2 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors"
+              className="w-full rounded-2xl border-none bg-gray-100 dark:bg-zinc-900 px-4 py-4 text-sm text-black dark:text-white outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
               placeholder="username"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-zinc-400">Пароль</label>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-zinc-500">
+              Пароль
+            </label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-black px-3 py-2 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors"
+              className="w-full rounded-2xl border-none bg-gray-100 dark:bg-zinc-900 px-4 py-4 text-sm text-black dark:text-white outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
               placeholder="••••••••"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-95 transition"
+            className="w-full rounded-2xl bg-black dark:bg-white py-4 mt-2 text-sm font-bold text-white dark:text-black hover:opacity-80 active:scale-95 transition-all"
           >
-            {isLogin ? "Войти" : "Зарегистрироваться"}
+            {isLogin ? "Войти" : "Создать аккаунт"}
           </button>
         </form>
 
-        <div className="mt-5 text-center">
+        <div className="mt-6 text-center">
           <button
             type="button"
             onClick={() => { setIsLogin(!isLogin); setError(""); }}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            className="text-sm font-medium text-gray-500 dark:text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
           >
             {isLogin ? "Ещё нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
           </button>
