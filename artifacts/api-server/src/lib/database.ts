@@ -1,15 +1,13 @@
 import { createClient } from "@libsql/client";
 import { logger } from "./logger";
 
-// 1. ПОДКЛЮЧЕНИЕ К TURSO
+// Создаем чистое подключение по официальной документации Turso
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL as string,
-  authToken: process.env.TURSO_AUTH_TOKEN as string
+  authToken: process.env.TURSO_AUTH_TOKEN as string,
 });
 
-let isInitialized = false;
-
-// 2. ИНИЦИАЛИЗАЦИЯ И МИГРАЦИИ
+// Функция автоматического создания таблиц при первом старте
 export async function initializeDatabase() {
   try {
     await db.execute(`
@@ -52,28 +50,23 @@ export async function initializeDatabase() {
       )
     `);
 
-    logger.info("✅ Облачная БД Turso (Mesbook) успешно инициализирована");
-    return db;
+    logger.info("✅ Таблицы в Turso успешно проверены/созданы");
   } catch (error) {
-    logger.error({ error }, "❌ Ошибка при инициализации Turso");
-    throw error;
+    logger.error({ error }, "❌ Ошибка инициализации таблиц Turso");
   }
 }
 
-// ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ: Теперь таблицы создаются автоматически при первом запросе!
+// Запускаем инициализацию сразу при импорте файла
+initializeDatabase();
+
 export async function getDatabase() {
-  if (!isInitialized) {
-    await initializeDatabase();
-    isInitialized = true;
-  }
   return db;
 }
 
-// 3. ФУНКЦИИ ДЛЯ РАБОТЫ С ДАННЫМИ
 export async function getUserByUsername(database: any, username: string) {
   const result = await database.execute({
     sql: "SELECT id, username, password, display_name, avatar_url, bio, last_seen FROM users WHERE username = ?",
-    args: [username]
+    args: [username],
   });
   return result.rows[0] || null;
 }
@@ -81,18 +74,18 @@ export async function getUserByUsername(database: any, username: string) {
 export async function createUser(database: any, username: string, password: string, displayName: string, avatarUrl?: string) {
   await database.execute({
     sql: "INSERT INTO users (username, password, display_name, avatar_url, bio, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
-    args: [username, password, displayName, avatarUrl || "", "", Date.now()]
+    args: [username, password, displayName, avatarUrl || "", "", Date.now()],
   });
   
   const result = await database.execute("SELECT last_insert_rowid() as id");
-  return result.rows[0]?.id || 1;
+  return Number(result.rows[0]?.id) || 1;
 }
 
 export async function searchUsers(database: any, query: string, currentUserId: number) {
   const searchPattern = "%" + query + "%";
   const result = await database.execute({
     sql: "SELECT id, display_name as displayName, avatar_url as avatarUrl, bio, last_seen FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?",
-    args: [searchPattern, searchPattern, currentUserId]
+    args: [searchPattern, searchPattern, currentUserId],
   });
   return result.rows;
 }
