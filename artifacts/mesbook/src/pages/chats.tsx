@@ -160,7 +160,7 @@ export default function ChatsPage() {
             </button>
             
             <h1 className="text-3xl font-normal tracking-[0.05em] text-black dark:text-white uppercase px-2">
-              Mesbook
+              Mesogram
             </h1>
 
             <button 
