@@ -18,7 +18,10 @@ export default function ChatsPage() {
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+  const saved = localStorage.getItem('mesbook_user');
+  return saved ? JSON.parse(saved) : null;
+});
   const [isDark, setIsDark] = useState(false);
   const [, setLocation] = useLocation();
 
