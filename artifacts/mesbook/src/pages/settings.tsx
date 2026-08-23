@@ -4,11 +4,12 @@ import { MessageSquare, LogOut, Check, Moon, Sun, Users, Camera } from 'lucide-r
 
 export default function SettingsPage() {
   const [, setLocation] = useLocation();
-  const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [bio, setBio] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
+  const savedUser = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
+const [displayName, setDisplayName] = useState(savedUser.displayName || '');
+const [username, setUsername] = useState(savedUser.username || '');
+const [password, setPassword] = useState('');
+const [bio, setBio] = useState(savedUser.bio || '');
+const [avatarUrl, setAvatarUrl] = useState(savedUser.avatarUrl || '');
   const [saved, setSaved] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [imgError, setImgError] = useState(false);
