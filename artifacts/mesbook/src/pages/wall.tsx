@@ -32,7 +32,10 @@ export default function WallPage() {
   // Состояния для бокового меню и модалки профиля
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+  const saved = localStorage.getItem('mesbook_user');
+  return saved ? JSON.parse(saved) : null;
+});
   const [isDark, setIsDark] = useState(false);
   const [, setLocation] = useLocation();
   const currentUserId = getUserId();
