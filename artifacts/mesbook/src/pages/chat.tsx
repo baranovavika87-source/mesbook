@@ -163,7 +163,6 @@ export default function ChatPage() {
         const mediaMsg = `[MEDIA] ${data.secure_url}`;
         await sendMessageToServer(mediaMsg);
       } else {
-        // Если url не пришел, отправим весь ответ от сервера для дебага
         const errorMsg = `[MEDIA] ERROR: ${JSON.stringify(data)}`;
         await sendMessageToServer(errorMsg);
       }
@@ -193,9 +192,14 @@ export default function ChatPage() {
   // --- УМНЫЙ РЕНДЕР СООБЩЕНИЙ ---
   const renderMessageContent = (msgContent: string, isMe: boolean) => {
     if (msgContent.startsWith('[MEDIA] ')) {
-      // Добавили .trim(), чтобы обрезать случайные невидимые пробелы
-      const url = msgContent.replace('[MEDIA] ', '').trim();
+      let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
+      
+      // МАГИЯ CLOUDINARY: Если это фото с Айфона (heic/heif), 
+      // просим Cloudinary на лету отдать нам обычный .jpg
+      if (!isVideo && url.match(/\.(heic|heif)$/i)) {
+        url = url.replace(/\.(heic|heif)$/i, '.jpg');
+      }
       
       return (
         <div className="mt-1 mb-2">
@@ -204,8 +208,6 @@ export default function ChatPage() {
           ) : (
             <img src={url} alt="Media" className="w-full max-w-[240px] rounded-xl object-cover" />
           )}
-          {/* СТРОЧКА ДЛЯ РАССЛЕДОВАНИЯ: Выведет саму ссылку красным текстом */}
-          <div className="text-[10px] mt-2 text-red-500 break-all">{url}</div>
         </div>
       );
     }
