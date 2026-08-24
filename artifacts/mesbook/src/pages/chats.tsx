@@ -13,15 +13,28 @@ const getUserId = () => {
 
 export default function ChatsPage() {
   const [search, setSearch] = useState('');
-  const [chats, setChats] = useState<any[]>([]);
-  const [searchResults, setSearchResults] = useState<any[]>([]);
   
+  // Мгновенная загрузка списка чатов из памяти
+  const [chats, setChats] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('mesbook_chats');
+      return saved ? JSON.parse(saved) : [];
+    } catch(e) { return []; }
+  });
+  
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  
+  // Мгновенная загрузка профиля из памяти
   const [currentUser, setCurrentUser] = useState<any>(() => {
-  const saved = localStorage.getItem('mesbook_user');
-  return saved ? JSON.parse(saved) : null;
-});
+    try {
+      const saved = localStorage.getItem('mesbook_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch(e) { return null; }
+  });
+  
   const [isDark, setIsDark] = useState(false);
   const [, setLocation] = useLocation();
 
@@ -46,11 +59,14 @@ export default function ChatsPage() {
         });
         if (res.ok) {
           const data = await res.json();
-          let arr = [];
+          let arr: any[] = [];
           if (Array.isArray(data)) arr = data;
           else if (data && Array.isArray(data.chats)) arr = data.chats;
           else if (data && Array.isArray(data.data)) arr = data.data;
+          
           setChats(arr);
+          // Сохраняем свежие чаты в память телефона
+          localStorage.setItem('mesbook_chats', JSON.stringify(arr));
         }
       } catch (e) {}
     };
@@ -78,16 +94,17 @@ export default function ChatsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const filteredChats = Array.isArray(chats) ? chats.filter((c: any) =>
+  const filteredChats = Array.isArray(chats) ? chats.filter((c: any) => 
     (c.participant?.displayName || '').toLowerCase().includes(search.toLowerCase())
   ) : [];
 
   const toggleTheme = () => {
     const isNowDark = document.documentElement.classList.toggle('dark');
     setIsDark(isNowDark);
+    localStorage.setItem('theme', isNowDark ? 'dark' : 'light');
   };
 
-    const handleLogout = () => {
+  const handleLogout = () => {
     localStorage.removeItem('mesbook_user');
     window.location.href = '/';
   };
@@ -95,27 +112,28 @@ export default function ChatsPage() {
   return (
     <div className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300 relative overflow-hidden">
       
+      {/* Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 transition-opacity" 
+          className="fixed inset-0 bg-black/50 z-40 transition-opacity"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
-      
-      <div className={'fixed top-0 left-0 h-full w-[80%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 shadow-2xl flex flex-col ' + (isSidebarOpen ? 'translate-x-0' : '-translate-x-full')}>
-        
+
+      {/* Sidebar */}
+      <div className={`fixed top-0 left-0 h-full w-[80%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 ease-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-4 flex justify-end">
-          <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-black dark:text-white rounded-full hover:bg-gray-100 dark:hover:bg-zinc-900 transition">
+          <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-black dark:text-white rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
             <X size={26} />
           </button>
         </div>
-
-        <div className="px-6 pb-6 border-b border-gray-100 dark:border-zinc-900 flex flex-col items-center text-center">
-          <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-3xl font-bold text-black dark:text-white mb-4 overflow-hidden">
+        
+        <div className="px-6 pb-6 border-b border-gray-100 dark:border-zinc-800 flex flex-col items-center text-center">
+          <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-3xl font-bold text-black dark:text-white mb-4 overflow-hidden border-2 border-white dark:border-zinc-900 shadow-sm">
             {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
               <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
             ) : (
-              currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'U'
+              currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"
             )}
           </div>
           <h2 className="text-2xl font-bold text-black dark:text-white leading-tight mb-1">
@@ -139,7 +157,7 @@ export default function ChatsPage() {
           </button>
         </div>
 
-        <div className="mt-auto mb-6">
+        <div className="mt-auto mb-6 flex flex-col">
           <button onClick={handleLogout} className="flex items-center gap-5 px-8 py-4 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors w-full text-left">
             <LogOut size={24} />
             <span className="text-lg font-medium">Выйти</span>
@@ -147,43 +165,18 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      <header className="px-6 pt-10 pb-4 h-24">
-        {!isSearchOpen ? (
-          <div className="flex justify-between items-center h-full">
-            {/* ИЗМЕНЕНА КНОПКА: ТЕПЕРЬ ТУТ АВАТАРКА */}
-            <button 
-              onClick={() => setIsSidebarOpen(true)}
-              className="w-12 h-12 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-black dark:text-white font-bold text-xl transition-transform active:scale-95 overflow-hidden"
-            >
-              {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
-                <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'U'
-              )}
-            </button>
-            
-            <h1 className="text-3xl font-normal tracking-[0.05em] text-black dark:text-white uppercase px-2">
-              Mesogram
-            </h1>
-
-            <button 
-              onClick={() => setIsSearchOpen(true)}
-              className="w-12 h-12 shrink-0 flex items-center justify-center text-black dark:text-white transition-transform active:scale-95"
-            >
-              <Search size={30} strokeWidth={2} />
-            </button>
-          </div>
-        ) : (
+      <header className="px-6 pt-10 pb-4 h-24 relative z-10 bg-white dark:bg-black">
+        {isSearchOpen ? (
           <div className="flex items-center gap-3 h-full animate-in fade-in slide-in-from-right-4 duration-200">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-3.5 text-gray-400 dark:text-zinc-500" size={18} />
-              <input
+              <input 
                 autoFocus
                 type="text"
-                placeholder="Поиск или @имя..."
+                placeholder="Поиск или @username..."
                 value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full bg-gray-100 dark:bg-zinc-900 border-none rounded-xl pl-10 pr-4 py-3 text-sm text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-gray-100 dark:bg-zinc-900 border-none rounded-xl pl-10 pr-4 py-3 text-sm text-black dark:text-white outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
               />
             </div>
             <button 
@@ -196,25 +189,49 @@ export default function ChatsPage() {
               Отмена
             </button>
           </div>
+        ) : (
+          <div className="flex justify-between items-center h-full">
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="w-12 h-12 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-700"
+            >
+              {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
+                <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-black dark:text-white font-semibold">{currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"}</span>
+              )}
+            </button>
+            
+            <h1 className="text-3xl font-normal tracking-[0.05em] text-black dark:text-white uppercase px-2">
+              Mesogram
+            </h1>
+            
+            <button 
+              onClick={() => setIsSearchOpen(true)}
+              className="w-12 h-12 shrink-0 flex items-center justify-center text-black dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-900 rounded-full transition-colors"
+            >
+              <Search size={22} strokeWidth={2} />
+            </button>
+          </div>
         )}
       </header>
 
       <main className="flex-1 overflow-y-auto">
         {searchResults.length > 0 && (
           <div className="px-6 py-2 border-b border-gray-100 dark:border-zinc-900">
-            <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase mb-2">Пользователи</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase mb-2 tracking-wider">Пользователи</h3>
             {searchResults.map((user: any) => (
               <Link key={user.id} href={'/chat/' + user.id}>
-                <a
+                <a 
                   onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
                   className="flex items-center justify-between py-3 hover:bg-gray-50 dark:hover:bg-zinc-900/50 px-2 rounded-xl transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-black dark:text-white font-semibold text-xs overflow-hidden">
+                    <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden">
                       {user.avatarUrl && user.avatarUrl.length > 5 ? (
                         <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                       ) : (
-                        user.displayName?.charAt(0) || 'U'
+                        <span className="text-black dark:text-white font-semibold">{user.displayName?.charAt(0) || "U"}</span>
                       )}
                     </div>
                     <span className="font-medium text-black dark:text-white text-sm">{user.displayName}</span>
@@ -226,24 +243,36 @@ export default function ChatsPage() {
           </div>
         )}
 
-        <div className="divide-y divide-gray-100 dark:divide-zinc-900">
+        <div className="divide-y divide-gray-100 dark:divide-zinc-900/50">
           {filteredChats.map((chat: any) => {
             const participant = chat.participant || {};
+            
+            // Вычисляем статус онлайна (если был активен менее 3 минут назад)
+            const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 3 * 60 * 1000) : false;
+
             return (
-              <Link key={chat.id} href={'/chat/' + chat.id}>
-                <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors">
-                  <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center text-black dark:text-white font-semibold text-lg shrink-0 overflow-hidden">
+              <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
+                <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors">
+                  
+                  {/* Контейнер аватарки с relative для правильного позиционирования точки */}
+                  <div className="w-14 h-14 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center relative border border-gray-200/50 dark:border-zinc-700/50">
                     {participant.avatarUrl && participant.avatarUrl.length > 5 ? (
-                      <img src={participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                      <img src={participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover rounded-full" />
                     ) : (
-                      participant.displayName?.charAt(0) || 'U'
+                      <span className="text-lg font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
+                    )}
+                    
+                    {/* Зеленая точка онлайна */}
+                    {isOnline && (
+                      <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>
                     )}
                   </div>
+                  
                   <div className="ml-4 flex-1 overflow-hidden">
-                    <h3 className="font-semibold text-black dark:text-white truncate">
+                    <h3 className="font-semibold text-black dark:text-white text-base truncate">
                       {participant.displayName || 'Собеседник'}
                     </h3>
-                    <p className="text-sm text-gray-500 dark:text-zinc-400 truncate">
+                    <p className="text-sm text-gray-500 dark:text-zinc-400 truncate mt-0.5">
                       {chat.lastMessage || 'Нет сообщений'}
                     </p>
                   </div>
@@ -251,14 +280,14 @@ export default function ChatsPage() {
               </Link>
             );
           })}
-
-          {filteredChats.length === 0 && searchResults.length === 0 && (
-            <div className="text-center py-20 text-gray-400 dark:text-zinc-600">
-              <MessageSquare size={48} className="mx-auto mb-2 opacity-20" />
-              <p>Чатов пока нет</p>
-            </div>
-          )}
         </div>
+
+        {filteredChats.length === 0 && searchResults.length === 0 && (
+          <div className="text-center py-20 text-gray-400 dark:text-zinc-600">
+            <MessageSquare size={48} className="mx-auto mb-3 opacity-20" />
+            <p>Чатов пока нет</p>
+          </div>
+        )}
       </main>
 
       <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black z-10">
@@ -278,3 +307,4 @@ export default function ChatsPage() {
     </div>
   );
 }
+
