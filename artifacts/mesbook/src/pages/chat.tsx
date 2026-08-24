@@ -15,7 +15,12 @@ export default function ChatPage() {
   const [match, params] = useRoute('/chat/:chatId');
   const chatId = params?.chatId;
   const [messages, setMessages] = useState<any[]>([]);
-  const [chatInfo, setChatInfo] = useState<any>(null);
+  const [chatInfo, setChatInfo] = useState<any>(() => {
+  try {
+    const savedChats = JSON.parse(localStorage.getItem('mesbook_chats') || '[]');
+    return savedChats.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId)) || null;
+  } catch(e) { return null; }
+});
   const [content, setContent] = useState('');
   const [readFailed, setReadFailed] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
