@@ -18,7 +18,12 @@ export default function ChatPage() {
   const [chatInfo, setChatInfo] = useState<any>(null);
   const [content, setContent] = useState('');
   const [readFailed, setReadFailed] = useState(false);
-  const [showProfile, setShowProfile] = useState(false); // <-- Состояние для карточки профиля
+  const [showProfile, setShowProfile] = useState(false);
+  
+  // --- НОВОЕ СОСТОЯНИЕ ДЛЯ ОТВЕТА НА СООБЩЕНИЕ ---
+  const [replyingTo, setReplyingTo] = useState<any>(null);
+  const touchStartRef = useRef<number | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentUserId = getUserId();
 
@@ -93,9 +98,12 @@ export default function ChatPage() {
     if (!content.trim()) return;
 
     const tempContent = content.trim();
+    // Если есть ответ, формируем текст красиво
+    const finalContent = replyingTo ? `> ${replyingTo.content}\n\n${tempContent}` : tempContent;
+
     const tempMsg = {
       id: Date.now(),
-      content: tempContent,
+      content: finalContent,
       isSending: true,
       senderId: currentUserId,
       createdAt: new Date().toISOString()
@@ -103,12 +111,13 @@ export default function ChatPage() {
 
     setMessages((prev: any) => [...prev, tempMsg]);
     setContent('');
+    setReplyingTo(null); // Сбрасываем плашку ответа после отправки
 
     try {
       const res = await fetch('/api/chats/' + chatId + '/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
-        body: JSON.stringify({ content: tempContent })
+        body: JSON.stringify({ content: finalContent })
       });
       if (res.ok) {
         loadData();
@@ -131,7 +140,6 @@ export default function ChatPage() {
     } catch (e) {}
   };
 
-  // Вычисляем статус онлайна (если был активен менее 3 минут назад)
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
   const lastSeenText = isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно");
@@ -146,7 +154,6 @@ export default function ChatPage() {
           </a>
         </Link>
         
-        {/* КЛИКАБЕЛЬНАЯ ШАПКА ДЛЯ ОТКРЫТИЯ ПРОФИЛЯ */}
         <div 
           className="flex items-center gap-3 cursor-pointer flex-1"
           onClick={() => setShowProfile(true)}
@@ -178,10 +185,42 @@ export default function ChatPage() {
         {messages.map((msg: any) => {
           const isMe = String(msg.senderId || msg.authorId || msg.userId) === String(currentUserId);
           return (
-            <div key={msg.id} className={'flex flex-col max-w-[85%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')}>
-              
+            <div 
+              key={msg.id} 
+              className={'flex flex-col max-w-[85%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')}
+              // --- ОТСЛЕЖИВАНИЕ СВАЙПА ---
+              onTouchStart={(e) => {
+                touchStartRef.current = e.touches[0].clientX;
+              }}
+              onTouchEnd={(e) => {
+                if (touchStartRef.current !== null) {
+                  const touchEndX = e.changedTouches[0].clientX;
+                  const diff = touchStartRef.current - touchEndX;
+                  
+                  // Если палец сдвинулся ВЛЕВО более чем на 50 пикселей
+                  if (diff > 50) {
+                    setReplyingTo(msg);
+                    // Микро-вибрация при успешном свайпе (работает на большинстве смартфонов)
+                    if (window.navigator && window.navigator.vibrate) {
+                      window.navigator.vibrate(40);
+                    }
+                  }
+                  touchStartRef.current = null;
+                }
+              }}
+            >
               <div className={'px-4 pt-2.5 pb-6 shadow-none relative min-w-[90px] rounded-2xl ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-none' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white rounded-tl-none')}>
-                <p className="text-[15px] leading-relaxed break-words">{msg.content}</p>
+                {/* Если сообщение содержит цитату (ответ), рендерим её красиво */}
+                {msg.content.startsWith('> ') ? (
+                  <div className="mb-2">
+                    <div className={'pl-2 border-l-2 text-[12px] opacity-70 mb-1 ' + (isMe ? 'border-white/30 dark:border-black/30' : 'border-black/20 dark:border-white/20')}>
+                      {msg.content.split('\n\n')[0].replace('> ', '')}
+                    </div>
+                    <p className="text-[15px] leading-relaxed break-words">{msg.content.split('\n\n').slice(1).join('\n\n')}</p>
+                  </div>
+                ) : (
+                  <p className="text-[15px] leading-relaxed break-words">{msg.content}</p>
+                )}
                 
                 <div className={'absolute bottom-1.5 right-3 flex items-center justify-end gap-1 mt-1 text-[10px] ' + (isMe ? 'text-gray-300 dark:text-zinc-600' : 'text-gray-400 dark:text-zinc-500')}>
                   <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
@@ -213,7 +252,29 @@ export default function ChatPage() {
         })}
       </main>
 
-      <div className="p-4 bg-white dark:bg-black border-t border-gray-100 dark:border-zinc-900 pb-8 relative z-10">
+      <div className="p-4 bg-white dark:bg-black border-t border-gray-100 dark:border-zinc-900 pb-8 relative z-10 flex flex-col">
+        
+        {/* --- ПЛАШКА ОТВЕТА --- */}
+        {replyingTo && (
+          <div className="flex items-center justify-between mb-3 px-4 py-2 bg-gray-50 dark:bg-zinc-900 rounded-2xl border-l-2 border-black dark:border-white animate-in slide-in-from-bottom-2 duration-200">
+            <div className="flex flex-col overflow-hidden mr-4">
+              <span className="text-[10px] font-bold text-black dark:text-white uppercase tracking-wider mb-0.5">
+                Ответ
+              </span>
+              <span className="text-[13px] text-gray-500 dark:text-zinc-400 truncate">
+                {replyingTo.content.replace(/^> .*\n\n/, '')} {/* Убираем цитату, если отвечаем на ответ */}
+              </span>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => setReplyingTo(null)} 
+              className="p-1.5 flex-shrink-0 text-gray-400 hover:text-black dark:hover:text-white rounded-full transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSend} className="flex items-center gap-3">
           <input
             className="flex-1 bg-gray-100 dark:bg-zinc-900 border-none rounded-full px-5 py-3.5 outline-none text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
@@ -231,7 +292,6 @@ export default function ChatPage() {
         </form>
       </div>
 
-      {/* --- МОДАЛЬНОЕ ОКНО ПРОФИЛЯ --- */}
       {showProfile && (
         <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm transition-opacity">
           <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
@@ -277,4 +337,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
