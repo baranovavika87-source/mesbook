@@ -195,11 +195,11 @@ export default function ChatPage() {
       }
       
       return (
-        <div className="mt-0.5 mb-1">
+        <div className="mt-0.5 mb-0.5">
           {isVideo ? (
-            <video src={url} controls className="w-full max-w-[220px] rounded-lg bg-black/10" />
+            <video src={url} controls className="w-full max-w-[180px] rounded-[4px] bg-black/10" />
           ) : (
-            <img src={url} alt="Media" className="w-full max-w-[220px] rounded-lg object-cover" />
+            <img src={url} alt="Media" className="w-full max-w-[180px] rounded-[4px] object-cover" />
           )}
         </div>
       );
@@ -208,15 +208,15 @@ export default function ChatPage() {
     if (msgContent.startsWith('> ')) {
       return (
         <div className="mb-1.5">
-          <div className={'pl-2 border-l-2 text-[12px] opacity-70 mb-1 ' + (isMe ? 'border-white/30 dark:border-black/30' : 'border-black/20 dark:border-white/20')}>
+          <div className={'pl-2 border-l-2 text-[11px] opacity-70 mb-1 ' + (isMe ? 'border-white/30 dark:border-black/30' : 'border-black/20 dark:border-white/20')}>
             {msgContent.split('\n\n')[0].replace('> ', '')}
           </div>
-          <p className="text-[14px] leading-snug break-words">{msgContent.split('\n\n').slice(1).join('\n\n')}</p>
+          <p className="text-[13px] leading-tight break-words">{msgContent.split('\n\n').slice(1).join('\n\n')}</p>
         </div>
       );
     }
 
-    return <p className="text-[14px] leading-snug break-words">{msgContent}</p>;
+    return <p className="text-[13px] leading-tight break-words">{msgContent}</p>;
   };
 
   return (
@@ -256,8 +256,7 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* Уменьшено расстояние между сообщениями: space-y-3 вместо space-y-4 */}
-      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2.5">
+      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">
         {messages.map((msg: any) => {
           const isMe = String(msg.senderId || msg.authorId || msg.userId) === String(currentUserId);
           const isMedia = msg.content.startsWith('[MEDIA] ');
@@ -265,8 +264,7 @@ export default function ChatPage() {
           return (
             <div 
               key={msg.id} 
-              // Уменьшена максимальная ширина сообщений для большей компактности
-              className={'flex flex-col max-w-[80%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')}
+              className={'flex flex-col max-w-[70%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')}
               onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }}
               onTouchEnd={(e) => {
                 if (touchStartRef.current !== null) {
@@ -280,30 +278,28 @@ export default function ChatPage() {
                 }
               }}
             >
-              {/* Обновленные классы для контейнера: более аккуратные закругления и уменьшенные отступы */}
-              <div className={(isMedia ? 'p-1.5 pb-5 ' : 'px-3.5 pt-2 pb-5 ') + 'shadow-none relative min-w-[75px] rounded-xl ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-[4px]' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white rounded-tl-[4px]')}>
+              <div className={(isMedia ? 'p-1 pb-4 ' : 'px-3 pt-2 pb-4 ') + 'shadow-none relative min-w-[65px] rounded-md ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-none' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white rounded-tl-none')}>
                 
                 {renderMessageContent(msg.content, isMe)}
                 
-                {/* Расположение времени теперь чуть плотнее к тексту */}
-                <div className={'absolute bottom-1 right-2.5 flex items-center justify-end gap-1 mt-1 text-[10px] ' + (isMe ? 'text-gray-300 dark:text-zinc-600' : 'text-gray-400 dark:text-zinc-500')}>
+                <div className={'absolute bottom-0.5 right-1.5 flex items-center justify-end gap-1 mt-1 text-[9px] ' + (isMe ? 'text-gray-400 dark:text-zinc-500' : 'text-gray-500 dark:text-zinc-500')}>
                   <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                   
                   {isMe && (
                     <div className="flex items-center ml-0.5">
                       {msg.isSending ? (
-                        <Loader2 size={10} className="animate-spin" />
+                        <Loader2 size={9} className="animate-spin" />
                       ) : (
                         <div className="flex -space-x-1">
-                          <Check size={12} />
+                          <Check size={11} />
                           {(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && (
-                            <Check size={12} />
+                            <Check size={11} />
                           )}
                         </div>
                       )}
                       {!msg.isSending && (
-                        <button onClick={() => handleDelete(msg.id)} className="hover:text-red-500 ml-1.5 transition-colors">
-                          <Trash2 size={11} />
+                        <button onClick={() => handleDelete(msg.id)} className="hover:text-red-500 ml-1 transition-colors">
+                          <Trash2 size={10} />
                         </button>
                       )}
                     </div>
@@ -319,10 +315,10 @@ export default function ChatPage() {
       <div className="p-4 bg-white dark:bg-black border-t border-gray-100 dark:border-zinc-900 pb-8 relative z-10 flex flex-col">
         
         {replyingTo && (
-          <div className="flex items-center justify-between mb-3 px-4 py-2 bg-gray-50 dark:bg-zinc-900 rounded-xl border-l-2 border-black dark:border-white animate-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center justify-between mb-3 px-4 py-2 bg-gray-50 dark:bg-zinc-900 rounded-md border-l-2 border-black dark:border-white animate-in slide-in-from-bottom-2 duration-200">
             <div className="flex flex-col overflow-hidden mr-4">
               <span className="text-[10px] font-bold text-black dark:text-white uppercase tracking-wider mb-0.5">Ответ</span>
-              <span className="text-[13px] text-gray-500 dark:text-zinc-400 truncate">
+              <span className="text-[12px] text-gray-500 dark:text-zinc-400 truncate">
                 {replyingTo.content.startsWith('[MEDIA]') ? 'Вложение' : replyingTo.content.replace(/^> .*\n\n/, '')}
               </span>
             </div>
@@ -355,7 +351,7 @@ export default function ChatPage() {
           </button>
 
           <input
-            className="flex-1 bg-gray-100 dark:bg-zinc-900 border-none rounded-2xl px-4 py-3 outline-none text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all ml-1 text-sm"
+            className="flex-1 bg-gray-100 dark:bg-zinc-900 border-none rounded-md px-4 py-3 outline-none text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all ml-1 text-[13px]"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Сообщение..."
@@ -363,16 +359,16 @@ export default function ChatPage() {
           <button
             type="submit"
             disabled={!content.trim()}
-            className="w-11 h-11 flex-shrink-0 rounded-2xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:opacity-40 transition-all active:scale-95 ml-1"
+            className="w-11 h-11 flex-shrink-0 rounded-md bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:opacity-40 transition-all active:scale-95 ml-1"
           >
-            <Send size={18} className="ml-1" />
+            <Send size={16} className="ml-1" />
           </button>
         </form>
       </div>
 
       {showProfile && (
         <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm transition-opacity">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-zinc-900 rounded-xl w-full max-w-sm overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
             <button 
               onClick={() => setShowProfile(false)}
               className="absolute top-4 right-4 p-2 bg-gray-100 dark:bg-black rounded-full text-gray-500 hover:text-black dark:hover:text-white transition-colors"
@@ -397,7 +393,7 @@ export default function ChatPage() {
               {chatInfo?.participant?.bio && (
                 <div className="mt-8 w-full text-center">
                   <p className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase mb-2 tracking-wider">О себе</p>
-                  <p className="text-black dark:text-white text-sm bg-gray-50 dark:bg-black rounded-2xl p-4 leading-relaxed">
+                  <p className="text-black dark:text-white text-sm bg-gray-50 dark:bg-black rounded-md p-4 leading-relaxed">
                     {chatInfo?.participant?.bio}
                   </p>
                 </div>
