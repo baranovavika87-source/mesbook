@@ -14,7 +14,6 @@ const getUserId = () => {
 export default function ChatsPage() {
   const [search, setSearch] = useState('');
   
-  // Мгновенная загрузка списка чатов из памяти
   const [chats, setChats] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('mesbook_chats');
@@ -23,11 +22,9 @@ export default function ChatsPage() {
   });
   
   const [searchResults, setSearchResults] = useState<any[]>([]);
-
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   
-  // Мгновенная загрузка профиля из памяти
   const [currentUser, setCurrentUser] = useState<any>(() => {
     try {
       const saved = localStorage.getItem('mesbook_user');
@@ -39,7 +36,16 @@ export default function ChatsPage() {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
+    // ЖЕСТКАЯ ПРОВЕРКА ТЕМЫ ИЗ ПАМЯТИ
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+      setIsDark(true);
+      document.documentElement.classList.add('dark');
+    } else {
+      setIsDark(false);
+      document.documentElement.classList.remove('dark');
+    }
+
     const fetchMe = async () => {
       try {
         const res = await fetch('/api/me', {
@@ -65,7 +71,6 @@ export default function ChatsPage() {
           else if (data && Array.isArray(data.data)) arr = data.data;
           
           setChats(arr);
-          // Сохраняем свежие чаты в память телефона
           localStorage.setItem('mesbook_chats', JSON.stringify(arr));
         }
       } catch (e) {}
@@ -99,9 +104,16 @@ export default function ChatsPage() {
   ) : [];
 
   const toggleTheme = () => {
-    const isNowDark = document.documentElement.classList.toggle('dark');
-    setIsDark(isNowDark);
-    localStorage.setItem('theme', isNowDark ? 'dark' : 'light');
+    const html = document.documentElement;
+    if (html.classList.contains('dark')) {
+      html.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+      setIsDark(false);
+    } else {
+      html.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+      setIsDark(true);
+    }
   };
 
   const handleLogout = () => {
@@ -112,7 +124,6 @@ export default function ChatsPage() {
   return (
     <div className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300 relative overflow-hidden">
       
-      {/* Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 transition-opacity"
@@ -120,7 +131,6 @@ export default function ChatsPage() {
         />
       )}
 
-      {/* Sidebar */}
       <div className={`fixed top-0 left-0 h-full w-[80%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 ease-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-4 flex justify-end">
           <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-black dark:text-white rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
@@ -246,15 +256,11 @@ export default function ChatsPage() {
         <div className="divide-y divide-gray-100 dark:divide-zinc-900/50">
           {filteredChats.map((chat: any) => {
             const participant = chat.participant || {};
-            
-            // Вычисляем статус онлайна (если был активен менее 3 минут назад)
             const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 3 * 60 * 1000) : false;
 
             return (
               <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
                 <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors">
-                  
-                  {/* Контейнер аватарки с relative для правильного позиционирования точки */}
                   <div className="w-14 h-14 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center relative border border-gray-200/50 dark:border-zinc-700/50">
                     {participant.avatarUrl && participant.avatarUrl.length > 5 ? (
                       <img src={participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover rounded-full" />
@@ -262,7 +268,6 @@ export default function ChatsPage() {
                       <span className="text-lg font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
                     )}
                     
-                    {/* Зеленая точка онлайна */}
                     {isOnline && (
                       <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>
                     )}
@@ -307,4 +312,3 @@ export default function ChatsPage() {
     </div>
   );
 }
-
