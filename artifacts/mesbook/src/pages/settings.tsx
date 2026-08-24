@@ -13,14 +13,17 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [imgError, setImgError] = useState(false);
-  
-  // --- СОСТОЯНИЕ ДЛЯ ЗАГРУЗКИ АВАТАРКИ ---
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem('theme') === 'dark' || document.documentElement.classList.contains('dark')) {
+    // ЖЕСТКАЯ ПРОВЕРКА: Читаем строго то, что сохранено в памяти
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
       setIsDark(true);
       document.documentElement.classList.add('dark');
+    } else {
+      setIsDark(false);
+      document.documentElement.classList.remove('dark');
     }
 
     const fetchUser = async () => {
@@ -55,7 +58,6 @@ export default function SettingsPage() {
     }
   };
 
-  // --- ЛОГИКА ЗАГРУЗКИ АВАТАРКИ В CLOUDINARY ---
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -63,7 +65,7 @@ export default function SettingsPage() {
     setIsUploading(true);
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('upload_preset', 'mesogram-cloud'); // Тот же пресет
+    formData.append('upload_preset', 'mesogram-cloud');
 
     try {
       const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', {
@@ -74,7 +76,6 @@ export default function SettingsPage() {
       
       if (data.secure_url) {
         let url = data.secure_url;
-        // Фикс для айфонов: просим Cloudinary переделать heic в jpg
         if (url.match(/\.(heic|heif)$/i)) {
           url = url.replace(/\.(heic|heif)$/i, '.jpg');
         }
@@ -87,7 +88,7 @@ export default function SettingsPage() {
       alert("Ошибка сети при загрузке");
     } finally {
       setIsUploading(false);
-      e.target.value = ''; // Очищаем инпут
+      e.target.value = '';
     }
   };
 
@@ -108,21 +109,18 @@ export default function SettingsPage() {
           username: username ? '@' + username.replace('@', '') : undefined,
           password: password || undefined,
           bio,
-          avatarUrl // Отправляем теперь только короткую ссылку!
+          avatarUrl
         })
       });
 
       if (res.ok) {
         setSaved(true);
         setPassword("");
-        
-        // Обновляем localStorage чтобы фотка сразу появилась везде
         if (storedUser) {
           const userObj = JSON.parse(storedUser);
           userObj.avatarUrl = avatarUrl;
           localStorage.setItem("mesbook_user", JSON.stringify(userObj));
         }
-        
         setTimeout(() => setSaved(false), 2000);
       }
     } catch (error) {}
@@ -143,8 +141,6 @@ export default function SettingsPage() {
       </header>
 
       <main className="flex-1 overflow-y-auto px-6">
-        
-        {/* КЛИКАБЕЛЬНАЯ АВАТАРКА */}
         <div className="flex justify-center my-6 relative">
           <input 
             type="file" 
@@ -252,3 +248,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+
