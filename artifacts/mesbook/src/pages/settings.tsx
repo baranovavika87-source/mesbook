@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
-import { MessageSquare, LogOut, Check, Moon, Sun, Users, Camera } from 'lucide-react';
+import { MessageSquare, LogOut, Check, Moon, Sun, Users, Camera, Loader2 } from 'lucide-react';
 
 export default function SettingsPage() {
   const [, setLocation] = useLocation();
   const savedUser = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
-const [displayName, setDisplayName] = useState(savedUser.displayName || '');
-const [username, setUsername] = useState(savedUser.username || '');
-const [password, setPassword] = useState('');
-const [bio, setBio] = useState(savedUser.bio || '');
-const [avatarUrl, setAvatarUrl] = useState(savedUser.avatarUrl || '');
+  const [displayName, setDisplayName] = useState(savedUser.displayName || '');
+  const [username, setUsername] = useState(savedUser.username || '');
+  const [password, setPassword] = useState('');
+  const [bio, setBio] = useState(savedUser.bio || '');
+  const [avatarUrl, setAvatarUrl] = useState(savedUser.avatarUrl || '');
   const [saved, setSaved] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [imgError, setImgError] = useState(false);
+  
+  // --- СОСТОЯНИЕ ДЛЯ ЗАГРУЗКИ АВАТАРКИ ---
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     if (localStorage.getItem('theme') === 'dark' || document.documentElement.classList.contains('dark')) {
@@ -52,18 +55,40 @@ const [avatarUrl, setAvatarUrl] = useState(savedUser.avatarUrl || '');
     }
   };
 
-  // --- ЛОГИКА ЗАГРУЗКИ КАРТИНКИ ИЗ ГАЛЕРЕИ ТЕЛЕФОНА ---
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // --- ЛОГИКА ЗАГРУЗКИ АВАТАРКИ В CLOUDINARY ---
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Читаем файл как Base64 строку, чтобы сохранить в БД
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setAvatarUrl(reader.result as string);
-      setImgError(false);
-    };
-    reader.readAsDataURL(file);
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'mesogram-cloud'); // Тот же пресет
+
+    try {
+      const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      
+      if (data.secure_url) {
+        let url = data.secure_url;
+        // Фикс для айфонов: просим Cloudinary переделать heic в jpg
+        if (url.match(/\.(heic|heif)$/i)) {
+          url = url.replace(/\.(heic|heif)$/i, '.jpg');
+        }
+        setAvatarUrl(url);
+        setImgError(false);
+      } else {
+        alert("Ошибка при загрузке фото");
+      }
+    } catch (err) {
+      alert("Ошибка сети при загрузке");
+    } finally {
+      setIsUploading(false);
+      e.target.value = ''; // Очищаем инпут
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -83,13 +108,21 @@ const [avatarUrl, setAvatarUrl] = useState(savedUser.avatarUrl || '');
           username: username ? '@' + username.replace('@', '') : undefined,
           password: password || undefined,
           bio,
-          avatarUrl
+          avatarUrl // Отправляем теперь только короткую ссылку!
         })
       });
 
       if (res.ok) {
         setSaved(true);
         setPassword("");
+        
+        // Обновляем localStorage чтобы фотка сразу появилась везде
+        if (storedUser) {
+          const userObj = JSON.parse(storedUser);
+          userObj.avatarUrl = avatarUrl;
+          localStorage.setItem("mesbook_user", JSON.stringify(userObj));
+        }
+        
         setTimeout(() => setSaved(false), 2000);
       }
     } catch (error) {}
@@ -119,9 +152,10 @@ const [avatarUrl, setAvatarUrl] = useState(savedUser.avatarUrl || '');
             id="avatar-upload" 
             className="hidden" 
             onChange={handleAvatarUpload}
+            disabled={isUploading}
           />
-          <label htmlFor="avatar-upload" className="cursor-pointer relative block group">
-            <div className="w-28 h-28 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center text-black dark:text-white text-4xl font-semibold mb-2 overflow-hidden border-4 border-white dark:border-black shadow-sm transition-opacity group-active:opacity-70">
+          <label htmlFor="avatar-upload" className={`cursor-pointer relative block group ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}>
+            <div className="w-28 h-28 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center text-black dark:text-white text-4xl font-semibold mb-2 overflow-hidden border-4 border-white dark:border-zinc-800 shadow-sm transition-opacity group-active:opacity-70">
               {avatarUrl && avatarUrl.length > 5 && !imgError ? (
                 <img 
                   src={avatarUrl} 
@@ -133,8 +167,8 @@ const [avatarUrl, setAvatarUrl] = useState(savedUser.avatarUrl || '');
                 displayName ? displayName.charAt(0).toUpperCase() : "U"
               )}
             </div>
-            <div className="absolute bottom-2 right-0 bg-black dark:bg-white text-white dark:text-black rounded-full p-2 shadow-md">
-              <Camera size={16} />
+            <div className="absolute bottom-2 right-0 bg-black dark:bg-white text-white dark:text-black rounded-full p-2 shadow-md flex items-center justify-center w-8 h-8">
+              {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
             </div>
           </label>
         </div>
@@ -186,7 +220,8 @@ const [avatarUrl, setAvatarUrl] = useState(savedUser.avatarUrl || '');
 
           <button
             type="submit"
-            className="w-full mt-2 flex items-center justify-center gap-2 bg-black dark:bg-white text-white dark:text-black font-semibold py-3.5 rounded-xl transition-transform active:scale-95"
+            disabled={isUploading}
+            className="w-full mt-2 flex items-center justify-center gap-2 bg-black dark:bg-white text-white dark:text-black font-semibold py-3.5 rounded-xl transition-transform active:scale-95 disabled:opacity-50"
           >
             {saved ? <><Check size={20} /> Сохранено</> : "Сохранить изменения"}
           </button>
