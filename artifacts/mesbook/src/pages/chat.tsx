@@ -162,8 +162,12 @@ export default function ChatPage() {
         // Формируем спец-сообщение
         const mediaMsg = `[MEDIA] ${data.secure_url}`;
         await sendMessageToServer(mediaMsg);
+      } else {
+        // Если url не пришел, отправим весь ответ от сервера для дебага
+        const errorMsg = `[MEDIA] ERROR: ${JSON.stringify(data)}`;
+        await sendMessageToServer(errorMsg);
       }
-    } catch (err) {
+    } catch (err: any) {
       alert("Ошибка при загрузке файла");
     } finally {
       setIsUploading(false);
@@ -189,7 +193,8 @@ export default function ChatPage() {
   // --- УМНЫЙ РЕНДЕР СООБЩЕНИЙ ---
   const renderMessageContent = (msgContent: string, isMe: boolean) => {
     if (msgContent.startsWith('[MEDIA] ')) {
-      const url = msgContent.replace('[MEDIA] ', '');
+      // Добавили .trim(), чтобы обрезать случайные невидимые пробелы
+      const url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
       
       return (
@@ -199,6 +204,8 @@ export default function ChatPage() {
           ) : (
             <img src={url} alt="Media" className="w-full max-w-[240px] rounded-xl object-cover" />
           )}
+          {/* СТРОЧКА ДЛЯ РАССЛЕДОВАНИЯ: Выведет саму ссылку красным текстом */}
+          <div className="text-[10px] mt-2 text-red-500 break-all">{url}</div>
         </div>
       );
     }
@@ -329,7 +336,6 @@ export default function ChatPage() {
         )}
 
         <form onSubmit={handleSend} className="flex items-center gap-2">
-          {/* СКРЫТЫЙ ИНПУТ ДЛЯ ФАЙЛОВ */}
           <input
             type="file"
             accept="image/*,video/*"
@@ -338,7 +344,6 @@ export default function ChatPage() {
             onChange={handleFileUpload}
           />
           
-          {/* КНОПКА СКРЕПКИ */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -374,7 +379,6 @@ export default function ChatPage() {
               <X size={20} />
             </button>
             <div className="p-8 flex flex-col items-center">
-              {/* ... (код профиля остался без изменений) ... */}
               <div className="w-28 h-28 rounded-full bg-gray-100 dark:bg-black flex items-center justify-center text-black dark:text-white text-4xl font-semibold mb-4 overflow-hidden border-4 border-white dark:border-zinc-800 shadow-sm">
                 {chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? (
                   <img src={chatInfo?.participant?.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
