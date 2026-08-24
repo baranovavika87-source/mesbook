@@ -20,7 +20,6 @@ export default function ChatPage() {
   const [showProfile, setShowProfile] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   
-  // --- СОСТОЯНИЯ ДЛЯ ЗАГРУЗКИ ФАЙЛОВ ---
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -140,7 +139,6 @@ export default function ChatPage() {
     await sendMessageToServer(finalContent);
   };
 
-  // --- ФУНКЦИЯ ЗАГРУЗКИ ФАЙЛА В CLOUDINARY ---
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -148,10 +146,9 @@ export default function ChatPage() {
     setIsUploading(true);
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('upload_preset', 'mesogram-cloud'); // Твой пресет
+    formData.append('upload_preset', 'mesogram-cloud'); 
 
     try {
-      // Отправляем в твоё облако wrwmuyjl
       const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', {
         method: 'POST',
         body: formData
@@ -159,7 +156,6 @@ export default function ChatPage() {
       const data = await res.json();
       
       if (data.secure_url) {
-        // Формируем спец-сообщение
         const mediaMsg = `[MEDIA] ${data.secure_url}`;
         await sendMessageToServer(mediaMsg);
       } else {
@@ -189,24 +185,21 @@ export default function ChatPage() {
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
   const lastSeenText = isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно");
 
-  // --- УМНЫЙ РЕНДЕР СООБЩЕНИЙ ---
   const renderMessageContent = (msgContent: string, isMe: boolean) => {
     if (msgContent.startsWith('[MEDIA] ')) {
       let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
       
-      // МАГИЯ CLOUDINARY: Если это фото с Айфона (heic/heif), 
-      // просим Cloudinary на лету отдать нам обычный .jpg
       if (!isVideo && url.match(/\.(heic|heif)$/i)) {
         url = url.replace(/\.(heic|heif)$/i, '.jpg');
       }
       
       return (
-        <div className="mt-1 mb-2">
+        <div className="mt-0.5 mb-1">
           {isVideo ? (
-            <video src={url} controls className="w-full max-w-[240px] rounded-xl bg-black/10" />
+            <video src={url} controls className="w-full max-w-[220px] rounded-lg bg-black/10" />
           ) : (
-            <img src={url} alt="Media" className="w-full max-w-[240px] rounded-xl object-cover" />
+            <img src={url} alt="Media" className="w-full max-w-[220px] rounded-lg object-cover" />
           )}
         </div>
       );
@@ -214,16 +207,16 @@ export default function ChatPage() {
     
     if (msgContent.startsWith('> ')) {
       return (
-        <div className="mb-2">
+        <div className="mb-1.5">
           <div className={'pl-2 border-l-2 text-[12px] opacity-70 mb-1 ' + (isMe ? 'border-white/30 dark:border-black/30' : 'border-black/20 dark:border-white/20')}>
             {msgContent.split('\n\n')[0].replace('> ', '')}
           </div>
-          <p className="text-[15px] leading-relaxed break-words">{msgContent.split('\n\n').slice(1).join('\n\n')}</p>
+          <p className="text-[14px] leading-snug break-words">{msgContent.split('\n\n').slice(1).join('\n\n')}</p>
         </div>
       );
     }
 
-    return <p className="text-[15px] leading-relaxed break-words">{msgContent}</p>;
+    return <p className="text-[14px] leading-snug break-words">{msgContent}</p>;
   };
 
   return (
@@ -263,13 +256,17 @@ export default function ChatPage() {
         </div>
       </header>
 
-      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Уменьшено расстояние между сообщениями: space-y-3 вместо space-y-4 */}
+      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2.5">
         {messages.map((msg: any) => {
           const isMe = String(msg.senderId || msg.authorId || msg.userId) === String(currentUserId);
+          const isMedia = msg.content.startsWith('[MEDIA] ');
+          
           return (
             <div 
               key={msg.id} 
-              className={'flex flex-col max-w-[85%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')}
+              // Уменьшена максимальная ширина сообщений для большей компактности
+              className={'flex flex-col max-w-[80%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')}
               onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }}
               onTouchEnd={(e) => {
                 if (touchStartRef.current !== null) {
@@ -283,11 +280,13 @@ export default function ChatPage() {
                 }
               }}
             >
-              <div className={'px-4 pt-2.5 pb-6 shadow-none relative min-w-[90px] rounded-2xl ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-none' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white rounded-tl-none')}>
+              {/* Обновленные классы для контейнера: более аккуратные закругления и уменьшенные отступы */}
+              <div className={(isMedia ? 'p-1.5 pb-5 ' : 'px-3.5 pt-2 pb-5 ') + 'shadow-none relative min-w-[75px] rounded-xl ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-[4px]' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white rounded-tl-[4px]')}>
                 
                 {renderMessageContent(msg.content, isMe)}
                 
-                <div className={'absolute bottom-1.5 right-3 flex items-center justify-end gap-1 mt-1 text-[10px] ' + (isMe ? 'text-gray-300 dark:text-zinc-600' : 'text-gray-400 dark:text-zinc-500')}>
+                {/* Расположение времени теперь чуть плотнее к тексту */}
+                <div className={'absolute bottom-1 right-2.5 flex items-center justify-end gap-1 mt-1 text-[10px] ' + (isMe ? 'text-gray-300 dark:text-zinc-600' : 'text-gray-400 dark:text-zinc-500')}>
                   <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                   
                   {isMe && (
@@ -320,7 +319,7 @@ export default function ChatPage() {
       <div className="p-4 bg-white dark:bg-black border-t border-gray-100 dark:border-zinc-900 pb-8 relative z-10 flex flex-col">
         
         {replyingTo && (
-          <div className="flex items-center justify-between mb-3 px-4 py-2 bg-gray-50 dark:bg-zinc-900 rounded-2xl border-l-2 border-black dark:border-white animate-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center justify-between mb-3 px-4 py-2 bg-gray-50 dark:bg-zinc-900 rounded-xl border-l-2 border-black dark:border-white animate-in slide-in-from-bottom-2 duration-200">
             <div className="flex flex-col overflow-hidden mr-4">
               <span className="text-[10px] font-bold text-black dark:text-white uppercase tracking-wider mb-0.5">Ответ</span>
               <span className="text-[13px] text-gray-500 dark:text-zinc-400 truncate">
@@ -356,7 +355,7 @@ export default function ChatPage() {
           </button>
 
           <input
-            className="flex-1 bg-gray-100 dark:bg-zinc-900 border-none rounded-full px-5 py-3.5 outline-none text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all ml-1"
+            className="flex-1 bg-gray-100 dark:bg-zinc-900 border-none rounded-2xl px-4 py-3 outline-none text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all ml-1 text-sm"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Сообщение..."
@@ -364,7 +363,7 @@ export default function ChatPage() {
           <button
             type="submit"
             disabled={!content.trim()}
-            className="w-12 h-12 flex-shrink-0 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:opacity-40 transition-all active:scale-95 ml-1"
+            className="w-11 h-11 flex-shrink-0 rounded-2xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:opacity-40 transition-all active:scale-95 ml-1"
           >
             <Send size={18} className="ml-1" />
           </button>
