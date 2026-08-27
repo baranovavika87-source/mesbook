@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
-import { MessageSquare, LogOut, Check, Moon, Sun, Users, Camera, Loader2 } from 'lucide-react';
+import { MessageSquare, LogOut, Check, Users, Camera, Loader2 } from 'lucide-react';
 
 export default function SettingsPage() {
   const [, setLocation] = useLocation();
@@ -11,18 +11,14 @@ export default function SettingsPage() {
   const [bio, setBio] = useState(savedUser.bio || '');
   const [avatarUrl, setAvatarUrl] = useState(savedUser.avatarUrl || '');
   const [saved, setSaved] = useState(false);
-  const [isDark, setIsDark] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    // ЖЕСТКАЯ ПРОВЕРКА: Читаем строго то, что сохранено в памяти
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') {
-      setIsDark(true);
       document.documentElement.classList.add('dark');
     } else {
-      setIsDark(false);
       document.documentElement.classList.remove('dark');
     }
 
@@ -44,19 +40,6 @@ export default function SettingsPage() {
     };
     fetchUser();
   }, []);
-
-  const toggleTheme = () => {
-    const html = document.documentElement;
-    if (html.classList.contains('dark')) {
-      html.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-      setIsDark(false);
-    } else {
-      html.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-      setIsDark(true);
-    }
-  };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -133,11 +116,10 @@ export default function SettingsPage() {
 
   return (
     <div className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300">
-      <header className="px-6 pt-10 pb-4 flex justify-between items-center">
-        <h1 className="text-4xl font-extrabold text-black dark:text-white tracking-tight">Профиль</h1>
-        <button onClick={toggleTheme} className="p-2.5 rounded-full bg-gray-100 dark:bg-zinc-900 text-black dark:text-white transition-colors active:scale-95">
-          {isDark ? <Sun size={22} /> : <Moon size={22} />}
-        </button>
+      
+      {/* Шапка: заголовок строго по центру, кнопка темы удалена */}
+      <header className="px-6 pt-10 pb-4 relative flex justify-center items-center">
+        <h1 className="text-xl font-bold text-black dark:text-white tracking-tight">Профиль</h1>
       </header>
 
       <main className="flex-1 overflow-y-auto px-6">
