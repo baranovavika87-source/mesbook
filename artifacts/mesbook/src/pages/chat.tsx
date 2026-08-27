@@ -15,6 +15,8 @@ export default function ChatPage() {
   const [match, params] = useRoute('/chat/:chatId');
   const chatId = params?.chatId;
   const isSavedChat = chatId === 'saved';
+  const isCustomChat = chatId?.startsWith('custom_') || chatId?.startsWith('group_') || chatId?.startsWith('channel_');
+  const isChannel = chatId?.startsWith('channel_');
 
   const [messages, setMessages] = useState<any[]>([]);
   const [content, setContent] = useState('');
@@ -32,13 +34,12 @@ export default function ChatPage() {
 
   const [chatInfo, setChatInfo] = useState<any>(() => {
     if (isSavedChat) {
-      return {
-        participant: {
-          displayName: 'Избранное',
-          username: 'saved_messages',
-          avatarUrl: ''
-        }
-      };
+      return { participant: { displayName: 'Избранное' } };
+    }
+    if (isCustomChat) {
+      const customChats = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
+      const found = customChats.find((c: any) => String(c.id) === String(chatId));
+      if (found) return found;
     }
     try {
       const savedChats = JSON.parse(localStorage.getItem('mesbook_chats') || '[]');
@@ -47,13 +48,21 @@ export default function ChatPage() {
   });
 
   const savedName = typeof window !== 'undefined' ? sessionStorage.getItem('chat_name_' + chatId) : null;
-  const displayName = isSavedChat ? 'Избранное' : (chatInfo?.participant?.displayName || chatInfo?.participant?.name || savedName || 'Собеседник');
+  const displayName = isSavedChat ? 'Избранное' : (chatInfo?.participant?.displayName || chatInfo?.name || savedName || 'Собеседник');
 
   const loadData = async () => {
     if (isSavedChat) {
       try {
         const savedMsgs = JSON.parse(localStorage.getItem('mesbook_saved_messages_' + currentUserId) || '[]');
         setMessages(savedMsgs);
+      } catch (e) {}
+      return;
+    }
+
+    if (isCustomChat) {
+      try {
+        const customMsgs = JSON.parse(localStorage.getItem('mesbook_custom_messages_' + chatId) || '[]');
+        setMessages(customMsgs);
       } catch (e) {}
       return;
     }
@@ -98,7 +107,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     loadData();
-    if (!isSavedChat) {
+    if (!isSavedChat && !isCustomChat) {
       const interval = setInterval(loadData, 2000);
       return () => clearInterval(interval);
     }
@@ -106,7 +115,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     const sendPing = async () => {
-      if (isSavedChat) return;
+      if (isSavedChat || isCustomChat) return;
       try {
         await fetch('/api/ping', {
           method: 'POST',
@@ -139,6 +148,13 @@ export default function ChatPage() {
       const updated = [...messages, tempMsg];
       setMessages(updated);
       localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
+      return;
+    }
+
+    if (isCustomChat) {
+      const updated = [...messages, tempMsg];
+      setMessages(updated);
+      localStorage.setItem('mesbook_custom_messages_' + chatId, JSON.stringify(updated));
       return;
     }
 
@@ -213,6 +229,13 @@ export default function ChatPage() {
       return;
     }
 
+    if (isCustomChat) {
+      const updated = messages.filter((m: any) => m.id !== msgId);
+      setMessages(updated);
+      localStorage.setItem('mesbook_custom_messages_' + chatId, JSON.stringify(updated));
+      return;
+    }
+
     try {
       await fetch('/api/chats/' + chatId + '/messages/' + msgId, {
         method: 'DELETE',
@@ -224,7 +247,13 @@ export default function ChatPage() {
 
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
-  const lastSeenText = isSavedChat ? "" : (isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно"));
+  
+  // Статус в шапке для разных типов чатов
+  const subtitleText = isSavedChat 
+    ? "" 
+    : isCustomChat 
+      ? (isChannel ? "1 подписчик" : "1 участник") 
+      : (isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно"));
 
   const renderMessageContent = (msgContent: string, isMe: boolean) => {
     if (msgContent.startsWith('[MEDIA] ')) {
@@ -272,7 +301,7 @@ export default function ChatPage() {
         
         <div 
           className="flex items-center gap-3 cursor-pointer flex-1"
-          onClick={() => !isSavedChat && setShowProfile(true)}
+          onClick={() => !isSavedChat && !isCustomChat && setShowProfile(true)}
         >
           <div className="relative">
             <div className={`w-11 h-11 rounded-full flex items-center justify-center font-semibold text-lg overflow-hidden ${isSavedChat ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white'}`}>
@@ -284,7 +313,7 @@ export default function ChatPage() {
                 displayName.charAt(0).toUpperCase()
               )}
             </div>
-            {!isSavedChat && isOnline && (
+            {!isSavedChat && !isCustomChat && isOnline && (
               <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>
             )}
           </div>
@@ -292,9 +321,9 @@ export default function ChatPage() {
             <h2 className="font-bold text-black dark:text-white text-base leading-tight">
               {displayName}
             </h2>
-            {!isSavedChat && (
-              <p className={`text-[13px] font-medium mt-0.5 ${isOnline ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500'}`}>
-                {lastSeenText}
+            {subtitleText && (
+              <p className={`text-[13px] font-medium mt-0.5 ${isCustomChat ? 'text-gray-400 dark:text-zinc-500' : (isOnline ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500')}`}>
+                {subtitleText}
               </p>
             )}
           </div>
@@ -332,7 +361,7 @@ export default function ChatPage() {
                   
                   {isMe && (
                     <div className="flex items-center ml-0.5">
-                      {isSavedChat ? (
+                      {isSavedChat || isCustomChat ? (
                         <div className="flex -space-x-1">
                           <Check size={11} />
                           <Check size={11} />
@@ -419,4 +448,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
