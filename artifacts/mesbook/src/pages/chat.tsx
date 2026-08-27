@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Send, Trash2, Loader2, Check, X, Paperclip } from 'lucide-react';
+import { ArrowLeft, Send, Trash2, Loader2, Check, X, Paperclip, Bookmark } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -14,6 +14,8 @@ const getUserId = () => {
 export default function ChatPage() {
   const [match, params] = useRoute('/chat/:chatId');
   const chatId = params?.chatId;
+  const isSavedChat = chatId === 'saved';
+
   const [messages, setMessages] = useState<any[]>([]);
   const [content, setContent] = useState('');
   const [readFailed, setReadFailed] = useState(false);
@@ -27,7 +29,19 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentUserId = getUserId();
 
+  // Флаг: прокручивали ли мы чат вниз изначально
+  const hasScrolledToBottom = useRef(false);
+
   const [chatInfo, setChatInfo] = useState<any>(() => {
+    if (isSavedChat) {
+      return {
+        participant: {
+          displayName: 'Избранное',
+          username: 'saved_messages',
+          avatarUrl: ''
+        }
+      };
+    }
     try {
       const savedChats = JSON.parse(localStorage.getItem('mesbook_chats') || '[]');
       return savedChats.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId)) || null;
@@ -35,9 +49,18 @@ export default function ChatPage() {
   });
 
   const savedName = typeof window !== 'undefined' ? sessionStorage.getItem('chat_name_' + chatId) : null;
-  const displayName = chatInfo?.participant?.displayName || chatInfo?.participant?.name || savedName || 'Собеседник';
+  const displayName = isSavedChat ? 'Избранное' : (chatInfo?.participant?.displayName || chatInfo?.participant?.name || savedName || 'Собеседник');
 
   const loadData = async () => {
+    if (isSavedChat) {
+      // Локальная загрузка для Избранного из localStorage
+      try {
+        const savedMsgs = JSON.parse(localStorage.getItem('mesbook_saved_messages_' + currentUserId) || '[]');
+        setMessages(savedMsgs);
+      } catch (e) {}
+      return;
+    }
+
     if (!readFailed) {
       try {
         const res = await fetch('/api/chats/' + chatId + '/read', {
@@ -78,12 +101,15 @@ export default function ChatPage() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 2000);
-    return () => clearInterval(interval);
+    if (!isSavedChat) {
+      const interval = setInterval(loadData, 2000);
+      return () => clearInterval(interval);
+    }
   }, [chatId]);
 
   useEffect(() => {
     const sendPing = async () => {
+      if (isSavedChat) return;
       try {
         await fetch('/api/ping', {
           method: 'POST',
@@ -96,8 +122,12 @@ export default function ChatPage() {
     return () => clearInterval(interval);
   }, [currentUserId]);
 
+  // Скроллим вниз только при САМОМ ПЕРВОМ открытии чата
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollRef.current && !hasScrolledToBottom.current && messages.length > 0) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      hasScrolledToBottom.current = true;
+    }
   }, [messages]);
 
   const sendMessageToServer = async (text: string) => {
@@ -108,6 +138,14 @@ export default function ChatPage() {
       senderId: currentUserId,
       createdAt: new Date().toISOString()
     };
+
+    if (isSavedChat) {
+      // Сохраняем в избранное локально
+      const updated = [...messages, tempMsg];
+      setMessages(updated);
+      localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
+      return;
+    }
 
     setMessages((prev: any) => [...prev, tempMsg]);
 
@@ -172,6 +210,14 @@ export default function ChatPage() {
 
   const handleDelete = async (msgId: number) => {
     if (!window.confirm("Удалить сообщение?")) return;
+    
+    if (isSavedChat) {
+      const updated = messages.filter((m: any) => m.id !== msgId);
+      setMessages(updated);
+      localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
+      return;
+    }
+
     try {
       await fetch('/api/chats/' + chatId + '/messages/' + msgId, {
         method: 'DELETE',
@@ -183,7 +229,7 @@ export default function ChatPage() {
 
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
-  const lastSeenText = isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно");
+  const lastSeenText = isSavedChat ? "Всегда на связи" : (isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно"));
 
   const renderMessageContent = (msgContent: string, isMe: boolean) => {
     if (msgContent.startsWith('[MEDIA] ')) {
@@ -231,17 +277,19 @@ export default function ChatPage() {
         
         <div 
           className="flex items-center gap-3 cursor-pointer flex-1"
-          onClick={() => setShowProfile(true)}
+          onClick={() => !isSavedChat && setShowProfile(true)}
         >
           <div className="relative">
-            <div className="w-11 h-11 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center text-black dark:text-white font-semibold text-lg overflow-hidden">
-              {chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? (
+            <div className={`w-11 h-11 rounded-full flex items-center justify-center font-semibold text-lg overflow-hidden ${isSavedChat ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white'}`}>
+              {isSavedChat ? (
+                <Bookmark size={20} />
+              ) : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? (
                 <img src={chatInfo?.participant?.avatarUrl} alt="" className="w-full h-full object-cover" />
               ) : (
                 displayName.charAt(0).toUpperCase()
               )}
             </div>
-            {isOnline && (
+            {!isSavedChat && isOnline && (
               <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>
             )}
           </div>
@@ -249,7 +297,7 @@ export default function ChatPage() {
             <h2 className="font-bold text-black dark:text-white text-base leading-tight">
               {displayName}
             </h2>
-            <p className={`text-[13px] font-medium mt-0.5 ${isOnline ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500'}`}>
+            <p className={`text-[13px] font-medium mt-0.5 ${isSavedChat ? 'text-blue-500' : (isOnline ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500')}`}>
               {lastSeenText}
             </p>
           </div>
@@ -287,7 +335,9 @@ export default function ChatPage() {
                   
                   {isMe && (
                     <div className="flex items-center ml-0.5">
-                      {msg.isSending ? (
+                      {isSavedChat ? (
+                        <Check size={11} />
+                      ) : msg.isSending ? (
                         <Loader2 size={9} className="animate-spin" />
                       ) : (
                         <div className="flex -space-x-1">
@@ -366,7 +416,7 @@ export default function ChatPage() {
         </form>
       </div>
 
-      {showProfile && (
+      {showProfile && !isSavedChat && (
         <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm transition-opacity">
           <div className="bg-white dark:bg-zinc-900 rounded-xl w-full max-w-sm overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
             <button 
