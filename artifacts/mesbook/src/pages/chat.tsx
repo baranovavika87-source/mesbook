@@ -15,8 +15,19 @@ export default function ChatPage() {
   const [match, params] = useRoute('/chat/:chatId');
   const chatId = params?.chatId;
   const isSavedChat = chatId === 'saved';
+  const currentUserId = getUserId();
 
-  const [messages, setMessages] = useState<any[]>([]);
+  // 1. ИНИЦИАЛИЗАЦИЯ ИЗ КЭША ДЛЯ МОМЕНТАЛЬНОГО ОТОБРАЖЕНИЯ (Telegram-style)
+  const [messages, setMessages] = useState<any[]>(() => {
+    try {
+      if (isSavedChat) {
+        return JSON.parse(localStorage.getItem('mesbook_saved_messages_' + currentUserId) || '[]');
+      }
+      const cached = localStorage.getItem('mesbook_messages_cache_' + currentUserId + '_' + chatId);
+      return cached ? JSON.parse(cached) : [];
+    } catch(e) { return []; }
+  });
+
   const [content, setContent] = useState('');
   const [readFailed, setReadFailed] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -27,7 +38,8 @@ export default function ChatPage() {
 
   const touchStartRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const currentUserId = getUserId();
+  
+  // Флаг автоскролла: если кэш загрузился, скроллим сразу
   const hasScrolledToBottom = useRef(false);
 
   const [chatInfo, setChatInfo] = useState<any>(() => {
@@ -45,14 +57,17 @@ export default function ChatPage() {
   const isGroup = chatInfo?.participant?.isGroup;
   const isChannel = chatInfo?.participant?.isChannel;
 
-  const loadData = async () => {
-    if (isSavedChat) {
-      try {
-        const savedMsgs = JSON.parse(localStorage.getItem('mesbook_saved_messages_' + currentUserId) || '[]');
-        setMessages(savedMsgs);
-      } catch (e) {}
-      return;
+  // 2. СОХРАНЕНИЕ В КЭШ ПРИ ЛЮБОМ ИЗМЕНЕНИИ
+  useEffect(() => {
+    if (!isSavedChat && messages.length > 0) {
+      // Сохраняем только подтвержденные сервером сообщения, чтобы "часики" не зависали при перезагрузке
+      const confirmedMsgs = messages.filter(m => !m.isSending);
+      localStorage.setItem('mesbook_messages_cache_' + currentUserId + '_' + chatId, JSON.stringify(confirmedMsgs));
     }
+  }, [messages, chatId, currentUserId, isSavedChat]);
+
+  const loadData = async () => {
+    if (isSavedChat) return; // Избранное работает только локально
 
     if (!readFailed) {
       try {
@@ -118,23 +133,34 @@ export default function ChatPage() {
     }
   }, [messages]);
 
+  const forceScrollToBottom = () => {
+    setTimeout(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, 10);
+  };
+
   const sendMessageToServer = async (text: string) => {
     const tempMsg = {
       id: Date.now(),
       content: text,
-      isSending: true,
+      isSending: !isSavedChat, // В Избранном сообщения не "отправляются", они появляются сразу
       senderId: currentUserId,
       createdAt: new Date().toISOString()
     };
 
     if (isSavedChat) {
-      const updated = [...messages, tempMsg];
-      setMessages(updated);
-      localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
+      setMessages((prev: any) => {
+        const updated = [...prev, tempMsg];
+        localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
+        return updated;
+      });
+      forceScrollToBottom();
       return;
     }
 
+    // 3. ОПТИМИСТИЧНЫЙ UI: Сообщение появляется в чате СРАЗУ, до ответа от сервера
     setMessages((prev: any) => [...prev, tempMsg]);
+    forceScrollToBottom();
 
     try {
       const res = await fetch('/api/chats/' + chatId + '/messages', {
@@ -145,6 +171,7 @@ export default function ChatPage() {
       if (res.ok) {
         loadData();
       } else {
+        // Если сервер выдал ошибку, удаляем наше временное сообщение
         setMessages((prev: any) => prev.filter((m: any) => m.id !== tempMsg.id));
       }
     } catch (error) {
@@ -417,4 +444,4 @@ export default function ChatPage() {
 
     </div>
   );
-}
+    }
