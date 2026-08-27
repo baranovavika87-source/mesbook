@@ -83,8 +83,6 @@ export default function ChatsPage() {
           else if (data && Array.isArray(data.data)) arr = data.data;
           
           const localGroups = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
-          
-          // Аккуратно объединяем, чтобы избежать дубликатов
           const combined = [...localGroups, ...arr];
           
           setChats(combined);
@@ -478,7 +476,8 @@ export default function ChatsPage() {
                       {chat.lastMessage && (
                         <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
                           <Check size={13} />
-                          {(chat.isRead || chat.readAt || chat.status === 'read' || chat.id.startsWith('group_') || chat.id.startsWith('channel_')) && <Check size={13} />}
+                          {/* БЕЗОПАСНАЯ ПРОВЕРКА ЧЕРЕЗ String() */}
+                          {(chat.isRead || chat.readAt || chat.status === 'read' || String(chat.id).startsWith('group_') || String(chat.id).startsWith('channel_') || String(chat.id).startsWith('custom_')) && <Check size={13} />}
                         </div>
                       )}
                     </div>
