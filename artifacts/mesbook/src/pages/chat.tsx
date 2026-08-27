@@ -46,6 +46,14 @@ export default function ChatPage() {
   const isChannel = chatInfo?.participant?.isChannel;
 
   const loadData = async () => {
+    if (isSavedChat) {
+      try {
+        const savedMsgs = JSON.parse(localStorage.getItem('mesbook_saved_messages_' + currentUserId) || '[]');
+        setMessages(savedMsgs);
+      } catch (e) {}
+      return;
+    }
+
     if (!readFailed) {
       try {
         const res = await fetch('/api/chats/' + chatId + '/read', {
@@ -85,8 +93,10 @@ export default function ChatPage() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 2000);
-    return () => clearInterval(interval);
+    if (!isSavedChat) {
+      const interval = setInterval(loadData, 2000);
+      return () => clearInterval(interval);
+    }
   }, [chatId]);
 
   useEffect(() => {
@@ -116,6 +126,13 @@ export default function ChatPage() {
       senderId: currentUserId,
       createdAt: new Date().toISOString()
     };
+
+    if (isSavedChat) {
+      const updated = [...messages, tempMsg];
+      setMessages(updated);
+      localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
+      return;
+    }
 
     setMessages((prev: any) => [...prev, tempMsg]);
 
@@ -180,6 +197,14 @@ export default function ChatPage() {
 
   const handleDelete = async (msgId: number) => {
     if (!window.confirm("Удалить сообщение?")) return;
+    
+    if (isSavedChat) {
+      const updated = messages.filter((m: any) => m.id !== msgId);
+      setMessages(updated);
+      localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
+      return;
+    }
+
     try {
       await fetch('/api/chats/' + chatId + '/messages/' + msgId, {
         method: 'DELETE',
@@ -392,4 +417,4 @@ export default function ChatPage() {
 
     </div>
   );
-                      }
+}
