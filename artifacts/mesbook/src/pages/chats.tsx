@@ -17,7 +17,10 @@ export default function ChatsPage() {
   const [chats, setChats] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('mesbook_chats');
-      return saved ? JSON.parse(saved) : [];
+      const parsed = saved ? JSON.parse(saved) : [];
+      // Подтягиваем наши локальные группы/каналы сразу при старте
+      const localGroups = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
+      return [...localGroups, ...parsed];
     } catch(e) { return []; }
   });
   
@@ -84,8 +87,12 @@ export default function ChatsPage() {
           else if (data && Array.isArray(data.chats)) arr = data.chats;
           else if (data && Array.isArray(data.data)) arr = data.data;
           
-          setChats(arr);
-          localStorage.setItem('mesbook_chats', JSON.stringify(arr));
+          // Объединяем серверные чаты и наши кастомные группы/каналы
+          const localGroups = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
+          const combined = [...localGroups, ...arr];
+          
+          setChats(combined);
+          localStorage.setItem('mesbook_chats', JSON.stringify(combined));
         }
       } catch (e) {}
 
@@ -156,16 +163,23 @@ export default function ChatsPage() {
     if (!name) return;
 
     const newChatObj = {
-      id: 'custom_' + Date.now(),
+      id: (modalType === 'group' ? 'group_' : 'channel_') + Date.now(),
       participant: {
-        id: 'group_' + Date.now(),
+        id: (modalType === 'group' ? 'group_' : 'channel_') + Date.now(),
         displayName: name,
-        avatarUrl: ''
+        avatarUrl: '',
+        isGroup: modalType === 'group',
+        isChannel: modalType === 'channel'
       },
       lastMessage: modalType === 'group' ? 'Группа создана' : 'Канал создан',
       lastMessageTime: new Date().toISOString(),
       isRead: true
     };
+
+    // Сохраняем локально в отдельный список
+    const localGroups = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
+    const updatedLocal = [newChatObj, ...localGroups];
+    localStorage.setItem('mesbook_custom_chats', JSON.stringify(updatedLocal));
 
     const updatedChats = [newChatObj, ...chats];
     setChats(updatedChats);
