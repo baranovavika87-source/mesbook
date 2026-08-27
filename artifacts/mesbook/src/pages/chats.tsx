@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, Hash } from 'lucide-react';
+import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -25,7 +25,6 @@ export default function ChatsPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   
-  // Состояния для модального окна создания группы/канала
   const [modalType, setModalType] = useState<'group' | 'channel' | null>(null);
   const [groupName, setGroupName] = useState('');
   const [channelName, setChannelName] = useState('');
@@ -151,13 +150,11 @@ export default function ChatsPage() {
     }
   };
 
-  // Создание группы или канала
   const handleCreateGroupOrChannel = (e: React.FormEvent) => {
     e.preventDefault();
     const name = modalType === 'group' ? groupName.trim() : channelName.trim();
     if (!name) return;
 
-    // Создаем локальный объект нового чата/группы
     const newChatObj = {
       id: 'custom_' + Date.now(),
       participant: {
@@ -174,13 +171,11 @@ export default function ChatsPage() {
     setChats(updatedChats);
     localStorage.setItem('mesbook_chats', JSON.stringify(updatedChats));
 
-    // Сбрасываем форму и закрываем окна
     setGroupName('');
     setChannelName('');
     setModalType(null);
     setIsSidebarOpen(false);
 
-    // Переходим в созданный чат
     setLocation('/chat/' + newChatObj.id);
   };
 
@@ -200,7 +195,6 @@ export default function ChatsPage() {
         />
       )}
 
-      {/* ВЫПЛЫВАЮЩЕЕ МЕНЮ */}
       <div className={`fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 ease-out shadow-2xl flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         
         <div className="p-6 pb-4 flex justify-between items-start relative">
@@ -246,7 +240,6 @@ export default function ChatsPage() {
             </a>
           </Link>
 
-          {/* Кнопка создания группы */}
           <button 
             onClick={() => setModalType('group')} 
             className="flex items-center gap-4 px-6 py-4 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full text-left"
@@ -255,7 +248,6 @@ export default function ChatsPage() {
             <span className="text-[15px] font-medium">Создать группу</span>
           </button>
 
-          {/* Кнопка создания канала */}
           <button 
             onClick={() => setModalType('channel')} 
             className="flex items-center gap-4 px-6 py-4 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full text-left"
@@ -280,7 +272,6 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* МОДАЛЬНОЕ ОКНО СОЗДАНИЯ ГРУППЫ / КАНАЛА */}
       {modalType && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl border border-gray-100 dark:border-zinc-800">
@@ -502,7 +493,7 @@ export default function ChatsPage() {
       <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black z-10">
         <Link href="/">
           <a className="flex flex-col items-center text-black dark:text-white transition-colors">
-            <MessageSquare size= {24} />
+            <MessageSquare size={24} />
             <span className="text-[10px] font-medium mt-1">Чаты</span>
           </a>
         </Link>
@@ -516,3 +507,4 @@ export default function ChatsPage() {
     </div>
   );
 }
+
