@@ -17,10 +17,7 @@ export default function ChatsPage() {
   const [chats, setChats] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('mesbook_chats');
-      const parsed = saved ? JSON.parse(saved) : [];
-      // Подтягиваем наши локальные группы/каналы сразу при старте
-      const localGroups = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
-      return [...localGroups, ...parsed];
+      return saved ? JSON.parse(saved) : [];
     } catch(e) { return []; }
   });
   
@@ -41,9 +38,7 @@ export default function ChatsPage() {
 
   const [savedMessages, setSavedMessages] = useState<any[]>(() => {
     try {
-      const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
-      const uid = u.id || 1;
-      const saved = localStorage.getItem('mesbook_saved_messages_' + uid);
+      const saved = localStorage.getItem('mesbook_saved_messages_' + getUserId());
       return saved ? JSON.parse(saved) : [];
     } catch(e) { return []; }
   });
@@ -87,8 +82,9 @@ export default function ChatsPage() {
           else if (data && Array.isArray(data.chats)) arr = data.chats;
           else if (data && Array.isArray(data.data)) arr = data.data;
           
-          // Объединяем серверные чаты и наши кастомные группы/каналы
           const localGroups = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
+          
+          // Аккуратно объединяем, чтобы избежать дубликатов
           const combined = [...localGroups, ...arr];
           
           setChats(combined);
@@ -97,9 +93,7 @@ export default function ChatsPage() {
       } catch (e) {}
 
       try {
-        const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
-        const uid = u.id || 1;
-        const saved = localStorage.getItem('mesbook_saved_messages_' + uid);
+        const saved = localStorage.getItem('mesbook_saved_messages_' + getUserId());
         if (saved) setSavedMessages(JSON.parse(saved));
       } catch(e) {}
     };
@@ -176,7 +170,6 @@ export default function ChatsPage() {
       isRead: true
     };
 
-    // Сохраняем локально в отдельный список
     const localGroups = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
     const updatedLocal = [newChatObj, ...localGroups];
     localStorage.setItem('mesbook_custom_chats', JSON.stringify(updatedLocal));
@@ -461,7 +454,7 @@ export default function ChatsPage() {
                       <span className="text-lg font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
                     )}
                     
-                    {isOnline && (
+                    {isOnline && !participant.isGroup && !participant.isChannel && (
                       <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>
                     )}
                   </div>
@@ -485,7 +478,7 @@ export default function ChatsPage() {
                       {chat.lastMessage && (
                         <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
                           <Check size={13} />
-                          {(chat.isRead || chat.readAt || chat.status === 'read') && <Check size={13} />}
+                          {(chat.isRead || chat.readAt || chat.status === 'read' || chat.id.startsWith('group_') || chat.id.startsWith('channel_')) && <Check size={13} />}
                         </div>
                       )}
                     </div>
@@ -521,4 +514,3 @@ export default function ChatsPage() {
     </div>
   );
 }
-
