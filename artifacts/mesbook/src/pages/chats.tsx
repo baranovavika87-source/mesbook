@@ -77,16 +77,8 @@ export default function ChatsPage() {
         });
         if (res.ok) {
           const data = await res.json();
-          let arr: any[] = [];
-          if (Array.isArray(data)) arr = data;
-          else if (data && Array.isArray(data.chats)) arr = data.chats;
-          else if (data && Array.isArray(data.data)) arr = data.data;
-          
-          const localGroups = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
-          const combined = [...localGroups, ...arr];
-          
-          setChats(combined);
-          localStorage.setItem('mesbook_chats', JSON.stringify(combined));
+          setChats(data);
+          localStorage.setItem('mesbook_chats', JSON.stringify(data));
         }
       } catch (e) {}
 
@@ -149,39 +141,29 @@ export default function ChatsPage() {
     }
   };
 
-  const handleCreateGroupOrChannel = (e: React.FormEvent) => {
+  // СОЗДАНИЕ ГРУППЫ ТЕПЕРЬ ИДЕТ ЧЕРЕЗ API TURSO!
+  const handleCreateGroupOrChannel = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = modalType === 'group' ? groupName.trim() : channelName.trim();
     if (!name) return;
 
-    const newChatObj = {
-      id: (modalType === 'group' ? 'group_' : 'channel_') + Date.now(),
-      participant: {
-        id: (modalType === 'group' ? 'group_' : 'channel_') + Date.now(),
-        displayName: name,
-        avatarUrl: '',
-        isGroup: modalType === 'group',
-        isChannel: modalType === 'channel'
-      },
-      lastMessage: modalType === 'group' ? 'Группа создана' : 'Канал создан',
-      lastMessageTime: new Date().toISOString(),
-      isRead: true
-    };
-
-    const localGroups = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
-    const updatedLocal = [newChatObj, ...localGroups];
-    localStorage.setItem('mesbook_custom_chats', JSON.stringify(updatedLocal));
-
-    const updatedChats = [newChatObj, ...chats];
-    setChats(updatedChats);
-    localStorage.setItem('mesbook_chats', JSON.stringify(updatedChats));
+    try {
+      const res = await fetch('/api/chats/create', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getUserId(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, isGroup: modalType === 'group', isChannel: modalType === 'channel' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Сервер сам возвращает нам новый ID группы (например 100000001)
+        setLocation('/chat/' + data.id);
+      }
+    } catch (e) {}
 
     setGroupName('');
     setChannelName('');
     setModalType(null);
     setIsSidebarOpen(false);
-
-    setLocation('/chat/' + newChatObj.id);
   };
 
   const lastSavedMsg = savedMessages[savedMessages.length - 1];
@@ -476,8 +458,7 @@ export default function ChatsPage() {
                       {chat.lastMessage && (
                         <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
                           <Check size={13} />
-                          {/* БЕЗОПАСНАЯ ПРОВЕРКА ЧЕРЕЗ String() */}
-                          {(chat.isRead || chat.readAt || chat.status === 'read' || String(chat.id).startsWith('group_') || String(chat.id).startsWith('channel_') || String(chat.id).startsWith('custom_')) && <Check size={13} />}
+                          {(chat.isRead || chat.readAt || chat.status === 'read' || participant.isGroup || participant.isChannel) && <Check size={13} />}
                         </div>
                       )}
                     </div>
@@ -512,4 +493,4 @@ export default function ChatsPage() {
       </nav>
     </div>
   );
-            }
+                  }
