@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check } from 'lucide-react';
+import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, Hash } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -25,6 +25,11 @@ export default function ChatsPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   
+  // Состояния для модального окна создания группы/канала
+  const [modalType, setModalType] = useState<'group' | 'channel' | null>(null);
+  const [groupName, setGroupName] = useState('');
+  const [channelName, setChannelName] = useState('');
+
   const [currentUser, setCurrentUser] = useState<any>(() => {
     try {
       const saved = localStorage.getItem('mesbook_user');
@@ -32,7 +37,6 @@ export default function ChatsPage() {
     } catch(e) { return null; }
   });
 
-  // Загружаем сообщения для Избранного, чтобы показывать последнее в списке
   const [savedMessages, setSavedMessages] = useState<any[]>(() => {
     try {
       const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
@@ -86,7 +90,6 @@ export default function ChatsPage() {
         }
       } catch (e) {}
 
-      // Обновляем избранное
       try {
         const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
         const uid = u.id || 1;
@@ -148,7 +151,39 @@ export default function ChatsPage() {
     }
   };
 
-  // Последнее сообщение для избранного
+  // Создание группы или канала
+  const handleCreateGroupOrChannel = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = modalType === 'group' ? groupName.trim() : channelName.trim();
+    if (!name) return;
+
+    // Создаем локальный объект нового чата/группы
+    const newChatObj = {
+      id: 'custom_' + Date.now(),
+      participant: {
+        id: 'group_' + Date.now(),
+        displayName: name,
+        avatarUrl: ''
+      },
+      lastMessage: modalType === 'group' ? 'Группа создана' : 'Канал создан',
+      lastMessageTime: new Date().toISOString(),
+      isRead: true
+    };
+
+    const updatedChats = [newChatObj, ...chats];
+    setChats(updatedChats);
+    localStorage.setItem('mesbook_chats', JSON.stringify(updatedChats));
+
+    // Сбрасываем форму и закрываем окна
+    setGroupName('');
+    setChannelName('');
+    setModalType(null);
+    setIsSidebarOpen(false);
+
+    // Переходим в созданный чат
+    setLocation('/chat/' + newChatObj.id);
+  };
+
   const lastSavedMsg = savedMessages[savedMessages.length - 1];
 
   return (
@@ -165,6 +200,7 @@ export default function ChatsPage() {
         />
       )}
 
+      {/* ВЫПЛЫВАЮЩЕЕ МЕНЮ */}
       <div className={`fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 ease-out shadow-2xl flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         
         <div className="p-6 pb-4 flex justify-between items-start relative">
@@ -210,16 +246,18 @@ export default function ChatsPage() {
             </a>
           </Link>
 
+          {/* Кнопка создания группы */}
           <button 
-            onClick={() => alert("Создание группы скоро появится!")} 
+            onClick={() => setModalType('group')} 
             className="flex items-center gap-4 px-6 py-4 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full text-left"
           >
             <Users size={20} className="text-gray-500 dark:text-zinc-400" />
             <span className="text-[15px] font-medium">Создать группу</span>
           </button>
 
+          {/* Кнопка создания канала */}
           <button 
-            onClick={() => alert("Создание канала скоро появится!")} 
+            onClick={() => setModalType('channel')} 
             className="flex items-center gap-4 px-6 py-4 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full text-left"
           >
             <Volume2 size={20} className="text-gray-500 dark:text-zinc-400" />
@@ -241,6 +279,57 @@ export default function ChatsPage() {
           </Link>
         </div>
       </div>
+
+      {/* МОДАЛЬНОЕ ОКНО СОЗДАНИЯ ГРУППЫ / КАНАЛА */}
+      {modalType && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl border border-gray-100 dark:border-zinc-800">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-black dark:text-white">
+                {modalType === 'group' ? 'Новая группа' : 'Новый канал'}
+              </h3>
+              <button 
+                onClick={() => setModalType(null)} 
+                className="p-1 text-gray-400 hover:text-black dark:hover:text-white rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateGroupOrChannel} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase mb-1 ml-1 tracking-wider">
+                  {modalType === 'group' ? 'Название группы' : 'Название канала'}
+                </label>
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder={modalType === 'group' ? 'Например: Команда разработчиков' : 'Например: Новости IT'}
+                  value={modalType === 'group' ? groupName : channelName}
+                  onChange={e => modalType === 'group' ? setGroupName(e.target.value) : setChannelName(e.target.value)}
+                  className="w-full bg-gray-100 dark:bg-black border-none rounded-xl px-4 py-3.5 text-sm text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-600 outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalType(null)}
+                  className="flex-1 py-3 bg-gray-100 dark:bg-zinc-800 text-black dark:text-white font-medium rounded-xl transition-colors active:scale-95"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-xl transition-transform active:scale-95"
+                >
+                  Создать
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <header className="px-6 pt-10 pb-4 h-24 relative z-10 bg-white dark:bg-black">
         {isSearchOpen ? (
@@ -322,7 +411,6 @@ export default function ChatsPage() {
 
         <div className="divide-y divide-gray-100 dark:divide-zinc-900/50">
           
-          {/* ИЗБРАННОЕ С ВРЕМЕНЕМ И ГАЛОЧКАМИ */}
           <Link href="/chat/saved">
             <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors">
               <div className="w-14 h-14 shrink-0 rounded-full bg-blue-500/10 flex items-center justify-center relative border border-blue-500/20 text-blue-500">
@@ -414,7 +502,7 @@ export default function ChatsPage() {
       <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black z-10">
         <Link href="/">
           <a className="flex flex-col items-center text-black dark:text-white transition-colors">
-            <MessageSquare size={24} />
+            <MessageSquare size= {24} />
             <span className="text-[10px] font-medium mt-1">Чаты</span>
           </a>
         </Link>
