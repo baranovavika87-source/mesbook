@@ -135,6 +135,17 @@ export default function ChatPage() {
     }
   }, [messages]);
 
+  const updateCustomChatLastMessage = (updatedMsgs: any[]) => {
+    const customChats = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
+    const chatIdx = customChats.findIndex((c: any) => String(c.id) === String(chatId));
+    if (chatIdx !== -1) {
+      const lastMsg = updatedMsgs[updatedMsgs.length - 1];
+      customChats[chatIdx].lastMessage = lastMsg ? lastMsg.content : (isChannel ? 'Канал создан' : 'Группа создана');
+      customChats[chatIdx].lastMessageTime = lastMsg ? lastMsg.createdAt : new Date().toISOString();
+      localStorage.setItem('mesbook_custom_chats', JSON.stringify(customChats));
+    }
+  };
+
   const sendMessageToServer = async (text: string) => {
     const tempMsg = {
       id: Date.now(),
@@ -155,6 +166,7 @@ export default function ChatPage() {
       const updated = [...messages, tempMsg];
       setMessages(updated);
       localStorage.setItem('mesbook_custom_messages_' + chatId, JSON.stringify(updated));
+      updateCustomChatLastMessage(updated);
       return;
     }
 
@@ -233,6 +245,7 @@ export default function ChatPage() {
       const updated = messages.filter((m: any) => m.id !== msgId);
       setMessages(updated);
       localStorage.setItem('mesbook_custom_messages_' + chatId, JSON.stringify(updated));
+      updateCustomChatLastMessage(updated);
       return;
     }
 
@@ -248,7 +261,6 @@ export default function ChatPage() {
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
   
-  // Статус в шапке для разных типов чатов
   const subtitleText = isSavedChat 
     ? "" 
     : isCustomChat 
@@ -448,3 +460,4 @@ export default function ChatPage() {
     </div>
   );
 }
+
