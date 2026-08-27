@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2 } from 'lucide-react';
+import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -30,6 +30,16 @@ export default function ChatsPage() {
       const saved = localStorage.getItem('mesbook_user');
       return saved ? JSON.parse(saved) : null;
     } catch(e) { return null; }
+  });
+
+  // Загружаем сообщения для Избранного, чтобы показывать последнее в списке
+  const [savedMessages, setSavedMessages] = useState<any[]>(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
+      const uid = u.id || 1;
+      const saved = localStorage.getItem('mesbook_saved_messages_' + uid);
+      return saved ? JSON.parse(saved) : [];
+    } catch(e) { return []; }
   });
   
   const [isDark, setIsDark] = useState(false);
@@ -75,9 +85,17 @@ export default function ChatsPage() {
           localStorage.setItem('mesbook_chats', JSON.stringify(arr));
         }
       } catch (e) {}
+
+      // Обновляем избранное
+      try {
+        const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
+        const uid = u.id || 1;
+        const saved = localStorage.getItem('mesbook_saved_messages_' + uid);
+        if (saved) setSavedMessages(JSON.parse(saved));
+      } catch(e) {}
     };
     loadChats();
-    const interval = setInterval(loadChats, 5000);
+    const interval = setInterval(loadChats, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -130,6 +148,9 @@ export default function ChatsPage() {
     }
   };
 
+  // Последнее сообщение для избранного
+  const lastSavedMsg = savedMessages[savedMessages.length - 1];
+
   return (
     <div 
       className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300 relative overflow-hidden"
@@ -144,10 +165,8 @@ export default function ChatsPage() {
         />
       )}
 
-      {/* ВЫПЛЫВАЮЩЕЕ МЕНЮ */}
       <div className={`fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 ease-out shadow-2xl flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         
-        {/* Шапка меню */}
         <div className="p-6 pb-4 flex justify-between items-start relative">
           <div className="flex flex-col">
             <div className="w-16 h-16 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-2xl font-bold text-black dark:text-white mb-3 overflow-hidden border border-gray-200 dark:border-zinc-700 shadow-sm">
@@ -175,9 +194,7 @@ export default function ChatsPage() {
 
         <div className="w-full h-[1px] bg-gray-100 dark:bg-zinc-900 my-1"></div>
 
-        {/* ПУКТЫ МЕНЮ С РАЗДЕЛИТЕЛЯМИ */}
         <div className="flex flex-col py-1 overflow-y-auto flex-1 divide-y divide-gray-100 dark:divide-zinc-900/60">
-          
           <button 
             onClick={() => alert("Функция добавления второго аккаунта в разработке")} 
             className="flex items-center gap-4 px-6 py-4 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full text-left"
@@ -304,18 +321,35 @@ export default function ChatsPage() {
         )}
 
         <div className="divide-y divide-gray-100 dark:divide-zinc-900/50">
+          
+          {/* ИЗБРАННОЕ С ВРЕМЕНЕМ И ГАЛОЧКАМИ */}
           <Link href="/chat/saved">
             <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors">
               <div className="w-14 h-14 shrink-0 rounded-full bg-blue-500/10 flex items-center justify-center relative border border-blue-500/20 text-blue-500">
                 <Bookmark size={24} />
               </div>
               <div className="ml-4 flex-1 overflow-hidden">
-                <h3 className="font-semibold text-black dark:text-white text-base truncate">
-                  Избранное
-                </h3>
-                <p className="text-sm text-gray-500 dark:text-zinc-400 truncate mt-0.5">
-                  Ваши сохраненные сообщения
-                </p>
+                <div className="flex justify-between items-center">
+                  <h3 className="font-semibold text-black dark:text-white text-base truncate">
+                    Избранное
+                  </h3>
+                  {lastSavedMsg && (
+                    <span className="text-[11px] text-gray-400 dark:text-zinc-500 shrink-0 ml-2">
+                      {new Date(lastSavedMsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <p className="text-sm text-gray-500 dark:text-zinc-400 truncate pr-2">
+                    {lastSavedMsg ? (lastSavedMsg.content.startsWith('[MEDIA]') ? 'Вложение' : lastSavedMsg.content.replace(/^> .*\n\n/, '')) : 'Нет сообщений'}
+                  </p>
+                  {lastSavedMsg && (
+                    <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
+                      <Check size={13} />
+                      <Check size={13} />
+                    </div>
+                  )}
+                </div>
               </div>
             </a>
           </Link>
@@ -340,12 +374,28 @@ export default function ChatsPage() {
                   </div>
                   
                   <div className="ml-4 flex-1 overflow-hidden">
-                    <h3 className="font-semibold text-black dark:text-white text-base truncate">
-                      {participant.displayName || 'Собеседник'}
-                    </h3>
-                    <p className="text-sm text-gray-500 dark:text-zinc-400 truncate mt-0.5">
-                      {chat.lastMessage || 'Нет сообщений'}
-                    </p>
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-semibold text-black dark:text-white text-base truncate">
+                        {participant.displayName || 'Собеседник'}
+                      </h3>
+                      {chat.lastMessageTime && (
+                        <span className="text-[11px] text-gray-400 dark:text-zinc-500 shrink-0 ml-2">
+                          {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center justify-between mt-0.5">
+                      <p className="text-sm text-gray-500 dark:text-zinc-400 truncate pr-2">
+                        {chat.lastMessage?.startsWith('[MEDIA]') ? 'Вложение' : (chat.lastMessage || 'Нет сообщений')}
+                      </p>
+                      {chat.lastMessage && (
+                        <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
+                          <Check size={13} />
+                          {(chat.isRead || chat.readAt || chat.status === 'read') && <Check size={13} />}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </a>
               </Link>
@@ -378,4 +428,3 @@ export default function ChatsPage() {
     </div>
   );
 }
-
