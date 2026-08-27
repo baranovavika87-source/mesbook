@@ -28,8 +28,6 @@ export default function ChatPage() {
   const touchStartRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentUserId = getUserId();
-
-  // Флаг: прокручивали ли мы чат вниз изначально
   const hasScrolledToBottom = useRef(false);
 
   const [chatInfo, setChatInfo] = useState<any>(() => {
@@ -53,7 +51,6 @@ export default function ChatPage() {
 
   const loadData = async () => {
     if (isSavedChat) {
-      // Локальная загрузка для Избранного из localStorage
       try {
         const savedMsgs = JSON.parse(localStorage.getItem('mesbook_saved_messages_' + currentUserId) || '[]');
         setMessages(savedMsgs);
@@ -122,7 +119,6 @@ export default function ChatPage() {
     return () => clearInterval(interval);
   }, [currentUserId]);
 
-  // Скроллим вниз только при САМОМ ПЕРВОМ открытии чата
   useEffect(() => {
     if (scrollRef.current && !hasScrolledToBottom.current && messages.length > 0) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -140,7 +136,6 @@ export default function ChatPage() {
     };
 
     if (isSavedChat) {
-      // Сохраняем в избранное локально
       const updated = [...messages, tempMsg];
       setMessages(updated);
       localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
@@ -229,7 +224,7 @@ export default function ChatPage() {
 
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
-  const lastSeenText = isSavedChat ? "Всегда на связи" : (isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно"));
+  const lastSeenText = isSavedChat ? "" : (isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно"));
 
   const renderMessageContent = (msgContent: string, isMe: boolean) => {
     if (msgContent.startsWith('[MEDIA] ')) {
@@ -297,9 +292,11 @@ export default function ChatPage() {
             <h2 className="font-bold text-black dark:text-white text-base leading-tight">
               {displayName}
             </h2>
-            <p className={`text-[13px] font-medium mt-0.5 ${isSavedChat ? 'text-blue-500' : (isOnline ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500')}`}>
-              {lastSeenText}
-            </p>
+            {!isSavedChat && (
+              <p className={`text-[13px] font-medium mt-0.5 ${isOnline ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500'}`}>
+                {lastSeenText}
+              </p>
+            )}
           </div>
         </div>
       </header>
@@ -336,7 +333,10 @@ export default function ChatPage() {
                   {isMe && (
                     <div className="flex items-center ml-0.5">
                       {isSavedChat ? (
-                        <Check size={11} />
+                        <div className="flex -space-x-1">
+                          <Check size={11} />
+                          <Check size={11} />
+                        </div>
                       ) : msg.isSending ? (
                         <Loader2 size={9} className="animate-spin" />
                       ) : (
@@ -416,43 +416,7 @@ export default function ChatPage() {
         </form>
       </div>
 
-      {showProfile && !isSavedChat && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm transition-opacity">
-          <div className="bg-white dark:bg-zinc-900 rounded-xl w-full max-w-sm overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
-            <button 
-              onClick={() => setShowProfile(false)}
-              className="absolute top-4 right-4 p-2 bg-gray-100 dark:bg-black rounded-full text-gray-500 hover:text-black dark:hover:text-white transition-colors"
-            >
-              <X size={20} />
-            </button>
-            <div className="p-8 flex flex-col items-center">
-              <div className="w-28 h-28 rounded-full bg-gray-100 dark:bg-black flex items-center justify-center text-black dark:text-white text-4xl font-semibold mb-4 overflow-hidden border-4 border-white dark:border-zinc-800 shadow-sm">
-                {chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? (
-                  <img src={chatInfo?.participant?.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                ) : (
-                  displayName.charAt(0).toUpperCase()
-                )}
-              </div>
-              <h2 className="text-2xl font-bold text-black dark:text-white text-center">{displayName}</h2>
-              {chatInfo?.participant?.username && (
-                <p className="text-gray-500 dark:text-zinc-400 text-sm mt-1">{chatInfo?.participant?.username}</p>
-              )}
-              <div className={`mt-3 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide ${isOnline ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-black text-gray-500 dark:text-zinc-400'}`}>
-                {lastSeenText}
-              </div>
-              {chatInfo?.participant?.bio && (
-                <div className="mt-8 w-full text-center">
-                  <p className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase mb-2 tracking-wider">О себе</p>
-                  <p className="text-black dark:text-white text-sm bg-gray-50 dark:bg-black rounded-md p-4 leading-relaxed">
-                    {chatInfo?.participant?.bio}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }
+
