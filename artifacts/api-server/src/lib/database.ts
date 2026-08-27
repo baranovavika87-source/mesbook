@@ -69,7 +69,12 @@ export async function initializeDatabase() {
     await tursoQuery(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, sender_id INTEGER NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL, read_by_me INTEGER NOT NULL DEFAULT 0)`);
     await tursoQuery(`CREATE TABLE IF NOT EXISTS wall_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, author_id INTEGER NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)`);
 
-    logger.info("✅ Таблицы в Turso успешно созданы через HTTP API");
+    // ДОБАВЛЯЕМ НОВЫЕ КОЛОНКИ ДЛЯ ГРУПП И КАНАЛОВ
+    try { await tursoQuery(`ALTER TABLE chats ADD COLUMN name TEXT`); } catch (e) {}
+    try { await tursoQuery(`ALTER TABLE chats ADD COLUMN is_group INTEGER DEFAULT 0`); } catch (e) {}
+    try { await tursoQuery(`ALTER TABLE chats ADD COLUMN is_channel INTEGER DEFAULT 0`); } catch (e) {}
+
+    logger.info("✅ Таблицы в Turso успешно созданы/обновлены через HTTP API");
   } catch (error: any) {
     logger.error({ message: error?.message }, "❌ Ошибка инициализации Turso HTTP");
   }
