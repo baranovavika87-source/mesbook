@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, User, Plus, X, Moon, Sun, LogOut, Users } from 'lucide-react';
+import { Search, MessageSquare, User, Plus, X, Moon, Sun, LogOut, Users, Bookmark, Settings, UserPlus, Volume2 } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -35,8 +35,10 @@ export default function ChatsPage() {
   const [isDark, setIsDark] = useState(false);
   const [, setLocation] = useLocation();
 
+  // Логика для свайпа влево (открытие меню)
+  const touchStartX = useRef<number | null>(null);
+
   useEffect(() => {
-    // ЖЕСТКАЯ ПРОВЕРКА ТЕМЫ ИЗ ПАМЯТИ
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') {
       setIsDark(true);
@@ -99,6 +101,21 @@ export default function ChatsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  // Обработка свайпов по экрану
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    // Свайп влево открывает меню
+    if (diff > 70) {
+      setIsSidebarOpen(true);
+    }
+    touchStartX.current = null;
+  };
+
   const filteredChats = Array.isArray(chats) ? chats.filter((c: any) => 
     (c.participant?.displayName || '').toLowerCase().includes(search.toLowerCase())
   ) : [];
@@ -122,55 +139,111 @@ export default function ChatsPage() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300 relative overflow-hidden">
+    <div 
+      className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300 relative overflow-hidden"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       
+      {/* ЗАТЕМНЕНИЕ ФОНА ПРИ ОТКРЫТОМ МЕНЮ */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+          className="fixed inset-0 bg-black/60 z-40 transition-opacity backdrop-blur-xs"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      <div className={`fixed top-0 left-0 h-full w-[80%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 ease-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-4 flex justify-end">
-          <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-black dark:text-white rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
-            <X size={26} />
+      {/* ВЫПЛЫВАЮЩЕЕ МЕНЮ (САЙДБАР) */}
+      <div className={`fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 ease-out shadow-2xl flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        
+        {/* Шапка меню: Аватар + Кнопка темы в правом верхнем углу */}
+        <div className="p-6 pb-4 flex justify-between items-start relative">
+          <div className="flex flex-col">
+            <div className="w-16 h-16 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-2xl font-bold text-black dark:text-white mb-3 overflow-hidden border border-gray-200 dark:border-zinc-700 shadow-sm">
+              {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
+                <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"
+              )}
+            </div>
+            <h2 className="text-xl font-bold text-black dark:text-white leading-tight">
+              {currentUser?.displayName || 'Игорь'}
+            </h2>
+            <p className="text-sm text-gray-400 dark:text-zinc-500 mt-0.5">
+              {currentUser?.username || '@игорь'}
+            </p>
+          </div>
+
+          {/* 1. ТЕМА В ПРАВОМ ВЕРХНЕМ УГЛУ */}
+          <button 
+            onClick={toggleTheme} 
+            className="p-2.5 rounded-full bg-gray-100 dark:bg-zinc-900 text-black dark:text-white transition-colors active:scale-95"
+          >
+            {isDark ? <Sun size={20} /> : <Moon size={20} />}
           </button>
         </div>
-        
-        <div className="px-6 pb-6 border-b border-gray-100 dark:border-zinc-800 flex flex-col items-center text-center">
-          <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-3xl font-bold text-black dark:text-white mb-4 overflow-hidden border-2 border-white dark:border-zinc-900 shadow-sm">
-            {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
-              <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-            ) : (
-              currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"
-            )}
-          </div>
-          <h2 className="text-2xl font-bold text-black dark:text-white leading-tight mb-1">
-            {currentUser?.displayName || 'Пользователь'}
-          </h2>
-          <p className="text-gray-500 dark:text-zinc-400">
-            {currentUser?.username || '@username'}
-          </p>
-        </div>
 
-        <div className="flex flex-col py-4">
+        <div className="w-full h-[1px] bg-gray-100 dark:bg-zinc-900 my-2"></div>
+
+        {/* ПУКТЫ МЕНЮ */}
+        <div className="flex flex-col py-2 overflow-y-auto flex-1 space-y-1">
+          
+          {/* 2. Добавить аккаунт */}
+          <button 
+            onClick={() => alert("Функция добавления второго аккаунта в разработке")} 
+            className="flex items-center gap-4 px-6 py-3.5 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full text-left"
+          >
+            <UserPlus size={20} className="text-gray-500 dark:text-zinc-400" />
+            <span className="text-[15px] font-medium">Добавить аккаунт</span>
+          </button>
+
+          {/* 5. Мой профиль */}
           <Link href="/settings">
-            <a className="flex items-center gap-5 px-8 py-4 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900 transition-colors">
-              <User size={24} />
-              <span className="text-lg font-medium">Мой профиль</span>
+            <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 px-6 py-3.5 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors">
+              <User size={20} className="text-gray-500 dark:text-zinc-400" />
+              <span className="text-[15px] font-medium">Мой профиль</span>
             </a>
           </Link>
-          <button onClick={toggleTheme} className="flex items-center gap-5 px-8 py-4 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900 transition-colors w-full text-left">
-            {isDark ? <Sun size={24} /> : <Moon size={24} />}
-            <span className="text-lg font-medium">Тема</span>
+
+          {/* 3. Создать группу */}
+          <button 
+            onClick={() => alert("Создание группы скоро появится!")} 
+            className="flex items-center gap-4 px-6 py-3.5 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full text-left"
+          >
+            <Users size={20} className="text-gray-500 dark:text-zinc-400" />
+            <span className="text-[15px] font-medium">Создать группу</span>
           </button>
+
+          {/* 3. Создать канал */}
+          <button 
+            onClick={() => alert("Создание канала скоро появится!")} 
+            className="flex items-center gap-4 px-6 py-3.5 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full text-left"
+          >
+            <Volume2 size={20} className="text-gray-500 dark:text-zinc-400" />
+            <span className="text-[15px] font-medium">Создать канал</span>
+          </button>
+
+          {/* 4. Избранное (как чат) */}
+          <Link href="/chat/saved">
+            <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 px-6 py-3.5 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors">
+              <Bookmark size={20} className="text-gray-500 dark:text-zinc-400" />
+              <span className="text-[15px] font-medium">Избранное</span>
+            </a>
+          </Link>
+
+          {/* 5. Настройки приложения */}
+          <Link href="/settings">
+            <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 px-6 py-3.5 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors">
+              <Settings size={20} className="text-gray-500 dark:text-zinc-400" />
+              <span className="text-[15px] font-medium">Настройки</span>
+            </a>
+          </Link>
         </div>
 
-        <div className="mt-auto mb-6 flex flex-col">
-          <button onClick={handleLogout} className="flex items-center gap-5 px-8 py-4 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors w-full text-left">
-            <LogOut size={24} />
-            <span className="text-lg font-medium">Выйти</span>
+        <div className="p-4 border-t border-gray-100 dark:border-zinc-900">
+          <button onClick={handleLogout} className="flex items-center gap-4 px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl transition-colors w-full text-left">
+            <LogOut size={20} />
+            <span className="text-[15px] font-medium">Выйти</span>
           </button>
         </div>
       </div>
@@ -254,6 +327,23 @@ export default function ChatsPage() {
         )}
 
         <div className="divide-y divide-gray-100 dark:divide-zinc-900/50">
+          {/* СПЕЦИАЛЬНЫЙ ЧАТ: ИЗБРАННОЕ */}
+          <Link href="/chat/saved">
+            <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors">
+              <div className="w-14 h-14 shrink-0 rounded-full bg-blue-500/10 flex items-center justify-center relative border border-blue-500/20 text-blue-500">
+                <Bookmark size={24} />
+              </div>
+              <div className="ml-4 flex-1 overflow-hidden">
+                <h3 className="font-semibold text-black dark:text-white text-base truncate">
+                  Избранное
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-zinc-400 truncate mt-0.5">
+                  Ваши сохраненные сообщения
+                </p>
+              </div>
+            </a>
+          </Link>
+
           {filteredChats.map((chat: any) => {
             const participant = chat.participant || {};
             const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 3 * 60 * 1000) : false;
