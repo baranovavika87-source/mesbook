@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X } from 'lucide-react';
+import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2 } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -36,6 +36,19 @@ export default function ChatsPage() {
     } catch(e) { return null; }
   });
 
+  // --- МУЛЬТИАККАУНТ: Состояния ---
+  const [accounts, setAccounts] = useState<any[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
+    } catch(e) { return []; }
+  });
+  const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newName, setNewName] = useState('');
+  const [isAddingAccount, setIsAddingAccount] = useState(false);
+
   const [savedMessages, setSavedMessages] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('mesbook_saved_messages_' + getUserId());
@@ -63,7 +76,23 @@ export default function ChatsPage() {
         const res = await fetch('/api/me', {
           headers: { 'Authorization': 'Bearer ' + getUserId() }
         });
-        if (res.ok) setCurrentUser(await res.json());
+        if (res.ok) {
+          const user = await res.json();
+          setCurrentUser(user);
+          
+          // Обновляем данные текущего юзера в списке аккаунтов
+          setAccounts(prev => {
+            const exists = prev.find(a => a.id === user.id);
+            let newAccs;
+            if (!exists) {
+              newAccs = [...prev, user];
+            } else {
+              newAccs = prev.map(a => a.id === user.id ? user : a);
+            }
+            localStorage.setItem('mesbook_accounts', JSON.stringify(newAccs));
+            return newAccs;
+          });
+        }
       } catch (e) {}
     };
     fetchMe();
@@ -77,8 +106,16 @@ export default function ChatsPage() {
         });
         if (res.ok) {
           const data = await res.json();
-          setChats(data);
-          localStorage.setItem('mesbook_chats', JSON.stringify(data));
+          let arr: any[] = [];
+          if (Array.isArray(data)) arr = data;
+          else if (data && Array.isArray(data.chats)) arr = data.chats;
+          else if (data && Array.isArray(data.data)) arr = data.data;
+          
+          const localGroups = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
+          const combined = [...localGroups, ...arr];
+          
+          setChats(combined);
+          localStorage.setItem('mesbook_chats', JSON.stringify(combined));
         }
       } catch (e) {}
 
@@ -141,7 +178,6 @@ export default function ChatsPage() {
     }
   };
 
-  // СОЗДАНИЕ ГРУППЫ ТЕПЕРЬ ИДЕТ ЧЕРЕЗ API TURSO!
   const handleCreateGroupOrChannel = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = modalType === 'group' ? groupName.trim() : channelName.trim();
@@ -155,7 +191,6 @@ export default function ChatsPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        // Сервер сам возвращает нам новый ID группы (например 100000001)
         setLocation('/chat/' + data.id);
       }
     } catch (e) {}
@@ -164,6 +199,55 @@ export default function ChatsPage() {
     setChannelName('');
     setModalType(null);
     setIsSidebarOpen(false);
+  };
+
+  // --- МУЛЬТИАККАУНТ: Логика ---
+  const handleAddAccountSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUsername.trim() || !newPassword.trim()) return;
+    if (!isLoginMode && !newName.trim()) return;
+    
+    setIsAddingAccount(true);
+    try {
+      const url = isLoginMode ? '/api/login' : '/api/register';
+      const body = isLoginMode 
+        ? { username: newUsername, password: newPassword } 
+        : { username: newUsername, password: newPassword, displayName: newName };
+        
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      
+      if (res.ok) {
+        const user = await res.json();
+        const prevAccounts = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
+        const updatedAccounts = [...prevAccounts.filter((a: any) => a.id !== user.id), user];
+        
+        localStorage.setItem('mesbook_accounts', JSON.stringify(updatedAccounts));
+        localStorage.setItem('mesbook_user', JSON.stringify(user));
+        
+        setNewUsername('');
+        setNewPassword('');
+        setNewName('');
+        setShowAddAccountModal(false);
+        
+        // Перезагружаем страницу, чтобы применить контекст нового юзера
+        window.location.reload();
+      } else {
+        const err = await res.json();
+        alert(err.error || "Ошибка при входе");
+      }
+    } catch (e) {
+      alert("Ошибка сети");
+    }
+    setIsAddingAccount(false);
+  };
+
+  const switchAccount = (acc: any) => {
+    localStorage.setItem('mesbook_user', JSON.stringify(acc));
+    window.location.reload();
   };
 
   const lastSavedMsg = savedMessages[savedMessages.length - 1];
@@ -182,6 +266,7 @@ export default function ChatsPage() {
         />
       )}
 
+      {/* ВЫПЛЫВАЮЩЕЕ МЕНЮ */}
       <div className={`fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 ease-out shadow-2xl flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         
         <div className="p-6 pb-4 flex justify-between items-start relative">
@@ -212,8 +297,33 @@ export default function ChatsPage() {
         <div className="w-full h-[1px] bg-gray-100 dark:bg-zinc-900 my-1"></div>
 
         <div className="flex flex-col py-1 overflow-y-auto flex-1 divide-y divide-gray-100 dark:divide-zinc-900/60">
+          
+          {/* СПИСОК АККАУНТОВ */}
+          {accounts.length > 1 && (
+            <div className="pb-2 mb-1 border-b border-gray-100 dark:border-zinc-900/60">
+              {accounts.map(acc => {
+                const isActive = acc.id === currentUser?.id;
+                return (
+                  <button 
+                    key={acc.id} 
+                    onClick={() => !isActive && switchAccount(acc)} 
+                    className="flex items-center gap-4 px-6 py-3 hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full text-left"
+                  >
+                    <div className="w-8 h-8 bg-gray-200 dark:bg-zinc-800 rounded-full flex items-center justify-center overflow-hidden shrink-0 text-black dark:text-white font-semibold text-xs">
+                      {acc.avatarUrl && acc.avatarUrl.length > 5 ? <img src={acc.avatarUrl} className="w-full h-full object-cover" /> : acc.displayName?.charAt(0).toUpperCase()}
+                    </div>
+                    <span className={`text-[15px] font-medium flex-1 truncate ${isActive ? 'text-black dark:text-white' : 'text-gray-500 dark:text-zinc-400'}`}>
+                      {acc.displayName}
+                    </span>
+                    {isActive && <Check size={16} className="text-black dark:text-white" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <button 
-            onClick={() => alert("Функция добавления второго аккаунта в разработке")} 
+            onClick={() => setShowAddAccountModal(true)} 
             className="flex items-center gap-4 px-6 py-4 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full text-left"
           >
             <UserPlus size={20} className="text-gray-500 dark:text-zinc-400" />
@@ -259,6 +369,46 @@ export default function ChatsPage() {
         </div>
       </div>
 
+      {/* МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ АККАУНТА */}
+      {showAddAccountModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl border border-gray-100 dark:border-zinc-800">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-black dark:text-white">
+                {isLoginMode ? 'Войти в аккаунт' : 'Новый аккаунт'}
+              </h3>
+              <button onClick={() => setShowAddAccountModal(false)} className="p-1 text-gray-400 hover:text-black dark:hover:text-white rounded-full transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex bg-gray-100 dark:bg-black rounded-lg p-1 mb-6">
+               <button type="button" onClick={() => setIsLoginMode(true)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${isLoginMode ? 'bg-white dark:bg-zinc-800 shadow-sm text-black dark:text-white' : 'text-gray-500'}`}>Войти</button>
+               <button type="button" onClick={() => setIsLoginMode(false)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${!isLoginMode ? 'bg-white dark:bg-zinc-800 shadow-sm text-black dark:text-white' : 'text-gray-500'}`}>Создать</button>
+            </div>
+
+            <form onSubmit={handleAddAccountSubmit} className="space-y-4">
+              {!isLoginMode && (
+                <div>
+                  <input type="text" placeholder="Имя (например, Игорь)" value={newName} onChange={e => setNewName(e.target.value)} className="w-full bg-gray-100 dark:bg-black border-none rounded-xl px-4 py-3.5 text-sm text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-600 outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all" />
+                </div>
+              )}
+              <div>
+                <input type="text" placeholder="Никнейм (@username)" value={newUsername} onChange={e => setNewUsername(e.target.value)} className="w-full bg-gray-100 dark:bg-black border-none rounded-xl px-4 py-3.5 text-sm text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-600 outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all" />
+              </div>
+              <div>
+                <input type="password" placeholder="Пароль" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full bg-gray-100 dark:bg-black border-none rounded-xl px-4 py-3.5 text-sm text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-600 outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all" />
+              </div>
+              
+              <button type="submit" disabled={isAddingAccount} className="w-full py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-xl transition-transform active:scale-95 mt-2 flex items-center justify-center h-12">
+                {isAddingAccount ? <Loader2 size={18} className="animate-spin" /> : (isLoginMode ? 'Войти' : 'Продолжить')}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* МОДАЛЬНОЕ ОКНО ГРУПП И КАНАЛОВ */}
       {modalType && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl border border-gray-100 dark:border-zinc-800">
@@ -391,25 +541,25 @@ export default function ChatsPage() {
           
           <Link href="/chat/saved">
             <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors">
-              <div className="w-14 h-14 shrink-0 rounded-full bg-blue-500/10 flex items-center justify-center relative border border-blue-500/20 text-blue-500">
-                <Bookmark size={24} />
+              <div className="w-14 h-14 shrink-0 rounded-full bg-black dark:bg-white flex items-center justify-center relative border border-gray-200 dark:border-zinc-800 text-white dark:text-black">
+                <Bookmark size={20} fill="currentColor" />
               </div>
               <div className="ml-4 flex-1 overflow-hidden">
                 <div className="flex justify-between items-center">
                   <h3 className="font-semibold text-black dark:text-white text-base truncate">
                     Избранное
                   </h3>
-                  {lastSavedMsg && (
-                    <span className="text-[11px] text-gray-400 dark:text-zinc-500 shrink-0 ml-2">
-                      {new Date(lastSavedMsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {savedMessages[savedMessages.length - 1]?.createdAt && (
+                    <span className="text-[11px] text-gray-400 dark:text-zinc-500 shrink-0 ml-2 font-medium">
+                      {new Date(savedMessages[savedMessages.length - 1].createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   )}
                 </div>
                 <div className="flex items-center justify-between mt-0.5">
                   <p className="text-sm text-gray-500 dark:text-zinc-400 truncate pr-2">
-                    {lastSavedMsg ? (lastSavedMsg.content.startsWith('[MEDIA]') ? 'Вложение' : lastSavedMsg.content.replace(/^> .*\n\n/, '')) : 'Нет сообщений'}
+                    {savedMessages.length > 0 ? (savedMessages[savedMessages.length - 1].content.startsWith('[MEDIA]') ? 'Вложение' : savedMessages[savedMessages.length - 1].content.replace(/^> .*\n\n/, '')) : 'Нет сообщений'}
                   </p>
-                  {lastSavedMsg && (
+                  {savedMessages.length > 0 && (
                     <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
                       <Check size={13} />
                       <Check size={13} />
@@ -445,7 +595,7 @@ export default function ChatsPage() {
                         {participant.displayName || 'Собеседник'}
                       </h3>
                       {chat.lastMessageTime && (
-                        <span className="text-[11px] text-gray-400 dark:text-zinc-500 shrink-0 ml-2">
+                        <span className="text-[11px] text-gray-400 dark:text-zinc-500 shrink-0 ml-2 font-medium">
                           {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
@@ -458,7 +608,7 @@ export default function ChatsPage() {
                       {chat.lastMessage && (
                         <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
                           <Check size={13} />
-                          {(chat.isRead || chat.readAt || chat.status === 'read' || participant.isGroup || participant.isChannel) && <Check size={13} />}
+                          {(chat.isRead || chat.readAt || chat.status === 'read' || String(chat.id).startsWith('group_') || String(chat.id).startsWith('channel_') || String(chat.id).startsWith('custom_')) && <Check size={13} />}
                         </div>
                       )}
                     </div>
@@ -493,4 +643,4 @@ export default function ChatsPage() {
       </nav>
     </div>
   );
-                  }
+              }
