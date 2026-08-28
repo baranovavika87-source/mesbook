@@ -220,7 +220,7 @@ export default function ChatPage() {
       if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic|heif)$/i, '.jpg');
       return (
         <div className="mt-0.5 mb-0.5">
-          {isVideo ? <video src={url} controls className="w-full max-w-[180px] rounded-[4px] bg-black/10" /> : <img src={url} alt="Media" className="w-full max-w-[180px] rounded-[4px] object-cover" />}
+          {isVideo ? <video src={url} controls className="w-full max-w-[200px] rounded-[4px] bg-black/10" /> : <img src={url} alt="Media" className="w-full max-w-[200px] rounded-[4px] object-cover" />}
         </div>
       );
     }
@@ -230,11 +230,11 @@ export default function ChatPage() {
           <div className={'pl-2 border-l-2 text-[11px] opacity-70 mb-1 ' + (isMe ? 'border-white/30 dark:border-black/30' : 'border-black/20 dark:border-white/20')}>
             {msgContent.split('\n\n')[0].replace('> ', '')}
           </div>
-          <p className="text-[13px] leading-tight break-words">{msgContent.split('\n\n').slice(1).join('\n\n')}</p>
+          <p className="text-[14px] leading-tight break-words">{msgContent.split('\n\n').slice(1).join('\n\n')}</p>
         </div>
       );
     }
-    return <p className="text-[13px] leading-tight break-words">{msgContent}</p>;
+    return <p className="text-[14px] leading-[1.3] break-words">{msgContent}</p>;
   };
 
   return (
@@ -260,29 +260,25 @@ export default function ChatPage() {
           const isMe = String(msg.senderId) === String(currentUserId);
           const isMedia = msg.content.startsWith('[MEDIA] ');
           return (
-            <div key={msg.id} className={'flex flex-col max-w-[70%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')} onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }} onTouchEnd={(e) => { if (touchStartRef.current !== null) { const touchEndX = e.changedTouches[0].clientX; const diff = touchStartRef.current - touchEndX; if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } touchStartRef.current = null; } }}>
-              <div className={(isMedia ? 'p-1 ' : 'px-3 pt-2 pb-6 ') + 'shadow-none relative min-w-[75px] rounded-xl ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-sm' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white rounded-tl-sm')}>
+            <div key={msg.id} className={'flex flex-col max-w-[75%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')} onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }} onTouchEnd={(e) => { if (touchStartRef.current !== null) { const touchEndX = e.changedTouches[0].clientX; const diff = touchStartRef.current - touchEndX; if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } touchStartRef.current = null; } }}>
+              {/* ИСПРАВЛЕНИЕ: Отступ pr-14 для текста, чтобы время никогда на него не наезжало */}
+              <div className={(isMedia ? 'p-1 ' : 'px-3 pt-2.5 pb-6 pr-14 ') + 'shadow-none relative min-w-[80px] rounded-[18px] ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-sm' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white rounded-tl-sm')}>
                 
                 {renderMessageContent(msg.content, isMe)}
                 
-                <div className={`absolute flex items-center justify-end gap-1 text-[10px] ${isMedia ? 'bottom-2 right-2 bg-black/40 text-white px-1.5 py-0.5 rounded-full' : 'bottom-1 right-2'} ${isMe && !isMedia ? 'text-gray-400 dark:text-zinc-500' : 'text-gray-500 dark:text-zinc-500'}`}>
+                {/* ИСПРАВЛЕНИЕ: Блок со временем. Для картинок — он полупрозрачный поверх изображения */}
+                <div className={`absolute flex items-center justify-end gap-1 text-[10px] ${isMedia ? 'bottom-2 right-2 bg-black/50 text-white px-2 py-0.5 rounded-full backdrop-blur-sm' : 'bottom-1.5 right-2.5'} ${isMe && !isMedia ? 'text-gray-400 dark:text-zinc-500' : 'text-gray-500 dark:text-zinc-500'}`}>
                   <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                   
                   {isMe && (
                     <div className="flex items-center ml-0.5">
-                      {isSavedChat || isGroupOrChannel ? (
-                        <div className="flex -space-x-1">
-                          <Check size={11} />
-                          <Check size={11} />
-                        </div>
-                      ) : msg.isSending ? (
+                      {msg.isSending ? (
                         <Loader2 size={9} className="animate-spin" />
                       ) : (
                         <div className="flex -space-x-1">
+                          {/* ИСПРАВЛЕНИЕ: Всегда двойные галочки для отправленных сообщений */}
                           <Check size={11} />
-                          {(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && (
-                            <Check size={11} />
-                          )}
+                          <Check size={11} />
                         </div>
                       )}
                       {!msg.isSending && (
@@ -329,4 +325,4 @@ export default function ChatPage() {
       </div>
     </div>
   );
-      }
+                                                                                            }
