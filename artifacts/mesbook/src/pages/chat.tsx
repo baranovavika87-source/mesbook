@@ -14,6 +14,8 @@ const getUserId = () => {
 export default function ChatPage() {
   const [match, params] = useRoute('/chat/:chatId');
   const chatId = params?.chatId;
+  const numericChatId = Number(chatId);
+  const isGroupOrChannel = numericChatId >= 100000000;
   const isSavedChat = chatId === 'saved';
   const currentUserId = getUserId();
 
@@ -37,7 +39,6 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasScrolledToBottom = useRef(false);
 
-  // ИСПРАВЛЕНИЕ: Берем кэш только текущего пользователя
   const [chatInfo, setChatInfo] = useState<any>(() => {
     if (isSavedChat) return { participant: { displayName: 'Избранное', isSaved: true } };
     try {
@@ -59,7 +60,7 @@ export default function ChatPage() {
   }, [messages, chatId, currentUserId, isSavedChat]);
 
   useEffect(() => {
-    if (!isGroup && !isChannel) return;
+    if (!isGroup && !isChannel && !isGroupOrChannel) return;
     const checkMembership = async () => {
       try {
         const res = await fetch(`/api/chats/${chatId}/is_member`, {
@@ -72,7 +73,7 @@ export default function ChatPage() {
       } catch(e) {}
     };
     checkMembership();
-  }, [chatId, isGroup, isChannel, currentUserId]);
+  }, [chatId, isGroup, isChannel, isGroupOrChannel, currentUserId]);
 
   const loadData = async () => {
     if (isSavedChat) return;
@@ -114,7 +115,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     const sendPing = async () => {
-      if (isSavedChat || isGroup || isChannel) return;
+      if (isSavedChat || isGroupOrChannel) return;
       try {
         await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } });
       } catch (e) {}
@@ -210,7 +211,7 @@ export default function ChatPage() {
 
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
-  const subtitleText = isSavedChat ? "" : isGroup ? "Группа" : isChannel ? "Канал" : (isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно"));
+  const subtitleText = isSavedChat ? "" : isGroupOrChannel ? "Канал/Группа" : (isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно"));
 
   const renderMessageContent = (msgContent: string, isMe: boolean) => {
     if (msgContent.startsWith('[MEDIA] ')) {
@@ -240,16 +241,16 @@ export default function ChatPage() {
     <div className="flex flex-col h-screen bg-white dark:bg-black transition-colors duration-300 relative">
       <header className="px-4 pt-10 pb-4 border-b border-gray-100 dark:border-zinc-900 flex items-center gap-4 bg-white dark:bg-black relative z-10">
         <Link href="/"><a className="p-2 -ml-2 text-gray-500 hover:text-black dark:hover:text-white transition-colors"><ArrowLeft size={24} /></a></Link>
-        <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && !isGroup && !isChannel && setShowProfile(true)}>
+        <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && !isGroupOrChannel && setShowProfile(true)}>
           <div className="relative">
             <div className={`w-11 h-11 rounded-full flex items-center justify-center font-semibold text-lg overflow-hidden ${isSavedChat ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white'}`}>
               {isSavedChat ? <Bookmark size={20} /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} alt="" className="w-full h-full object-cover" /> : displayName.charAt(0).toUpperCase()}
             </div>
-            {!isSavedChat && !isGroup && !isChannel && isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>}
+            {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>}
           </div>
           <div className="flex flex-col">
             <h2 className="font-bold text-black dark:text-white text-base leading-tight">{displayName}</h2>
-            {subtitleText && <p className={`text-[13px] font-medium mt-0.5 ${isGroup || isChannel ? 'text-gray-400 dark:text-zinc-500' : (isOnline ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500')}`}>{subtitleText}</p>}
+            {subtitleText && <p className={`text-[13px] font-medium mt-0.5 ${isGroupOrChannel ? 'text-gray-400 dark:text-zinc-500' : (isOnline ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500')}`}>{subtitleText}</p>}
           </div>
         </div>
       </header>
@@ -260,14 +261,35 @@ export default function ChatPage() {
           const isMedia = msg.content.startsWith('[MEDIA] ');
           return (
             <div key={msg.id} className={'flex flex-col max-w-[70%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')} onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }} onTouchEnd={(e) => { if (touchStartRef.current !== null) { const touchEndX = e.changedTouches[0].clientX; const diff = touchStartRef.current - touchEndX; if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } touchStartRef.current = null; } }}>
-              <div className={(isMedia ? 'p-1 pb-4 ' : 'px-3 pt-2 pb-4 ') + 'shadow-none relative min-w-[65px] rounded-md ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-none' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white rounded-tl-none')}>
+              <div className={(isMedia ? 'p-1 ' : 'px-3 pt-2 pb-6 ') + 'shadow-none relative min-w-[75px] rounded-xl ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-sm' : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white rounded-tl-sm')}>
+                
                 {renderMessageContent(msg.content, isMe)}
-                <div className={'absolute bottom-0.5 right-1.5 flex items-center justify-end gap-1 mt-1 text-[9px] ' + (isMe ? 'text-gray-400 dark:text-zinc-500' : 'text-gray-500 dark:text-zinc-500')}>
+                
+                <div className={`absolute flex items-center justify-end gap-1 text-[10px] ${isMedia ? 'bottom-2 right-2 bg-black/40 text-white px-1.5 py-0.5 rounded-full' : 'bottom-1 right-2'} ${isMe && !isMedia ? 'text-gray-400 dark:text-zinc-500' : 'text-gray-500 dark:text-zinc-500'}`}>
                   <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                  
                   {isMe && (
                     <div className="flex items-center ml-0.5">
-                      {isSavedChat || isGroup || isChannel ? <div className="flex -space-x-1"><Check size={11} /><Check size={11} /></div> : msg.isSending ? <Loader2 size={9} className="animate-spin" /> : <div className="flex -space-x-1"><Check size={11} />{(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && <Check size={11} />}</div>}
-                      {!msg.isSending && <button onClick={() => handleDelete(msg.id)} className="hover:text-red-500 ml-1 transition-colors"><Trash2 size={10} /></button>}
+                      {isSavedChat || isGroupOrChannel ? (
+                        <div className="flex -space-x-1">
+                          <Check size={11} />
+                          <Check size={11} />
+                        </div>
+                      ) : msg.isSending ? (
+                        <Loader2 size={9} className="animate-spin" />
+                      ) : (
+                        <div className="flex -space-x-1">
+                          <Check size={11} />
+                          {(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && (
+                            <Check size={11} />
+                          )}
+                        </div>
+                      )}
+                      {!msg.isSending && (
+                        <button onClick={() => handleDelete(msg.id)} className="hover:text-red-500 ml-1 transition-colors">
+                          <Trash2 size={10} />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -307,4 +329,4 @@ export default function ChatPage() {
       </div>
     </div>
   );
-                                                                                                                                          }
+      }
