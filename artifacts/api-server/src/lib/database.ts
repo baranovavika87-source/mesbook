@@ -3,7 +3,6 @@ import { logger } from "./logger";
 const url = process.env.TURSO_DATABASE_URL?.replace("libsql://", "https://") as string;
 const authToken = process.env.TURSO_AUTH_TOKEN as string;
 
-// Функция для правильной типизации аргументов под требования Turso API
 function formatArg(arg: any) {
   if (arg === null || arg === undefined) {
     return { type: "null" };
@@ -69,10 +68,13 @@ export async function initializeDatabase() {
     await tursoQuery(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, sender_id INTEGER NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL, read_by_me INTEGER NOT NULL DEFAULT 0)`);
     await tursoQuery(`CREATE TABLE IF NOT EXISTS wall_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, author_id INTEGER NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)`);
 
-    // ДОБАВЛЯЕМ НОВЫЕ КОЛОНКИ ДЛЯ ГРУПП И КАНАЛОВ
     try { await tursoQuery(`ALTER TABLE chats ADD COLUMN name TEXT`); } catch (e) {}
     try { await tursoQuery(`ALTER TABLE chats ADD COLUMN is_group INTEGER DEFAULT 0`); } catch (e) {}
     try { await tursoQuery(`ALTER TABLE chats ADD COLUMN is_channel INTEGER DEFAULT 0`); } catch (e) {}
+    
+    // НОВЫЕ ПОЛЯ ПРОФИЛЯ
+    try { await tursoQuery(`ALTER TABLE users ADD COLUMN personal_channel TEXT DEFAULT ''`); } catch (e) {}
+    try { await tursoQuery(`ALTER TABLE users ADD COLUMN birth_date TEXT DEFAULT ''`); } catch (e) {}
 
     logger.info("✅ Таблицы в Turso успешно созданы/обновлены через HTTP API");
   } catch (error: any) {
