@@ -35,7 +35,6 @@ function parseChatId(currentUserId: number, paramId: string) {
   return min * 10000 + max;
 }
 
-// === ИНИЦИАЛИЗАЦИЯ НОВОЙ ТАБЛИЦЫ ПОДПИСОК ПРИ ПЕРВОМ ЗАПРОСЕ ===
 let isMembersTableCreated = false;
 async function ensureMembersTable(database: any) {
   if (isMembersTableCreated) return;
@@ -81,7 +80,6 @@ router.patch("/me", async (req, res): Promise<void> => {
   res.json(await getUser(database, currentUserId));
 });
 
-// ОБНОВЛЕННЫЙ ПОИСК: ТЕПЕРЬ ИЩЕТ И ПОЛЬЗОВАТЕЛЕЙ, И КАНАЛЫ
 router.get("/users/search", async (req, res) => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const query = String(req.query.q || "");
@@ -133,7 +131,6 @@ router.post("/chats/create", async (req, res): Promise<void> => {
   const result = await database.execute("SELECT last_insert_rowid() as id");
   const groupId = Number(result.rows[0]?.id) + 100000000;
   
-  // Создатель автоматически становится участником (подписывается)
   await database.execute({
     sql: "INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, 'admin')",
     args: [groupId, currentUserId]
@@ -147,7 +144,6 @@ router.post("/chats/create", async (req, res): Promise<void> => {
   res.json({ id: groupId, name, isGroup, isChannel });
 });
 
-// ПРОВЕРКА ПОДПИСКИ
 router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const chatId = Number(req.params.chatId);
@@ -161,7 +157,6 @@ router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
   res.json({ isMember: result.rows.length > 0 });
 });
 
-// ПОДПИСАТЬСЯ НА КАНАЛ / ВСТУПИТЬ В ГРУППУ
 router.post("/chats/:chatId/join", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const chatId = Number(req.params.chatId);
@@ -173,14 +168,16 @@ router.post("/chats/:chatId/join", async (req, res): Promise<void> => {
       sql: "INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, 'member')",
       args: [chatId, currentUserId]
     });
-  } catch(e) {} // Игнорируем ошибку, если уже подписан
+  } catch(e) {}
 
   res.json({ success: true });
 });
 
+// ИСПРАВЛЕНИЕ: Теперь сервер отдает только те группы, в которых состоит пользователь
 router.get("/chats", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
+  await ensureMembersTable(database);
   
   const chatRows = await database.execute({
     sql: `SELECT 
@@ -190,9 +187,13 @@ router.get("/chats", async (req, res): Promise<void> => {
         (SELECT COUNT(*) FROM messages WHERE chat_id = m.chat_id AND sender_id != ? AND read_by_me = 0) AS unread_count
      FROM messages m
      WHERE m.id IN (SELECT MAX(id) FROM messages GROUP BY chat_id)
-     AND (CAST(m.chat_id / 10000 AS INT) = ? OR m.chat_id % 10000 = ? OR m.chat_id >= 100000000)
+     AND (
+       CAST(m.chat_id / 10000 AS INT) = ? 
+       OR m.chat_id % 10000 = ? 
+       OR (m.chat_id >= 100000000 AND EXISTS (SELECT 1 FROM chat_members cm WHERE cm.chat_id = m.chat_id AND cm.user_id = ?))
+     )
      ORDER BY m.created_at DESC`,
-    args: [currentUserId, currentUserId, currentUserId]
+    args: [currentUserId, currentUserId, currentUserId, currentUserId]
   });
 
   const chats = await Promise.all(chatRows.rows.map(async (row: any) => {
@@ -289,7 +290,6 @@ router.delete("/chats/:chatId/messages/:messageId", async (req, res): Promise<vo
   res.json({ success: true });
 });
 
-// УМНАЯ ЛЕНТА: БЕРЕТ СООБЩЕНИЯ ИЗ КАНАЛОВ, НА КОТОРЫЕ ТЫ ПОДПИСАН
 router.get("/wall/feed", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
