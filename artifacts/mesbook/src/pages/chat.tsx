@@ -6,7 +6,9 @@ const getUserId = () => {
   try {
     const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
     return u.id || u.userId || u._id || 1;
-  } catch (e) { return 1; }
+  } catch (e) {
+    return 1;
+  }
 };
 
 export default function ChatPage() {
@@ -28,8 +30,6 @@ export default function ChatPage() {
   const [showProfile, setShowProfile] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
-  
-  // СТАТУС ПОДПИСКИ
   const [isMember, setIsMember] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -37,10 +37,11 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasScrolledToBottom = useRef(false);
 
+  // ИСПРАВЛЕНИЕ: Берем кэш только текущего пользователя
   const [chatInfo, setChatInfo] = useState<any>(() => {
     if (isSavedChat) return { participant: { displayName: 'Избранное', isSaved: true } };
     try {
-      const savedChats = JSON.parse(localStorage.getItem('mesbook_chats') || '[]');
+      const savedChats = JSON.parse(localStorage.getItem('mesbook_chats_' + currentUserId) || '[]');
       return savedChats.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId)) || null;
     } catch(e) { return null; }
   });
@@ -57,7 +58,6 @@ export default function ChatPage() {
     }
   }, [messages, chatId, currentUserId, isSavedChat]);
 
-  // ПРОВЕРКА ПОДПИСКИ
   useEffect(() => {
     if (!isGroup && !isChannel) return;
     const checkMembership = async () => {
@@ -72,7 +72,7 @@ export default function ChatPage() {
       } catch(e) {}
     };
     checkMembership();
-  }, [chatId, isGroup, isChannel]);
+  }, [chatId, isGroup, isChannel, currentUserId]);
 
   const loadData = async () => {
     if (isSavedChat) return;
@@ -111,6 +111,18 @@ export default function ChatPage() {
       return () => clearInterval(interval);
     }
   }, [chatId]);
+
+  useEffect(() => {
+    const sendPing = async () => {
+      if (isSavedChat || isGroup || isChannel) return;
+      try {
+        await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } });
+      } catch (e) {}
+    };
+    sendPing();
+    const interval = setInterval(sendPing, 30000);
+    return () => clearInterval(interval);
+  }, [currentUserId]);
 
   useEffect(() => {
     if (scrollRef.current && !hasScrolledToBottom.current && messages.length > 0) {
@@ -276,10 +288,9 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* КНОПКА ПОДПИСАТЬСЯ ИЛИ ПОЛЕ ВВОДА */}
         {!isMember ? (
           <div className="flex items-center justify-center pt-1">
-            <button onClick={joinChat} className="w-full py-3.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors active:scale-95 text-[15px]">
+            <button onClick={joinChat} className="w-full py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-xl transition-colors active:scale-95 text-[15px]">
               {isChannel ? 'Подписаться' : 'Вступить в группу'}
             </button>
           </div>
@@ -296,4 +307,4 @@ export default function ChatPage() {
       </div>
     </div>
   );
-                       }
+                                                                                                                                          }
