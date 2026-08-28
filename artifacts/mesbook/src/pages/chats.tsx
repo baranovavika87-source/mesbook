@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2 } from 'lucide-react';
+import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, ArrowLeft, Camera } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -29,6 +29,7 @@ export default function ChatsPage() {
   const [modalType, setModalType] = useState<'group' | 'channel' | null>(null);
   const [groupName, setGroupName] = useState('');
   const [channelName, setChannelName] = useState('');
+  const [channelDesc, setChannelDesc] = useState('');
 
   const [currentUser, setCurrentUser] = useState<any>(() => {
     try {
@@ -148,8 +149,7 @@ export default function ChatsPage() {
     }
   };
 
-  const handleCreateGroupOrChannel = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateGroupOrChannel = async () => {
     const name = modalType === 'group' ? groupName.trim() : channelName.trim();
     if (!name) return;
 
@@ -167,6 +167,7 @@ export default function ChatsPage() {
 
     setGroupName('');
     setChannelName('');
+    setChannelDesc('');
     setModalType(null);
     setIsSidebarOpen(false);
   };
@@ -215,7 +216,6 @@ export default function ChatsPage() {
     window.location.reload();
   };
 
-  // Сортируем аккаунты так, чтобы текущий всегда был наверху
   const sortedAccounts = [...accounts].sort((a, b) => {
     if (String(a.id) === String(currentUser?.id)) return -1;
     if (String(b.id) === String(currentUser?.id)) return 1;
@@ -339,6 +339,7 @@ export default function ChatsPage() {
         </div>
       </div>
 
+      {/* МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ АККАУНТА */}
       {showAddAccountModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl border border-gray-100 dark:border-zinc-800">
@@ -377,53 +378,72 @@ export default function ChatsPage() {
         </div>
       )}
 
+      {/* НОВЫЙ ПОЛНОЭКРАННЫЙ ИНТЕРФЕЙС СОЗДАНИЯ ГРУППЫ/КАНАЛА */}
       {modalType && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl border border-gray-100 dark:border-zinc-800">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-black dark:text-white">
-                {modalType === 'group' ? 'Новая группа' : 'Новый канал'}
-              </h3>
-              <button 
-                onClick={() => setModalType(null)} 
-                className="p-1 text-gray-400 hover:text-black dark:hover:text-white rounded-full transition-colors"
-              >
-                <X size={20} />
+        <div className="fixed inset-0 z-50 bg-white dark:bg-black flex flex-col animate-in slide-in-from-right duration-200">
+          <header className="flex items-center justify-between px-4 h-14 border-b border-gray-100 dark:border-zinc-900">
+            <div className="flex items-center gap-6">
+              <button onClick={() => setModalType(null)} className="text-gray-500 hover:text-black dark:hover:text-white transition-colors">
+                <ArrowLeft size={24} />
               </button>
+              <h2 className="text-lg font-bold text-black dark:text-white">
+                {modalType === 'group' ? 'Создать группу' : 'Создать канал'}
+              </h2>
             </div>
+            <button 
+              onClick={handleCreateGroupOrChannel} 
+              disabled={modalType === 'group' ? !groupName.trim() : !channelName.trim()} 
+              className="p-2 text-black dark:text-white disabled:opacity-30 transition-opacity"
+            >
+              <Check size={24} />
+            </button>
+          </header>
 
-            <form onSubmit={handleCreateGroupOrChannel} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase mb-1 ml-1 tracking-wider">
-                  {modalType === 'group' ? 'Название группы' : 'Название канала'}
-                </label>
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder={modalType === 'group' ? 'Например: Команда разработчиков' : 'Например: Новости IT'}
-                  value={modalType === 'group' ? groupName : channelName}
-                  onChange={e => modalType === 'group' ? setGroupName(e.target.value) : setChannelName(e.target.value)}
-                  className="w-full bg-gray-100 dark:bg-black border-none rounded-xl px-4 py-3.5 text-sm text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-600 outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setModalType(null)}
-                  className="flex-1 py-3 bg-gray-100 dark:bg-zinc-800 text-black dark:text-white font-medium rounded-xl transition-colors active:scale-95"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-3 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-xl transition-transform active:scale-95"
-                >
-                  Создать
-                </button>
-              </div>
-            </form>
+          <div className="p-4 flex items-center gap-4 mt-2">
+            <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center shrink-0 border border-gray-200 dark:border-zinc-800">
+              <Camera size={28} className="text-gray-400 dark:text-zinc-600" />
+            </div>
+            <div className="flex-1">
+              <input
+                autoFocus
+                type="text"
+                placeholder={modalType === 'group' ? 'Название группы' : 'Название канала'}
+                value={modalType === 'group' ? groupName : channelName}
+                onChange={e => modalType === 'group' ? setGroupName(e.target.value) : setChannelName(e.target.value)}
+                className="w-full bg-transparent border-b border-gray-300 dark:border-zinc-700 py-2 text-lg text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-600 outline-none focus:border-black dark:focus:border-white transition-colors"
+              />
+            </div>
           </div>
+
+          {modalType === 'channel' && (
+            <div className="px-4 mt-6">
+              <p className="text-xs font-semibold text-gray-500 dark:text-zinc-500 uppercase tracking-wider mb-2 ml-1">Описание</p>
+              <textarea 
+                rows={2}
+                value={channelDesc}
+                onChange={e => setChannelDesc(e.target.value)}
+                className="w-full bg-transparent border-b border-gray-300 dark:border-zinc-700 py-2 text-sm text-black dark:text-white outline-none focus:border-black dark:focus:border-white transition-colors resize-none placeholder-gray-400 dark:placeholder-zinc-600" 
+                placeholder="Можете указать дополнительное описание канала." 
+              />
+            </div>
+          )}
+
+          {modalType === 'group' && (
+            <div className="mt-8 border-t border-gray-100 dark:border-zinc-900">
+              <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-900 bg-gray-50 dark:bg-zinc-900/30">
+                <span className="text-sm font-semibold text-gray-500 dark:text-zinc-400">1 участник</span>
+              </div>
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="w-11 h-11 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center font-bold text-black dark:text-white">
+                  {currentUser?.displayName?.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-black dark:text-white">{currentUser?.displayName}</p>
+                  <p className="text-xs text-gray-500 dark:text-zinc-500 mt-0.5">был(а) недавно</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -486,7 +506,7 @@ export default function ChatsPage() {
               <Link key={user.id} href={'/chat/' + user.id}>
                 <a 
                   onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
-                  className="flex items-center justify-between py-3 hover:bg-gray-50 dark:hover:bg-zinc-900/50 px-2 rounded-xl transition-colors"
+                  className="flex items-center justify-between py-3 px-2 transition-colors border-b border-gray-100 dark:border-zinc-900/60"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden">
@@ -505,10 +525,10 @@ export default function ChatsPage() {
           </div>
         )}
 
-        <div className="divide-y divide-gray-100 dark:divide-zinc-900/50">
+        <div className="flex flex-col">
           
           <Link href="/chat/saved">
-            <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors">
+            <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors border-b border-gray-100 dark:border-zinc-900/60">
               <div className="w-14 h-14 shrink-0 rounded-full bg-black dark:bg-white flex items-center justify-center relative border border-gray-200 dark:border-zinc-800 text-white dark:text-black">
                 <Bookmark size={20} fill="currentColor" />
               </div>
@@ -544,7 +564,7 @@ export default function ChatsPage() {
 
             return (
               <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
-                <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors">
+                <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors border-b border-gray-100 dark:border-zinc-900/60">
                   <div className="w-14 h-14 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center relative border border-gray-200/50 dark:border-zinc-700/50">
                     {participant.avatarUrl && participant.avatarUrl.length > 5 ? (
                       <img src={participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover rounded-full" />
@@ -575,9 +595,9 @@ export default function ChatsPage() {
                       </p>
                       {chat.lastMessage && (
                         <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
+                          {/* ИСПРАВЛЕНИЕ: Всегда две галочки для своих сообщений */}
                           <Check size={13} />
-                          {/* Уверенно ставим 2 галочки для групп и каналов */}
-                          {(chat.isRead || chat.readAt || chat.status === 'read' || Number(chat.id) >= 100000000) && <Check size={13} />}
+                          <Check size={13} />
                         </div>
                       )}
                     </div>
@@ -612,4 +632,4 @@ export default function ChatsPage() {
       </nav>
     </div>
   );
-                }
+          }
