@@ -12,12 +12,14 @@ function userFromRow(row: any) {
     avatarUrl: row.avatar_url,
     bio: row.bio || "", 
     lastSeen: Number(row.last_seen) || 0,
+    personalChannel: row.personal_channel || "",
+    birthDate: row.birth_date || "",
   };
 }
 
 async function getUser(database: any, id: number) {
   const result = await database.execute({
-    sql: "SELECT id, username, display_name, avatar_url, bio, last_seen FROM users WHERE id = ?", 
+    sql: "SELECT id, username, display_name, avatar_url, bio, last_seen, personal_channel, birth_date FROM users WHERE id = ?", 
     args: [id],
   });
   const row = result.rows[0];
@@ -28,7 +30,7 @@ function parseChatId(currentUserId: number, paramId: string) {
   if (paramId === "saved") return currentUserId * 10000 + currentUserId; 
   const numericId = Number(paramId);
   if (isNaN(numericId)) return null;
-  if (numericId >= 100000000) return numericId; // Группа или Канал
+  if (numericId >= 100000000) return numericId;
   if (numericId >= 10000) return numericId; 
   const min = Math.min(currentUserId, numericId);
   const max = Math.max(currentUserId, numericId);
@@ -62,7 +64,7 @@ router.get("/me", async (req, res): Promise<void> => {
 
 router.patch("/me", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const { displayName, avatarUrl, username, password, bio } = req.body; 
+  const { displayName, avatarUrl, username, password, bio, personalChannel, birthDate } = req.body; 
   const database = await getDatabase();
   
   if (username !== undefined && username.trim() !== "") {
@@ -77,6 +79,10 @@ router.patch("/me", async (req, res): Promise<void> => {
   if (bio !== undefined) await database.execute({ sql: "UPDATE users SET bio = ? WHERE id = ?", args: [bio, currentUserId] });
   if (password !== undefined && password.trim() !== "") await database.execute({ sql: "UPDATE users SET password = ? WHERE id = ?", args: [password, currentUserId] });
   
+  // Сохраняем новые поля
+  if (personalChannel !== undefined) await database.execute({ sql: "UPDATE users SET personal_channel = ? WHERE id = ?", args: [personalChannel, currentUserId] });
+  if (birthDate !== undefined) await database.execute({ sql: "UPDATE users SET birth_date = ? WHERE id = ?", args: [birthDate, currentUserId] });
+  
   res.json(await getUser(database, currentUserId));
 });
 
@@ -88,7 +94,7 @@ router.get("/users/search", async (req, res) => {
   const db = await getDatabase();
   
   const usersResult = await db.execute({
-    sql: "SELECT id, username, display_name as displayName, avatar_url as avatarUrl, bio, last_seen as lastSeen FROM users WHERE (username LIKE ? OR username LIKE ? OR display_name LIKE ?) AND id != ?",
+    sql: "SELECT id, username, display_name as displayName, avatar_url as avatarUrl, bio, last_seen as lastSeen, personal_channel as personalChannel, birth_date as birthDate FROM users WHERE (username LIKE ? OR username LIKE ? OR display_name LIKE ?) AND id != ?",
     args: [searchPattern1, searchPattern2, searchPattern1, currentUserId]
   });
 
@@ -173,7 +179,6 @@ router.post("/chats/:chatId/join", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
-// ИСПРАВЛЕНИЕ: Теперь сервер отдает только те группы, в которых состоит пользователь
 router.get("/chats", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
