@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, ArrowLeft, Camera } from 'lucide-react';
+import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2, LogOut, ArrowLeft, Camera } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -24,7 +24,10 @@ export default function ChatsPage() {
   
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
+  // СОСТОЯНИЯ ДЛЯ НОВОГО ПОИСКА
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchTab, setSearchTab] = useState<'chats' | 'channels'>('chats');
   
   const [modalType, setModalType] = useState<'group' | 'channel' | null>(null);
   const [groupName, setGroupName] = useState('');
@@ -136,6 +139,12 @@ export default function ChatsPage() {
     (c.participant?.displayName || '').toLowerCase().includes(search.toLowerCase())
   ) : [];
 
+  // Фильтры для вкладок поиска
+  const searchUsersGlobal = searchResults.filter(u => !u.isGroup && !u.isChannel);
+  const searchChannelsGlobal = searchResults.filter(u => u.isGroup || u.isChannel);
+  const localChatsFiltered = filteredChats.filter(c => !c.participant?.isGroup && !c.participant?.isChannel);
+  const localChannelsFiltered = filteredChats.filter(c => c.participant?.isGroup || c.participant?.isChannel);
+
   const toggleTheme = () => {
     const html = document.documentElement;
     if (html.classList.contains('dark')) {
@@ -216,6 +225,14 @@ export default function ChatsPage() {
     window.location.reload();
   };
 
+  const handleLogout = () => {
+    const accs = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
+    const filtered = accs.filter((a: any) => String(a.id) !== String(currentUserId));
+    localStorage.setItem('mesbook_accounts', JSON.stringify(filtered));
+    localStorage.removeItem('mesbook_user');
+    window.location.href = '/';
+  };
+
   const sortedAccounts = [...accounts].sort((a, b) => {
     if (String(a.id) === String(currentUser?.id)) return -1;
     if (String(b.id) === String(currentUser?.id)) return 1;
@@ -224,6 +241,78 @@ export default function ChatsPage() {
 
   const lastSavedMsg = savedMessages[savedMessages.length - 1];
 
+  // ==============================
+  // РЕНДЕР КАРТОЧКИ ЧАТА
+  // ==============================
+  const renderChatCard = (chat: any) => {
+    const participant = chat.participant || {};
+    const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 3 * 60 * 1000) : false;
+
+    return (
+      <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
+        <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors border-b border-gray-100 dark:border-zinc-900/60">
+          <div className="w-14 h-14 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center relative border border-gray-200/50 dark:border-zinc-700/50">
+            {participant.avatarUrl && participant.avatarUrl.length > 5 ? (
+              <img src={participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover rounded-full" />
+            ) : (
+              <span className="text-lg font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
+            )}
+            {isOnline && !participant.isGroup && !participant.isChannel && (
+              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>
+            )}
+          </div>
+          <div className="ml-4 flex-1 overflow-hidden">
+            <div className="flex justify-between items-center">
+              <h3 className="font-semibold text-black dark:text-white text-base truncate">
+                {participant.displayName || 'Собеседник'}
+              </h3>
+              {chat.lastMessageTime && (
+                <span className="text-[11px] text-gray-400 dark:text-zinc-500 shrink-0 ml-2 font-medium">
+                  {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center justify-between mt-0.5">
+              <p className="text-sm text-gray-500 dark:text-zinc-400 truncate pr-2">
+                {chat.lastMessage?.startsWith('[MEDIA]') ? 'Вложение' : (chat.lastMessage || 'Нет сообщений')}
+              </p>
+              {chat.lastMessage && (
+                <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
+                  <Check size={13} />
+                  {(chat.isRead || chat.readAt || chat.status === 'read' || String(chat.id).startsWith('group_') || String(chat.id).startsWith('channel_') || String(chat.id).startsWith('custom_') || participant.isGroup || participant.isChannel) && <Check size={13} />}
+                </div>
+              )}
+            </div>
+          </div>
+        </a>
+      </Link>
+    );
+  };
+
+  // ==============================
+  // РЕНДЕР КАРТОЧКИ ПОЛЬЗОВАТЕЛЯ ИЗ ГЛОБАЛЬНОГО ПОИСКА
+  // ==============================
+  const renderGlobalUserCard = (user: any) => (
+    <Link key={user.id} href={'/chat/' + user.id}>
+      <a 
+        onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
+        className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors border-b border-gray-100 dark:border-zinc-900/60"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200/50 dark:border-zinc-700/50">
+            {user.avatarUrl && user.avatarUrl.length > 5 ? (
+              <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-black dark:text-white font-semibold text-lg">{user.displayName?.charAt(0) || "U"}</span>
+            )}
+          </div>
+          <span className="font-semibold text-black dark:text-white text-base">{user.displayName}</span>
+        </div>
+        <Plus size={18} className="text-gray-400 dark:text-zinc-500" />
+      </a>
+    </Link>
+  );
+
   return (
     <div 
       className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300 relative overflow-hidden"
@@ -231,6 +320,9 @@ export default function ChatsPage() {
       onTouchEnd={handleTouchEnd}
     >
       
+      {/* ---------------------------------------------------------
+          САЙДБАР (ВЫПЛЫВАЮЩЕЕ МЕНЮ)
+      --------------------------------------------------------- */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/60 z-40 transition-opacity backdrop-blur-xs"
@@ -239,7 +331,6 @@ export default function ChatsPage() {
       )}
 
       <div className={`fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 ease-out shadow-2xl flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        
         <div className="p-6 pb-4 flex justify-between items-start relative">
           <div className="flex flex-col">
             <div className="w-16 h-16 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-2xl font-bold text-black dark:text-white mb-3 overflow-hidden border border-gray-200 dark:border-zinc-700 shadow-sm">
@@ -339,7 +430,9 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ АККАУНТА */}
+      {/* ---------------------------------------------------------
+          МОДАЛКИ (ДОБАВЛЕНИЕ АККАУНТА И СОЗДАНИЕ ГРУППЫ)
+      --------------------------------------------------------- */}
       {showAddAccountModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl border border-gray-100 dark:border-zinc-800">
@@ -378,15 +471,14 @@ export default function ChatsPage() {
         </div>
       )}
 
-      {/* НОВЫЙ ПОЛНОЭКРАННЫЙ ИНТЕРФЕЙС СОЗДАНИЯ ГРУППЫ/КАНАЛА */}
       {modalType && (
         <div className="fixed inset-0 z-50 bg-white dark:bg-black flex flex-col animate-in slide-in-from-right duration-200">
-          <header className="flex items-center justify-between px-4 h-14 border-b border-gray-100 dark:border-zinc-900">
+          <header className="flex items-center justify-between px-4 h-14 border-b border-gray-100 dark:border-zinc-900 shadow-sm">
             <div className="flex items-center gap-6">
               <button onClick={() => setModalType(null)} className="text-gray-500 hover:text-black dark:hover:text-white transition-colors">
                 <ArrowLeft size={24} />
               </button>
-              <h2 className="text-lg font-bold text-black dark:text-white">
+              <h2 className="text-[19px] font-bold text-black dark:text-white">
                 {modalType === 'group' ? 'Создать группу' : 'Создать канал'}
               </h2>
             </div>
@@ -395,7 +487,7 @@ export default function ChatsPage() {
               disabled={modalType === 'group' ? !groupName.trim() : !channelName.trim()} 
               className="p-2 text-black dark:text-white disabled:opacity-30 transition-opacity"
             >
-              <Check size={24} />
+              <Check size={26} strokeWidth={2.5} />
             </button>
           </header>
 
@@ -410,19 +502,19 @@ export default function ChatsPage() {
                 placeholder={modalType === 'group' ? 'Название группы' : 'Название канала'}
                 value={modalType === 'group' ? groupName : channelName}
                 onChange={e => modalType === 'group' ? setGroupName(e.target.value) : setChannelName(e.target.value)}
-                className="w-full bg-transparent border-b border-gray-300 dark:border-zinc-700 py-2 text-lg text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-600 outline-none focus:border-black dark:focus:border-white transition-colors"
+                className="w-full bg-transparent border-b border-gray-300 dark:border-zinc-700 py-2.5 text-[17px] font-medium text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-600 outline-none focus:border-black dark:focus:border-white transition-colors"
               />
             </div>
           </div>
 
           {modalType === 'channel' && (
             <div className="px-4 mt-6">
-              <p className="text-xs font-semibold text-gray-500 dark:text-zinc-500 uppercase tracking-wider mb-2 ml-1">Описание</p>
+              <p className="text-xs font-bold text-gray-400 dark:text-zinc-500 mb-2 ml-1">ОПИСАНИЕ</p>
               <textarea 
                 rows={2}
                 value={channelDesc}
                 onChange={e => setChannelDesc(e.target.value)}
-                className="w-full bg-transparent border-b border-gray-300 dark:border-zinc-700 py-2 text-sm text-black dark:text-white outline-none focus:border-black dark:focus:border-white transition-colors resize-none placeholder-gray-400 dark:placeholder-zinc-600" 
+                className="w-full bg-transparent border-b border-gray-300 dark:border-zinc-700 py-2 text-[15px] text-black dark:text-white outline-none focus:border-black dark:focus:border-white transition-colors resize-none placeholder-gray-400 dark:placeholder-zinc-600" 
                 placeholder="Можете указать дополнительное описание канала." 
               />
             </div>
@@ -430,16 +522,16 @@ export default function ChatsPage() {
 
           {modalType === 'group' && (
             <div className="mt-8 border-t border-gray-100 dark:border-zinc-900">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-900 bg-gray-50 dark:bg-zinc-900/30">
-                <span className="text-sm font-semibold text-gray-500 dark:text-zinc-400">1 участник</span>
+              <div className="px-4 py-2 border-b border-gray-100 dark:border-zinc-900">
+                <span className="text-[13px] font-semibold text-gray-500 dark:text-zinc-400">1 участник</span>
               </div>
-              <div className="flex items-center gap-3 px-4 py-3">
-                <div className="w-11 h-11 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center font-bold text-black dark:text-white">
+              <div className="flex items-center gap-4 px-4 py-3">
+                <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center font-bold text-black dark:text-white text-lg">
                   {currentUser?.displayName?.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="font-semibold text-sm text-black dark:text-white">{currentUser?.displayName}</p>
-                  <p className="text-xs text-gray-500 dark:text-zinc-500 mt-0.5">был(а) недавно</p>
+                  <p className="font-semibold text-[15px] text-black dark:text-white">{currentUser?.displayName}</p>
+                  <p className="text-[13px] text-gray-500 dark:text-zinc-500 mt-0.5">был(а) недавно</p>
                 </div>
               </div>
             </div>
@@ -447,155 +539,146 @@ export default function ChatsPage() {
         </div>
       )}
 
-      <header className="px-6 pt-10 pb-4 h-24 relative z-10 bg-white dark:bg-black">
-        {isSearchOpen ? (
-          <div className="flex items-center gap-3 h-full animate-in fade-in slide-in-from-right-4 duration-200">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-3.5 text-gray-400 dark:text-zinc-500" size={18} />
-              <input 
+      {/* ---------------------------------------------------------
+          ГЛАВНЫЙ ЭКРАН ИЛИ ЭКРАН ПОИСКА
+      --------------------------------------------------------- */}
+      {isSearchOpen ? (
+        <>
+          <header className="px-4 pt-12 pb-0 bg-white dark:bg-black relative z-10 flex flex-col border-b border-gray-100 dark:border-zinc-900/60 shadow-sm">
+            <div className="flex items-center gap-4 h-10 mb-3">
+              <button 
+                onClick={() => { setIsSearchOpen(false); setSearch(''); }} 
+                className="text-black dark:text-white active:scale-95 transition-transform"
+              >
+                <ArrowLeft size={24} />
+              </button>
+              <input
                 autoFocus
                 type="text"
-                placeholder="Поиск или @username..."
+                placeholder="Поиск"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-gray-100 dark:bg-zinc-900 border-none rounded-xl pl-10 pr-4 py-3 text-sm text-black dark:text-white outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
+                className="flex-1 bg-transparent border-none outline-none text-[18px] text-black dark:text-white placeholder-gray-400 dark:placeholder-zinc-600"
               />
             </div>
-            <button 
-              onClick={() => {
-                setIsSearchOpen(false);
-                setSearch('');
-              }}
-              className="text-black dark:text-white font-medium text-sm px-2 hover:opacity-70 transition-opacity"
-            >
-              Отмена
-            </button>
-          </div>
-        ) : (
-          <div className="flex justify-between items-center h-full">
-            <button 
-              onClick={() => setIsSidebarOpen(true)}
-              className="w-12 h-12 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-700"
-            >
-              {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
-                <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-black dark:text-white font-semibold">{currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"}</span>
-              )}
-            </button>
-            
-            <h1 className="text-3xl font-normal tracking-[0.05em] text-black dark:text-white uppercase px-2">
-              Mesogram
-            </h1>
-            
-            <button 
-              onClick={() => setIsSearchOpen(true)}
-              className="w-12 h-12 shrink-0 flex items-center justify-center text-black dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-900 rounded-full transition-colors"
-            >
-              <Search size={22} strokeWidth={2} />
-            </button>
-          </div>
-        )}
-      </header>
+            <div className="flex">
+              <button
+                onClick={() => setSearchTab('chats')}
+                className={`flex-1 pb-3 text-[15px] font-semibold transition-colors border-b-[2.5px] ${searchTab === 'chats' ? 'border-black dark:border-white text-black dark:text-white' : 'border-transparent text-gray-400 dark:text-zinc-600 hover:text-gray-600 dark:hover:text-zinc-400'}`}
+              >
+                Чаты
+              </button>
+              <button
+                onClick={() => setSearchTab('channels')}
+                className={`flex-1 pb-3 text-[15px] font-semibold transition-colors border-b-[2.5px] ${searchTab === 'channels' ? 'border-black dark:border-white text-black dark:text-white' : 'border-transparent text-gray-400 dark:text-zinc-600 hover:text-gray-600 dark:hover:text-zinc-400'}`}
+              >
+                Каналы
+              </button>
+            </div>
+          </header>
 
-      <main className="flex-1 overflow-y-auto">
-        {searchResults.length > 0 && (
-          <div className="px-6 py-2 border-b border-gray-100 dark:border-zinc-900">
-            <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase mb-2 tracking-wider">Пользователи</h3>
-            {searchResults.map((user: any) => (
-              <Link key={user.id} href={'/chat/' + user.id}>
-                <a 
-                  onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
-                  className="flex items-center justify-between py-3 px-2 transition-colors border-b border-gray-100 dark:border-zinc-900/60"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden">
-                      {user.avatarUrl && user.avatarUrl.length > 5 ? (
-                        <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-black dark:text-white font-semibold">{user.displayName?.charAt(0) || "U"}</span>
-                      )}
+          <main className="flex-1 overflow-y-auto">
+            {searchTab === 'chats' ? (
+              <div className="flex flex-col">
+                {searchUsersGlobal.length > 0 && (
+                  <>
+                    <div className="px-5 py-2 bg-gray-50 dark:bg-zinc-900/30 border-b border-gray-100 dark:border-zinc-900/60">
+                      <h3 className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Глобальный поиск</h3>
                     </div>
-                    <span className="font-medium text-black dark:text-white text-sm">{user.displayName}</span>
-                  </div>
-                  <Plus size={16} className="text-black dark:text-white" />
-                </a>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        <div className="flex flex-col">
-          
-          <Link href="/chat/saved">
-            <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors border-b border-gray-100 dark:border-zinc-900/60">
-              <div className="w-14 h-14 shrink-0 rounded-full bg-black dark:bg-white flex items-center justify-center relative border border-gray-200 dark:border-zinc-800 text-white dark:text-black">
-                <Bookmark size={20} fill="currentColor" />
-              </div>
-              <div className="ml-4 flex-1 overflow-hidden">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-semibold text-black dark:text-white text-base truncate">
-                    Избранное
-                  </h3>
-                  {savedMessages[savedMessages.length - 1]?.createdAt && (
-                    <span className="text-[11px] text-gray-400 dark:text-zinc-500 shrink-0 ml-2 font-medium">
-                      {new Date(savedMessages[savedMessages.length - 1].createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between mt-0.5">
-                  <p className="text-sm text-gray-500 dark:text-zinc-400 truncate pr-2">
-                    {savedMessages.length > 0 ? (savedMessages[savedMessages.length - 1].content.startsWith('[MEDIA]') ? 'Вложение' : savedMessages[savedMessages.length - 1].content.replace(/^> .*\n\n/, '')) : 'Нет сообщений'}
-                  </p>
-                  {savedMessages.length > 0 && (
-                    <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
-                      <Check size={13} />
-                      <Check size={13} />
+                    {searchUsersGlobal.map(renderGlobalUserCard)}
+                  </>
+                )}
+                {localChatsFiltered.length > 0 && (
+                  <>
+                    <div className="px-5 py-2 bg-gray-50 dark:bg-zinc-900/30 border-b border-gray-100 dark:border-zinc-900/60">
+                      <h3 className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Ваши чаты</h3>
                     </div>
-                  )}
-                </div>
+                    {localChatsFiltered.map(renderChatCard)}
+                  </>
+                )}
               </div>
-            </a>
-          </Link>
+            ) : (
+              <div className="flex flex-col">
+                {searchChannelsGlobal.length > 0 && (
+                  <>
+                    <div className="px-5 py-2 bg-gray-50 dark:bg-zinc-900/30 border-b border-gray-100 dark:border-zinc-900/60">
+                      <h3 className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Глобальный поиск</h3>
+                    </div>
+                    {searchChannelsGlobal.map(renderGlobalUserCard)}
+                  </>
+                )}
+                {localChannelsFiltered.length > 0 && (
+                  <>
+                    <div className="px-5 py-2 bg-gray-50 dark:bg-zinc-900/30 border-b border-gray-100 dark:border-zinc-900/60">
+                      <h3 className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Ваши каналы и группы</h3>
+                    </div>
+                    {localChannelsFiltered.map(renderChatCard)}
+                  </>
+                )}
+              </div>
+            )}
+            
+            {search.length >= 2 && searchResults.length === 0 && filteredChats.length === 0 && (
+               <div className="text-center py-20 text-gray-400 dark:text-zinc-600">
+                  <Search size={40} className="mx-auto mb-3 opacity-20" />
+                  <p>Ничего не найдено</p>
+               </div>
+            )}
+          </main>
+        </>
+      ) : (
+        <>
+          <header className="px-6 pt-10 pb-4 h-24 relative z-10 bg-white dark:bg-black shadow-sm">
+            <div className="flex justify-between items-center h-full">
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                className="w-12 h-12 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-700"
+              >
+                {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
+                  <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-black dark:text-white font-semibold">{currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"}</span>
+                )}
+              </button>
+              
+              <h1 className="text-3xl font-normal tracking-[0.05em] text-black dark:text-white uppercase px-2">
+                Mesogram
+              </h1>
+              
+              <button 
+                onClick={() => setIsSearchOpen(true)}
+                className="w-12 h-12 shrink-0 flex items-center justify-center text-black dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-900 rounded-full transition-colors"
+              >
+                <Search size={22} strokeWidth={2} />
+              </button>
+            </div>
+          </header>
 
-          {filteredChats.map((chat: any) => {
-            const participant = chat.participant || {};
-            const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 3 * 60 * 1000) : false;
-
-            return (
-              <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
+          <main className="flex-1 overflow-y-auto">
+            <div className="flex flex-col">
+              
+              <Link href="/chat/saved">
                 <a className="flex items-center px-6 py-4 hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors border-b border-gray-100 dark:border-zinc-900/60">
-                  <div className="w-14 h-14 shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center relative border border-gray-200/50 dark:border-zinc-700/50">
-                    {participant.avatarUrl && participant.avatarUrl.length > 5 ? (
-                      <img src={participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover rounded-full" />
-                    ) : (
-                      <span className="text-lg font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
-                    )}
-                    
-                    {isOnline && !participant.isGroup && !participant.isChannel && (
-                      <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-black rounded-full"></div>
-                    )}
+                  <div className="w-14 h-14 shrink-0 rounded-full bg-black dark:bg-white flex items-center justify-center relative border border-gray-200 dark:border-zinc-800 text-white dark:text-black">
+                    <Bookmark size={20} fill="currentColor" />
                   </div>
-                  
                   <div className="ml-4 flex-1 overflow-hidden">
                     <div className="flex justify-between items-center">
                       <h3 className="font-semibold text-black dark:text-white text-base truncate">
-                        {participant.displayName || 'Собеседник'}
+                        Избранное
                       </h3>
-                      {chat.lastMessageTime && (
+                      {savedMessages[savedMessages.length - 1]?.createdAt && (
                         <span className="text-[11px] text-gray-400 dark:text-zinc-500 shrink-0 ml-2 font-medium">
-                          {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(savedMessages[savedMessages.length - 1].createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
                     </div>
-                    
                     <div className="flex items-center justify-between mt-0.5">
                       <p className="text-sm text-gray-500 dark:text-zinc-400 truncate pr-2">
-                        {chat.lastMessage?.startsWith('[MEDIA]') ? 'Вложение' : (chat.lastMessage || 'Нет сообщений')}
+                        {savedMessages.length > 0 ? (savedMessages[savedMessages.length - 1].content.startsWith('[MEDIA]') ? 'Вложение' : savedMessages[savedMessages.length - 1].content.replace(/^> .*\n\n/, '')) : 'Нет сообщений'}
                       </p>
-                      {chat.lastMessage && (
+                      {savedMessages.length > 0 && (
                         <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
-                          {/* ИСПРАВЛЕНИЕ: Всегда две галочки для своих сообщений */}
                           <Check size={13} />
                           <Check size={13} />
                         </div>
@@ -604,32 +687,34 @@ export default function ChatsPage() {
                   </div>
                 </a>
               </Link>
-            );
-          })}
-        </div>
 
-        {filteredChats.length === 0 && searchResults.length === 0 && (
-          <div className="text-center py-20 text-gray-400 dark:text-zinc-600">
-            <MessageSquare size={48} className="mx-auto mb-3 opacity-20" />
-            <p>Чатов пока нет</p>
-          </div>
-        )}
-      </main>
+              {filteredChats.map(renderChatCard)}
+            </div>
 
-      <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black z-10">
-        <Link href="/">
-          <a className="flex flex-col items-center text-black dark:text-white transition-colors">
-            <MessageSquare size={24} />
-            <span className="text-[10px] font-medium mt-1">Чаты</span>
-          </a>
-        </Link>
-        <Link href="/wall">
-          <a className="flex flex-col items-center text-gray-400 dark:text-zinc-600 hover:text-black dark:hover:text-white transition-colors">
-            <Users size={24} />
-            <span className="text-[10px] font-medium mt-1">Стена</span>
-          </a>
-        </Link>
-      </nav>
+            {filteredChats.length === 0 && (
+              <div className="text-center py-20 text-gray-400 dark:text-zinc-600">
+                <MessageSquare size={48} className="mx-auto mb-3 opacity-20" />
+                <p>Чатов пока нет</p>
+              </div>
+            )}
+          </main>
+
+          <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black z-10">
+            <Link href="/">
+              <a className="flex flex-col items-center text-black dark:text-white transition-colors">
+                <MessageSquare size={24} />
+                <span className="text-[10px] font-medium mt-1">Чаты</span>
+              </a>
+            </Link>
+            <Link href="/wall">
+              <a className="flex flex-col items-center text-gray-400 dark:text-zinc-600 hover:text-black dark:hover:text-white transition-colors">
+                <Users size={24} />
+                <span className="text-[10px] font-medium mt-1">Стена</span>
+              </a>
+            </Link>
+          </nav>
+        </>
+      )}
     </div>
   );
-          }
+                }
