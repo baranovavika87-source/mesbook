@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2 } from 'lucide-react';
+import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2, LogOut } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -13,10 +13,11 @@ const getUserId = () => {
 
 export default function ChatsPage() {
   const [search, setSearch] = useState('');
+  const currentUserId = getUserId();
   
   const [chats, setChats] = useState<any[]>(() => {
     try {
-      const saved = localStorage.getItem('mesbook_chats');
+      const saved = localStorage.getItem('mesbook_chats_' + currentUserId);
       return saved ? JSON.parse(saved) : [];
     } catch(e) { return []; }
   });
@@ -36,12 +37,16 @@ export default function ChatsPage() {
     } catch(e) { return null; }
   });
 
-  // --- МУЛЬТИАККАУНТ: Состояния ---
+  // ИСПРАВЛЕНИЕ: Жесткая проверка дубликатов при загрузке аккаунтов
   const [accounts, setAccounts] = useState<any[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
+      const accs = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
+      const unique = Array.from(new Map(accs.map((a: any) => [String(a.id), a])).values());
+      localStorage.setItem('mesbook_accounts', JSON.stringify(unique));
+      return unique;
     } catch(e) { return []; }
   });
+
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [newUsername, setNewUsername] = useState('');
@@ -51,14 +56,13 @@ export default function ChatsPage() {
 
   const [savedMessages, setSavedMessages] = useState<any[]>(() => {
     try {
-      const saved = localStorage.getItem('mesbook_saved_messages_' + getUserId());
+      const saved = localStorage.getItem('mesbook_saved_messages_' + currentUserId);
       return saved ? JSON.parse(saved) : [];
     } catch(e) { return []; }
   });
   
   const [isDark, setIsDark] = useState(false);
   const [, setLocation] = useLocation();
-
   const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
@@ -73,22 +77,13 @@ export default function ChatsPage() {
 
     const fetchMe = async () => {
       try {
-        const res = await fetch('/api/me', {
-          headers: { 'Authorization': 'Bearer ' + getUserId() }
-        });
+        const res = await fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
         if (res.ok) {
           const user = await res.json();
           setCurrentUser(user);
-          
-          // Обновляем данные текущего юзера в списке аккаунтов
           setAccounts(prev => {
-            const exists = prev.find(a => a.id === user.id);
-            let newAccs;
-            if (!exists) {
-              newAccs = [...prev, user];
-            } else {
-              newAccs = prev.map(a => a.id === user.id ? user : a);
-            }
+            // ИСПРАВЛЕНИЕ: Защита от дублей при обновлении профиля
+            const newAccs = [...prev.filter(a => String(a.id) !== String(user.id)), user];
             localStorage.setItem('mesbook_accounts', JSON.stringify(newAccs));
             return newAccs;
           });
@@ -96,68 +91,45 @@ export default function ChatsPage() {
       } catch (e) {}
     };
     fetchMe();
-  }, []);
+  }, [currentUserId]);
 
   useEffect(() => {
     const loadChats = async () => {
       try {
-        const res = await fetch('/api/chats', {
-          headers: { 'Authorization': 'Bearer ' + getUserId(), 'Content-Type': 'application/json' }
-        });
+        const res = await fetch('/api/chats', { headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' } });
         if (res.ok) {
           const data = await res.json();
-          let arr: any[] = [];
-          if (Array.isArray(data)) arr = data;
-          else if (data && Array.isArray(data.chats)) arr = data.chats;
-          else if (data && Array.isArray(data.data)) arr = data.data;
-          
-          const localGroups = JSON.parse(localStorage.getItem('mesbook_custom_chats') || '[]');
-          const combined = [...localGroups, ...arr];
-          
-          setChats(combined);
-          localStorage.setItem('mesbook_chats', JSON.stringify(combined));
+          setChats(data);
+          localStorage.setItem('mesbook_chats_' + currentUserId, JSON.stringify(data));
         }
       } catch (e) {}
 
       try {
-        const saved = localStorage.getItem('mesbook_saved_messages_' + getUserId());
+        const saved = localStorage.getItem('mesbook_saved_messages_' + currentUserId);
         if (saved) setSavedMessages(JSON.parse(saved));
       } catch(e) {}
     };
     loadChats();
     const interval = setInterval(loadChats, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUserId]);
 
   useEffect(() => {
-    if (search.length < 2) {
-      setSearchResults([]);
-      return;
-    }
+    if (search.length < 2) { setSearchResults([]); return; }
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch('/api/users/search?q=' + encodeURIComponent(search), {
-          headers: { 'Authorization': 'Bearer ' + getUserId() }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setSearchResults(Array.isArray(data) ? data : []);
-        }
+        const res = await fetch('/api/users/search?q=' + encodeURIComponent(search), { headers: { 'Authorization': 'Bearer ' + currentUserId } });
+        if (res.ok) setSearchResults(Array.isArray(await res.json()) ? await res.json() : []);
       } catch (e) {}
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, currentUserId]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
     const diff = touchStartX.current - e.changedTouches[0].clientX;
-    if (diff > 70) {
-      setIsSidebarOpen(true);
-    }
+    if (diff > 70) setIsSidebarOpen(true);
     touchStartX.current = null;
   };
 
@@ -186,7 +158,7 @@ export default function ChatsPage() {
     try {
       const res = await fetch('/api/chats/create', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + getUserId(), 'Content-Type': 'application/json' },
+        headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, isGroup: modalType === 'group', isChannel: modalType === 'channel' })
       });
       if (res.ok) {
@@ -201,7 +173,6 @@ export default function ChatsPage() {
     setIsSidebarOpen(false);
   };
 
-  // --- МУЛЬТИАККАУНТ: Логика ---
   const handleAddAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUsername.trim() || !newPassword.trim()) return;
@@ -215,15 +186,14 @@ export default function ChatsPage() {
         : { username: newUsername, password: newPassword, displayName: newName };
         
       const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
       });
       
       if (res.ok) {
         const user = await res.json();
         const prevAccounts = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
-        const updatedAccounts = [...prevAccounts.filter((a: any) => a.id !== user.id), user];
+        // ИСПРАВЛЕНИЕ: Удаляем дубль перед добавлением нового
+        const updatedAccounts = [...prevAccounts.filter((a: any) => String(a.id) !== String(user.id)), user];
         
         localStorage.setItem('mesbook_accounts', JSON.stringify(updatedAccounts));
         localStorage.setItem('mesbook_user', JSON.stringify(user));
@@ -232,8 +202,6 @@ export default function ChatsPage() {
         setNewPassword('');
         setNewName('');
         setShowAddAccountModal(false);
-        
-        // Перезагружаем страницу, чтобы применить контекст нового юзера
         window.location.reload();
       } else {
         const err = await res.json();
@@ -248,6 +216,15 @@ export default function ChatsPage() {
   const switchAccount = (acc: any) => {
     localStorage.setItem('mesbook_user', JSON.stringify(acc));
     window.location.reload();
+  };
+
+  // ИСПРАВЛЕНИЕ: Кнопка Выйти теперь удаляет аккаунт из устройства
+  const handleLogout = () => {
+    const accs = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
+    const filtered = accs.filter((a: any) => String(a.id) !== String(currentUserId));
+    localStorage.setItem('mesbook_accounts', JSON.stringify(filtered));
+    localStorage.removeItem('mesbook_user');
+    window.location.href = '/';
   };
 
   const lastSavedMsg = savedMessages[savedMessages.length - 1];
@@ -266,7 +243,6 @@ export default function ChatsPage() {
         />
       )}
 
-      {/* ВЫПЛЫВАЮЩЕЕ МЕНЮ */}
       <div className={`fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-white dark:bg-[#0a0a0a] z-50 transform transition-transform duration-300 ease-out shadow-2xl flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         
         <div className="p-6 pb-4 flex justify-between items-start relative">
@@ -298,11 +274,10 @@ export default function ChatsPage() {
 
         <div className="flex flex-col py-1 overflow-y-auto flex-1 divide-y divide-gray-100 dark:divide-zinc-900/60">
           
-          {/* СПИСОК АККАУНТОВ */}
           {accounts.length > 1 && (
             <div className="pb-2 mb-1 border-b border-gray-100 dark:border-zinc-900/60">
               {accounts.map(acc => {
-                const isActive = acc.id === currentUser?.id;
+                const isActive = String(acc.id) === String(currentUser?.id);
                 return (
                   <button 
                     key={acc.id} 
@@ -366,10 +341,14 @@ export default function ChatsPage() {
               <span className="text-[15px] font-medium">Настройки</span>
             </a>
           </Link>
+          
+          <button onClick={handleLogout} className="flex items-center gap-4 px-6 py-4 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors w-full text-left mt-auto">
+            <LogOut size={20} />
+            <span className="text-[15px] font-medium">Выйти</span>
+          </button>
         </div>
       </div>
 
-      {/* МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ АККАУНТА */}
       {showAddAccountModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl border border-gray-100 dark:border-zinc-800">
@@ -408,7 +387,6 @@ export default function ChatsPage() {
         </div>
       )}
 
-      {/* МОДАЛЬНОЕ ОКНО ГРУПП И КАНАЛОВ */}
       {modalType && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl border border-gray-100 dark:border-zinc-800">
@@ -643,4 +621,4 @@ export default function ChatsPage() {
       </nav>
     </div>
   );
-              }
+        }
