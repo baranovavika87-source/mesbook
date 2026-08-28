@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2, LogOut } from 'lucide-react';
+import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2 } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -37,7 +37,6 @@ export default function ChatsPage() {
     } catch(e) { return null; }
   });
 
-  // ИСПРАВЛЕНИЕ: Жесткая проверка дубликатов при загрузке аккаунтов
   const [accounts, setAccounts] = useState<any[]>(() => {
     try {
       const accs = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
@@ -82,7 +81,6 @@ export default function ChatsPage() {
           const user = await res.json();
           setCurrentUser(user);
           setAccounts(prev => {
-            // ИСПРАВЛЕНИЕ: Защита от дублей при обновлении профиля
             const newAccs = [...prev.filter(a => String(a.id) !== String(user.id)), user];
             localStorage.setItem('mesbook_accounts', JSON.stringify(newAccs));
             return newAccs;
@@ -192,7 +190,6 @@ export default function ChatsPage() {
       if (res.ok) {
         const user = await res.json();
         const prevAccounts = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
-        // ИСПРАВЛЕНИЕ: Удаляем дубль перед добавлением нового
         const updatedAccounts = [...prevAccounts.filter((a: any) => String(a.id) !== String(user.id)), user];
         
         localStorage.setItem('mesbook_accounts', JSON.stringify(updatedAccounts));
@@ -218,14 +215,12 @@ export default function ChatsPage() {
     window.location.reload();
   };
 
-  // ИСПРАВЛЕНИЕ: Кнопка Выйти теперь удаляет аккаунт из устройства
-  const handleLogout = () => {
-    const accs = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
-    const filtered = accs.filter((a: any) => String(a.id) !== String(currentUserId));
-    localStorage.setItem('mesbook_accounts', JSON.stringify(filtered));
-    localStorage.removeItem('mesbook_user');
-    window.location.href = '/';
-  };
+  // Сортируем аккаунты так, чтобы текущий всегда был наверху
+  const sortedAccounts = [...accounts].sort((a, b) => {
+    if (String(a.id) === String(currentUser?.id)) return -1;
+    if (String(b.id) === String(currentUser?.id)) return 1;
+    return 0;
+  });
 
   const lastSavedMsg = savedMessages[savedMessages.length - 1];
 
@@ -274,20 +269,20 @@ export default function ChatsPage() {
 
         <div className="flex flex-col py-1 overflow-y-auto flex-1 divide-y divide-gray-100 dark:divide-zinc-900/60">
           
-          {accounts.length > 1 && (
-            <div className="pb-2 mb-1 border-b border-gray-100 dark:border-zinc-900/60">
-              {accounts.map(acc => {
+          {sortedAccounts.length > 1 && (
+            <div className="pb-3 pt-1 mb-1 border-b border-gray-100 dark:border-zinc-900/60 flex flex-col gap-1 px-2">
+              {sortedAccounts.map(acc => {
                 const isActive = String(acc.id) === String(currentUser?.id);
                 return (
                   <button 
                     key={acc.id} 
                     onClick={() => !isActive && switchAccount(acc)} 
-                    className="flex items-center gap-4 px-6 py-3 hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full text-left"
+                    className={`flex items-center gap-4 px-4 py-2.5 rounded-[14px] transition-colors w-full text-left ${isActive ? 'bg-gray-100 dark:bg-zinc-800/80 cursor-default' : 'hover:bg-gray-50 dark:hover:bg-zinc-900/50'}`}
                   >
-                    <div className="w-8 h-8 bg-gray-200 dark:bg-zinc-800 rounded-full flex items-center justify-center overflow-hidden shrink-0 text-black dark:text-white font-semibold text-xs">
+                    <div className="w-8 h-8 bg-gray-200 dark:bg-zinc-700 rounded-full flex items-center justify-center overflow-hidden shrink-0 text-black dark:text-white font-semibold text-xs border border-gray-300/30 dark:border-zinc-600/30">
                       {acc.avatarUrl && acc.avatarUrl.length > 5 ? <img src={acc.avatarUrl} className="w-full h-full object-cover" /> : acc.displayName?.charAt(0).toUpperCase()}
                     </div>
-                    <span className={`text-[15px] font-medium flex-1 truncate ${isActive ? 'text-black dark:text-white' : 'text-gray-500 dark:text-zinc-400'}`}>
+                    <span className={`text-[14px] font-medium flex-1 truncate ${isActive ? 'text-black dark:text-white' : 'text-gray-500 dark:text-zinc-400'}`}>
                       {acc.displayName}
                     </span>
                     {isActive && <Check size={16} className="text-black dark:text-white" />}
@@ -341,11 +336,6 @@ export default function ChatsPage() {
               <span className="text-[15px] font-medium">Настройки</span>
             </a>
           </Link>
-          
-          <button onClick={handleLogout} className="flex items-center gap-4 px-6 py-4 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors w-full text-left mt-auto">
-            <LogOut size={20} />
-            <span className="text-[15px] font-medium">Выйти</span>
-          </button>
         </div>
       </div>
 
@@ -586,7 +576,8 @@ export default function ChatsPage() {
                       {chat.lastMessage && (
                         <div className="flex -space-x-1 shrink-0 text-gray-400 dark:text-zinc-500">
                           <Check size={13} />
-                          {(chat.isRead || chat.readAt || chat.status === 'read' || String(chat.id).startsWith('group_') || String(chat.id).startsWith('channel_') || String(chat.id).startsWith('custom_')) && <Check size={13} />}
+                          {/* Уверенно ставим 2 галочки для групп и каналов */}
+                          {(chat.isRead || chat.readAt || chat.status === 'read' || Number(chat.id) >= 100000000) && <Check size={13} />}
                         </div>
                       )}
                     </div>
@@ -621,4 +612,4 @@ export default function ChatsPage() {
       </nav>
     </div>
   );
-        }
+                }
