@@ -72,7 +72,8 @@ export async function initializeDatabase() {
     try { await tursoQuery(`ALTER TABLE chats ADD COLUMN is_group INTEGER DEFAULT 0`); } catch (e) {}
     try { await tursoQuery(`ALTER TABLE chats ADD COLUMN is_channel INTEGER DEFAULT 0`); } catch (e) {}
     
-    // НОВЫЕ ПОЛЯ ПРОФИЛЯ
+    // НОВЫЕ ПОЛЯ ПРОФИЛЯ И АВАТАРКИ ЧАТОВ
+    try { await tursoQuery(`ALTER TABLE chats ADD COLUMN avatar_url TEXT DEFAULT ''`); } catch (e) {}
     try { await tursoQuery(`ALTER TABLE users ADD COLUMN personal_channel TEXT DEFAULT ''`); } catch (e) {}
     try { await tursoQuery(`ALTER TABLE users ADD COLUMN birth_date TEXT DEFAULT ''`); } catch (e) {}
 
@@ -98,7 +99,8 @@ export async function getDatabase() {
 
 export async function getUserByUsername(database: any, username: string) {
   const result = await database.execute({
-    sql: "SELECT id, username, password, display_name, avatar_url, bio, last_seen FROM users WHERE username = ?",
+    // Добавлены новые колонки для отдачи полных профилей
+    sql: "SELECT id, username, password, display_name, avatar_url, bio, last_seen, personal_channel, birth_date FROM users WHERE username = ?",
     args: [username],
   });
   return result.rows[0] || null;
@@ -117,8 +119,10 @@ export async function createUser(database: any, username: string, password: stri
 export async function searchUsers(database: any, query: string, currentUserId: number) {
   const searchPattern = "%" + query + "%";
   const result = await database.execute({
-    sql: "SELECT id, display_name as displayName, avatar_url as avatarUrl, bio, last_seen FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?",
+    // Добавлены новые колонки для отдачи полных профилей
+    sql: "SELECT id, display_name as displayName, avatar_url as avatarUrl, bio, last_seen, personal_channel, birth_date FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?",
     args: [searchPattern, searchPattern, currentUserId],
   });
   return result.rows;
 }
+
