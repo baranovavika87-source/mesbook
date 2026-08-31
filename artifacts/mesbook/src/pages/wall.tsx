@@ -6,9 +6,7 @@ const getUserId = () => {
   try {
     const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
     return u.id || u.userId || u._id || 1;
-  } catch (e) {
-    return 1;
-  }
+  } catch (e) { return 1; }
 };
 
 export default function WallPage() {
@@ -19,91 +17,65 @@ export default function WallPage() {
   const loadFeed = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/wall/feed', {
-        headers: { 'Authorization': 'Bearer ' + currentUserId }
-      });
-      if (res.ok) {
-        setPosts(await res.json());
-      }
+      const res = await fetch('/api/wall/feed', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
+      if (res.ok) setPosts(await res.json());
     } catch (e) {}
     setIsLoading(false);
   };
 
-  useEffect(() => {
-    loadFeed();
-  }, []);
+  useEffect(() => { loadFeed(); }, []);
 
-  // Функция вытаскивает все ссылки на медиа из текста поста
   const parsePostContent = (content: string) => {
     const mediaUrls: string[] = [];
     const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
     let match;
     let text = content;
-    
-    while ((match = mediaRegex.exec(content)) !== null) {
-      mediaUrls.push(match[1]);
-    }
+    while ((match = mediaRegex.exec(content)) !== null) mediaUrls.push(match[1]);
     text = text.replace(mediaRegex, '').trim();
-
     return { text, mediaUrls };
   };
 
   return (
-    <div className="flex h-screen flex-col bg-white dark:bg-black transition-colors duration-300">
+    <div className="flex h-screen flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 font-sans">
       
-      {/* Строгая монохромная шапка */}
-      <header className="flex justify-between items-center px-6 pt-12 pb-4 bg-white dark:bg-black sticky top-0 z-10 border-b border-gray-100 dark:border-zinc-900">
-        <button 
-          onClick={loadFeed} 
-          className="text-gray-500 hover:text-black dark:hover:text-white text-[15px] font-medium active:scale-95 transition-all"
-        >
-          Обновить
-        </button>
-        <h1 className="text-black dark:text-white text-lg font-bold absolute left-1/2 -translate-x-1/2 uppercase tracking-wide">
-          Стена
-        </h1>
-        <div className="w-[70px]"></div>
+      {/* ШАПКА В СТИЛЕ iOS */}
+      <header className="flex justify-between items-center px-4 pt-12 pb-4 bg-[#f2f2f7]/90 dark:bg-black/90 sticky top-0 z-10 border-b border-gray-200/50 dark:border-zinc-900/50 shadow-sm backdrop-blur-md">
+        <button onClick={loadFeed} className="text-black dark:text-white text-[16px] font-medium active:scale-95 transition-all ml-1">Обновить</button>
+        <h1 className="text-black dark:text-white text-[20px] font-semibold absolute left-1/2 -translate-x-1/2 tracking-wide">Стена</h1>
+        <div className="w-[80px]"></div>
       </header>
 
-      <main className="flex-1 overflow-y-auto bg-white dark:bg-black pt-4 pb-20">
-        
+      <main className="flex-1 overflow-y-auto pt-4 pb-20 px-4">
         {isLoading ? (
-          <div className="flex justify-center items-center py-20">
-            <Loader2 size={32} className="animate-spin text-gray-400 dark:text-zinc-600" />
-          </div>
+          <div className="flex justify-center items-center py-20"><Loader2 size={32} className="animate-spin text-gray-400 dark:text-zinc-600" /></div>
         ) : posts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-32 px-6 text-center">
-            <div className="w-16 h-16 bg-gray-100 dark:bg-zinc-900 rounded-full flex items-center justify-center mb-4">
-              <Users size={28} className="text-gray-400 dark:text-zinc-600" />
+            <div className="w-16 h-16 bg-white dark:bg-[#1c1c1e] rounded-full flex items-center justify-center mb-4 shadow-sm border border-gray-100 dark:border-zinc-800/50">
+              <Users size={28} className="text-gray-400" />
             </div>
-            <p className="text-gray-500 dark:text-zinc-400 text-sm max-w-[250px]">
-              Здесь будут появляться новые записи из каналов, на которые вы подписаны.
+            <p className="text-gray-500 text-[15px] max-w-[250px] leading-relaxed">
+              Здесь будут новые записи из каналов, на которые вы подписаны.
             </p>
             <Link href="/">
-              <a className="mt-8 px-8 py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-xl active:scale-95 transition-transform text-sm">
+              <a className="mt-8 px-8 py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-2xl active:scale-95 transition-transform text-[15px] shadow-md">
                 Найти каналы
               </a>
             </Link>
           </div>
         ) : (
-          <div className="flex flex-col space-y-6 px-4">
+          <div className="flex flex-col space-y-5">
             {posts.map((post) => {
               const { text, mediaUrls } = parsePostContent(post.content);
-              
               return (
-                <div key={post.id} className="bg-gray-50 dark:bg-zinc-900/30 rounded-xl overflow-hidden border border-gray-100 dark:border-zinc-800/50">
+                <div key={post.id} className="bg-white dark:bg-[#1c1c1e] rounded-[24px] overflow-hidden shadow-sm border border-gray-100 dark:border-zinc-800/50">
                   
-                  {/* Заголовок канала */}
-                  <div className="px-4 py-3 border-b border-gray-200/50 dark:border-zinc-800/50 flex items-center justify-between">
-                    <span className="text-black dark:text-white font-semibold text-[15px] truncate pr-2">
-                      {post.channelName}
-                    </span>
-                    <span className="text-gray-400 dark:text-zinc-500 text-[11px] shrink-0 font-medium">
-                      {new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                  {/* ИМЯ КАНАЛА И ВРЕМЯ */}
+                  <div className="px-5 py-3.5 border-b border-gray-100/50 dark:border-zinc-800/50 flex items-center justify-between bg-white dark:bg-[#1c1c1e]">
+                    <span className="text-black dark:text-white font-semibold text-[16px] truncate">{post.channelName}</span>
+                    <span className="text-gray-400 text-[12px] shrink-0 font-medium">{new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
-
-                  {/* Сетка для медиафайлов от края до края */}
+                  
+                  {/* МЕДИА СЕТКА */}
                   {mediaUrls.length > 0 && (
                     <div className={`grid gap-0.5 bg-gray-200 dark:bg-black ${mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                       {mediaUrls.map((url, idx) => (
@@ -118,12 +90,10 @@ export default function WallPage() {
                     </div>
                   )}
 
-                  {/* Текст поста */}
+                  {/* ТЕКСТ ПОСТА */}
                   {text && (
-                    <div className="p-4">
-                      <p className="text-black dark:text-white text-[14px] leading-snug whitespace-pre-wrap">
-                        {text}
-                      </p>
+                    <div className="p-5">
+                      <p className="text-black dark:text-white text-[15px] leading-relaxed whitespace-pre-wrap">{text}</p>
                     </div>
                   )}
                 </div>
@@ -133,17 +103,17 @@ export default function WallPage() {
         )}
       </main>
 
-      <nav className="border-t border-gray-100 dark:border-zinc-900 flex justify-around p-4 bg-white dark:bg-black z-10 pb-6">
+      <nav className="border-t border-gray-200/50 dark:border-zinc-800/50 flex justify-around p-3 bg-[#f2f2f7]/80 dark:bg-black/80 backdrop-blur-md z-10 pb-6">
         <Link href="/">
-          <a className="flex flex-col items-center text-gray-400 dark:text-zinc-600 hover:text-black dark:hover:text-white transition-colors">
-            <MessageSquare size={24} />
-            <span className="text-[10px] font-medium mt-1">Чаты</span>
+          <a className="flex flex-col items-center text-gray-400 hover:text-black dark:hover:text-white transition-colors">
+            <MessageSquare size={26} className="mb-1" />
+            <span className="text-[10px] font-medium">Чаты</span>
           </a>
         </Link>
         <Link href="/wall">
-          <a className="flex flex-col items-center text-black dark:text-white transition-colors">
-            <Users size={24} />
-            <span className="text-[10px] font-medium mt-1">Стена</span>
+          <a className="flex flex-col items-center text-black dark:text-white">
+            <Users size={26} className="mb-1" fill="currentColor" />
+            <span className="text-[10px] font-medium">Стена</span>
           </a>
         </Link>
       </nav>
