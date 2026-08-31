@@ -79,7 +79,6 @@ router.patch("/me", async (req, res): Promise<void> => {
   if (bio !== undefined) await database.execute({ sql: "UPDATE users SET bio = ? WHERE id = ?", args: [bio, currentUserId] });
   if (password !== undefined && password.trim() !== "") await database.execute({ sql: "UPDATE users SET password = ? WHERE id = ?", args: [password, currentUserId] });
   
-  // Сохраняем новые поля
   if (personalChannel !== undefined) await database.execute({ sql: "UPDATE users SET personal_channel = ? WHERE id = ?", args: [personalChannel, currentUserId] });
   if (birthDate !== undefined) await database.execute({ sql: "UPDATE users SET birth_date = ? WHERE id = ?", args: [birthDate, currentUserId] });
   
@@ -99,7 +98,7 @@ router.get("/users/search", async (req, res) => {
   });
 
   const chatsResult = await db.execute({
-    sql: "SELECT id, name, is_group, is_channel FROM chats WHERE name LIKE ?",
+    sql: "SELECT id, name, is_group, is_channel, avatar_url FROM chats WHERE name LIKE ?",
     args: [searchPattern1]
   });
 
@@ -108,7 +107,7 @@ router.get("/users/search", async (req, res) => {
     displayName: r.name,
     isGroup: Number(r.is_group) === 1,
     isChannel: Number(r.is_channel) === 1,
-    avatarUrl: ""
+    avatarUrl: r.avatar_url || ""
   }));
 
   return res.json([...usersResult.rows, ...foundChats]);
@@ -124,15 +123,15 @@ router.get("/users/:id", async (req, res): Promise<void> => {
 
 router.post("/chats/create", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const { name, isGroup, isChannel } = req.body;
+  const { name, isGroup, isChannel, avatarUrl } = req.body;
   if (!name) { res.status(400).json({ error: "Name is required" }); return; }
   
   const database = await getDatabase();
   await ensureMembersTable(database);
 
   await database.execute({
-    sql: "INSERT INTO chats (participant_id, created_at, name, is_group, is_channel) VALUES (?, ?, ?, ?, ?)",
-    args: [currentUserId, new Date().toISOString(), name, isGroup ? 1 : 0, isChannel ? 1 : 0]
+    sql: "INSERT INTO chats (participant_id, created_at, name, is_group, is_channel, avatar_url) VALUES (?, ?, ?, ?, ?, ?)",
+    args: [currentUserId, new Date().toISOString(), name, isGroup ? 1 : 0, isChannel ? 1 : 0, avatarUrl || ""]
   });
   const result = await database.execute("SELECT last_insert_rowid() as id");
   const groupId = Number(result.rows[0]?.id) + 100000000;
@@ -147,7 +146,7 @@ router.post("/chats/create", async (req, res): Promise<void> => {
     args: [groupId, currentUserId, isGroup ? "Группа создана" : "Канал создан", new Date().toISOString()]
   });
   
-  res.json({ id: groupId, name, isGroup, isChannel });
+  res.json({ id: groupId, name, isGroup, isChannel, avatarUrl });
 });
 
 router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
@@ -208,10 +207,10 @@ router.get("/chats", async (req, res): Promise<void> => {
     }
     if (cId >= 100000000) {
       const internalId = cId - 100000000;
-      const groupResult = await database.execute({ sql: "SELECT name, is_group, is_channel FROM chats WHERE id = ?", args: [internalId] });
+      const groupResult = await database.execute({ sql: "SELECT name, is_group, is_channel, avatar_url FROM chats WHERE id = ?", args: [internalId] });
       const gRow = groupResult.rows[0];
       if (gRow) {
-        return { id: cId, participant: { id: cId, displayName: gRow.name, avatarUrl: "", isGroup: Number(gRow.is_group)===1, isChannel: Number(gRow.is_channel)===1 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, unreadCount: Number(row.unread_count) };
+        return { id: cId, participant: { id: cId, displayName: gRow.name, avatarUrl: gRow.avatar_url || "", isGroup: Number(gRow.is_group)===1, isChannel: Number(gRow.is_channel)===1 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, unreadCount: Number(row.unread_count) };
       }
       return null;
     }
