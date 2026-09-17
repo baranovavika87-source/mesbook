@@ -24,8 +24,6 @@ export default function ChatsPage() {
   
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  
-  // СОСТОЯНИЯ ДЛЯ ПОИСКА
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchTab, setSearchTab] = useState<'chats' | 'channels'>('chats');
   
@@ -119,16 +117,12 @@ export default function ChatsPage() {
     return () => clearInterval(interval);
   }, [currentUserId]);
 
-  // ИСПРАВЛЕННЫЙ ГЛОБАЛЬНЫЙ ПОИСК
   useEffect(() => {
     if (search.length < 2) { setSearchResults([]); return; }
     const timer = setTimeout(async () => {
       try {
         const res = await fetch('/api/users/search?q=' + encodeURIComponent(search), { headers: { 'Authorization': 'Bearer ' + currentUserId } });
-        if (res.ok) {
-          const data = await res.json();
-          setSearchResults(Array.isArray(data) ? data : []);
-        }
+        if (res.ok) setSearchResults(Array.isArray(await res.json()) ? await res.json() : []);
       } catch (e) {}
     }, 300);
     return () => clearTimeout(timer);
@@ -146,7 +140,6 @@ export default function ChatsPage() {
     (c.participant?.displayName || '').toLowerCase().includes(search.toLowerCase())
   ) : [];
 
-  // ФИЛЬТРЫ ВКЛАДОК
   const searchUsersGlobal = searchResults.filter(u => !u.isGroup && !u.isChannel);
   const searchChannelsGlobal = searchResults.filter(u => u.isGroup || u.isChannel);
   const localChatsFiltered = filteredChats.filter(c => !c.participant?.isGroup && !c.participant?.isChannel);
@@ -265,7 +258,7 @@ export default function ChatsPage() {
 
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
-        <a className="flex items-center px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 last:border-0 bg-white dark:bg-[#1c1c1e]">
+        <a className="flex items-center px-5 py-3 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-200 dark:border-zinc-800/80 bg-white dark:bg-[#1c1c1e]">
           <div className="w-[52px] h-[52px] shrink-0 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center relative shadow-sm overflow-hidden border border-gray-200/50 dark:border-zinc-700/50">
             {participant.avatarUrl && participant.avatarUrl.length > 5 ? (
               <img src={participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
@@ -292,7 +285,7 @@ export default function ChatsPage() {
                 {chat.lastMessage?.startsWith('[MEDIA]') ? 'Вложение' : (chat.lastMessage || 'Нет сообщений')}
               </p>
               {chat.lastMessage && (
-                <div className="flex -space-x-1 shrink-0 text-black dark:text-white">
+                <div className="flex -space-x-1 shrink-0 text-blue-500">
                   <Check size={14} />
                   {(chat.isRead || chat.readAt || chat.status === 'read' || String(chat.id).startsWith('group_') || String(chat.id).startsWith('channel_') || String(chat.id).startsWith('custom_') || participant.isGroup || participant.isChannel) && <Check size={14} />}
                 </div>
@@ -304,14 +297,11 @@ export default function ChatsPage() {
     );
   };
 
-  // ==============================
-  // РЕНДЕР КАРТОЧКИ ГЛОБАЛЬНОГО ПОИСКА
-  // ==============================
   const renderGlobalUserCard = (user: any) => (
     <Link key={user.id} href={'/chat/' + user.id}>
       <a 
         onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
-        className="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 last:border-0 bg-white dark:bg-[#1c1c1e]"
+        className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-200 dark:border-zinc-800/80 bg-white dark:bg-[#1c1c1e]"
       >
         <div className="flex items-center gap-4">
           <div className="w-[52px] h-[52px] rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden shadow-sm border border-gray-200/50 dark:border-zinc-700/50">
@@ -429,6 +419,7 @@ export default function ChatsPage() {
                 <span className="text-[15px] font-medium">Избранное</span>
               </a>
             </Link>
+            
             <Link href="/settings">
               <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors">
                 <Settings size={20} className="text-gray-400 dark:text-zinc-400" />
@@ -693,7 +684,7 @@ export default function ChatsPage() {
             <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
               
               <Link href="/chat/saved">
-                <a className="flex items-center px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50">
+                <a className="flex items-center px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-200 dark:border-zinc-800/80 bg-white dark:bg-[#1c1c1e]">
                   <div className="w-[52px] h-[52px] shrink-0 rounded-full bg-black dark:bg-white flex items-center justify-center relative shadow-sm text-white dark:text-black border border-gray-200/50 dark:border-zinc-700/50">
                     <Bookmark size={24} fill="currentColor" />
                   </div>
