@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Send, Trash2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2 } from 'lucide-react';
+import { ArrowLeft, Send, Trash2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera } from 'lucide-react';
 
 const getUserId = () => {
   try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
@@ -27,7 +27,17 @@ export default function ChatPage() {
   const [showProfile, setShowProfile] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
+  
   const [isMember, setIsMember] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // СОСТОЯНИЯ ДЛЯ РЕДАКТИРОВАНИЯ
+  const [isEditingChat, setIsEditingChat] = useState(false);
+  const [editChatName, setEditChatName] = useState('');
+  const [editChatDesc, setEditChatDesc] = useState('');
+  const [editChatAvatar, setEditChatAvatar] = useState('');
+  const [isSavingChat, setIsSavingChat] = useState(false);
+  const editAvatarRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const touchStartRef = useRef<number | null>(null);
@@ -59,7 +69,11 @@ export default function ChatPage() {
     const checkMembership = async () => {
       try {
         const res = await fetch(`/api/chats/${chatId}/is_member`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
-        if (res.ok) { const data = await res.json(); setIsMember(data.isMember); }
+        if (res.ok) { 
+          const data = await res.json(); 
+          setIsMember(data.isMember); 
+          setIsAdmin(data.role === 'admin');
+        }
       } catch(e) {}
     };
     checkMembership();
@@ -102,16 +116,6 @@ export default function ChatPage() {
       return () => clearInterval(interval);
     }
   }, [chatId]);
-
-  useEffect(() => {
-    const sendPing = async () => {
-      if (isSavedChat || isGroupOrChannel) return;
-      try { await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
-    };
-    sendPing();
-    const interval = setInterval(sendPing, 30000);
-    return () => clearInterval(interval);
-  }, [currentUserId]);
 
   useEffect(() => {
     if (scrollRef.current && !hasScrolledToBottom.current && messages.length > 0) {
@@ -188,6 +192,44 @@ export default function ChatPage() {
     try { await fetch('/api/chats/' + chatId + '/messages/' + msgId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId } }); loadData(); } catch (e) {}
   };
 
+  const handleEditChatClick = () => {
+    setEditChatName(chatInfo?.participant?.displayName || '');
+    setEditChatDesc(chatInfo?.participant?.description || '');
+    setEditChatAvatar(chatInfo?.participant?.avatarUrl || '');
+    setIsEditingChat(true);
+  };
+
+  const handleEditAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsSavingChat(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'mesogram-cloud'); 
+    try {
+      const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.secure_url) setEditChatAvatar(data.secure_url);
+    } catch (err) {}
+    setIsSavingChat(false);
+  };
+
+  const handleSaveChatSettings = async () => {
+    setIsSavingChat(true);
+    try {
+      const res = await fetch(`/api/chats/${chatId}`, {
+        method: 'PATCH',
+        headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editChatName, description: editChatDesc, avatarUrl: editChatAvatar })
+      });
+      if (res.ok) {
+        setIsEditingChat(false);
+        loadData();
+      }
+    } catch(e) {}
+    setIsSavingChat(false);
+  };
+
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
   const subtitleText = isSavedChat ? "" : isGroupOrChannel ? "Канал/Группа" : (isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно"));
@@ -196,7 +238,7 @@ export default function ChatPage() {
     if (msgContent.startsWith('[MEDIA] ')) {
       let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
-      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic|heif)$/i, '.jpg');
+      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic\vert{}heif)$/i, '.jpg');
       return (
         <div className="mt-0.5 mb-0.5">
           {isVideo ? <video src={url} controls className="w-full max-w-[220px] rounded-[16px] bg-black/10" /> : <img src={url} alt="Media" className="w-full max-w-[220px] rounded-[16px] object-cover" />}
@@ -224,54 +266,108 @@ export default function ChatPage() {
       --------------------------------------------------------- */}
       {showProfile && chatInfo?.participant && (
         <div className="fixed inset-0 z-50 bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-bottom duration-200 overflow-y-auto">
-          <header className="flex items-center gap-6 px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900 sticky top-0 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
-            <button onClick={() => setShowProfile(false)} className="text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
-            <h1 className="text-[20px] font-semibold text-black dark:text-white">Информация</h1>
+          <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900 sticky top-0 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
+            <div className="flex items-center gap-6">
+              <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
+              <h1 className="text-[20px] font-semibold text-black dark:text-white">Информация</h1>
+            </div>
+            {isAdmin && !isEditingChat && (
+              <button onClick={handleEditChatClick} className="p-1 text-black dark:text-white active:scale-95 transition-transform"><Edit3 size={24} /></button>
+            )}
+            {isEditingChat && (
+              <button onClick={handleSaveChatSettings} disabled={isSavingChat} className="p-1 text-black dark:text-white active:scale-95 transition-transform">
+                {isSavingChat ? <Loader2 size={24} className="animate-spin" /> : <Check size={26} strokeWidth={2.5} />}
+              </button>
+            )}
           </header>
           
-          <div className="flex flex-col items-center pt-8 pb-4">
-            <div className="w-[120px] h-[120px] rounded-full shadow-md bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-800 mb-4">
-              {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? (
-                <img src={chatInfo.participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-[40px] font-medium text-black dark:text-white">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>
-              )}
-            </div>
-            <h2 className="text-[22px] font-bold text-black dark:text-white mb-1">{chatInfo.participant.displayName}</h2>
-            {chatInfo.participant.username && <p className="text-[15px] text-gray-500">{chatInfo.participant.username}</p>}
-            <p className={`mt-1.5 text-[13px] font-medium ${isOnline && !isGroupOrChannel ? 'text-green-500' : 'text-gray-400'}`}>{subtitleText}</p>
-          </div>
-          
-          <div className="px-4 pb-12 w-full max-w-lg mx-auto flex flex-col gap-4">
-            {chatInfo.participant.bio && (
-              <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm p-5 border border-gray-100 dark:border-zinc-800/50">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">О себе</p>
-                <p className="text-[16px] text-black dark:text-white leading-relaxed">{chatInfo.participant.bio}</p>
+          {isEditingChat ? (
+            <div className="px-4 pt-8 w-full max-w-lg mx-auto flex flex-col gap-5">
+              <div className="flex justify-center mb-4">
+                <div 
+                  className="w-[120px] h-[120px] rounded-full shadow-md bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-800 relative cursor-pointer"
+                  onClick={() => editAvatarRef.current?.click()}
+                >
+                  {editChatAvatar && editChatAvatar.length > 5 ? (
+                    <img src={editChatAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <Camera size={36} className="text-gray-400" />
+                  )}
+                  {isSavingChat && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
+                </div>
+                <input type="file" accept="image/*" className="hidden" ref={editAvatarRef} onChange={handleEditAvatarUpload} />
               </div>
-            )}
-            {(chatInfo.participant.personalChannel || chatInfo.participant.birthDate) && (
+
               <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100 dark:border-zinc-800/50">
-                {chatInfo.participant.personalChannel && (
-                  <div className="px-5 py-4 border-b border-gray-100 dark:border-zinc-900/60 flex items-center gap-4">
-                    <Volume2 size={22} className="text-gray-400" />
-                    <div>
-                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Канал</p>
-                      <p className="text-[16px] text-black dark:text-white">{chatInfo.participant.personalChannel}</p>
-                    </div>
-                  </div>
-                )}
-                {chatInfo.participant.birthDate && (
-                  <div className="px-5 py-4 flex items-center gap-4">
-                    <Calendar size={22} className="text-gray-400" />
-                    <div>
-                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">День рождения</p>
-                      <p className="text-[16px] text-black dark:text-white">{new Date(chatInfo.participant.birthDate).toLocaleDateString()}</p>
-                    </div>
+                <div className="px-5 py-2.5 border-b border-gray-100 dark:border-zinc-900/60">
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mt-1">Название</label>
+                  <input 
+                    type="text" 
+                    value={editChatName} 
+                    onChange={e => setEditChatName(e.target.value)} 
+                    className="w-full bg-transparent py-1.5 text-[17px] font-medium text-black dark:text-white outline-none" 
+                  />
+                </div>
+                {isChannel && (
+                  <div className="px-5 py-4">
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</label>
+                    <textarea 
+                      rows={4} 
+                      value={editChatDesc} 
+                      onChange={e => setEditChatDesc(e.target.value)} 
+                      className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
+                    />
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col items-center pt-8 pb-4">
+                <div className="w-[120px] h-[120px] rounded-full shadow-md bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-800 mb-4">
+                  {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? (
+                    <img src={chatInfo.participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[40px] font-medium text-black dark:text-white">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+                <h2 className="text-[22px] font-bold text-black dark:text-white mb-1">{chatInfo.participant.displayName}</h2>
+                {chatInfo.participant.username && <p className="text-[15px] text-gray-500">{chatInfo.participant.username}</p>}
+                <p className={`mt-1.5 text-[13px] font-medium ${isOnline && !isGroupOrChannel ? 'text-green-500' : 'text-gray-400'}`}>{subtitleText}</p>
+              </div>
+              
+              <div className="px-4 pb-12 w-full max-w-lg mx-auto flex flex-col gap-4">
+                {(chatInfo.participant.bio || chatInfo.participant.description) && (
+                  <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm p-5 border border-gray-100 dark:border-zinc-800/50">
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</p>
+                    <p className="text-[16px] text-black dark:text-white leading-relaxed whitespace-pre-wrap">{chatInfo.participant.bio || chatInfo.participant.description}</p>
+                  </div>
+                )}
+                {(chatInfo.participant.personalChannel || chatInfo.participant.birthDate) && (
+                  <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100 dark:border-zinc-800/50">
+                    {chatInfo.participant.personalChannel && (
+                      <div className="px-5 py-4 border-b border-gray-100 dark:border-zinc-900/60 flex items-center gap-4">
+                        <Volume2 size={22} className="text-gray-400" />
+                        <div>
+                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Канал</p>
+                          <p className="text-[16px] text-black dark:text-white">{chatInfo.participant.personalChannel}</p>
+                        </div>
+                      </div>
+                    )}
+                    {chatInfo.participant.birthDate && (
+                      <div className="px-5 py-4 flex items-center gap-4">
+                        <Calendar size={22} className="text-gray-400" />
+                        <div>
+                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">День рождения</p>
+                          <p className="text-[16px] text-black dark:text-white">{new Date(chatInfo.participant.birthDate).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
