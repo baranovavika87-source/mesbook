@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
-import { ArrowLeft, Camera, Loader2, X, Calendar, Volume2, LogOut } from 'lucide-react';
+import { ArrowLeft, Camera, Loader2, X, Calendar, Volume2, LogOut, ChevronRight, UserCircle, MessageCircle, Globe } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -15,6 +15,10 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  
+  // Текущий экран: 'main' (Главное меню) или 'profile' (Редактирование профиля)
+  const [currentView, setCurrentView] = useState<'main' | 'profile'>('main');
+  
   const currentUserId = getUserId();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -33,8 +37,12 @@ export default function SettingsPage() {
         const res = await fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
         if (res.ok) {
           const data = await res.json();
-          setUser(data); setDisplayName(data.displayName || ''); setUsername(data.username || '@');
-          setBio(data.bio || ''); setPersonalChannel(data.personalChannel || ''); setBirthDate(data.birthDate || '');
+          setUser(data); 
+          setDisplayName(data.displayName || ''); 
+          setUsername(data.username || '@');
+          setBio(data.bio || ''); 
+          setPersonalChannel(data.personalChannel || ''); 
+          setBirthDate(data.birthDate || '');
         }
       } catch (e) {}
       setIsLoading(false);
@@ -45,6 +53,7 @@ export default function SettingsPage() {
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value;
     if (!val.startsWith('@')) val = '@' + val.replace(/@/g, '');
+    if (val === '@') { setUsername('@'); return; }
     setUsername(val);
   };
 
@@ -58,13 +67,16 @@ export default function SettingsPage() {
     try {
       const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.secure_url) await handleSave({ avatarUrl: data.secure_url });
+      if (data.secure_url) {
+        // Сразу сохраняем аватарку при загрузке
+        await handleSave({ avatarUrl: data.secure_url }, true);
+      }
     } catch (err) {}
     setIsUploading(false);
   };
 
-  const handleSave = async (extraFields: any = {}) => {
-    setIsSaving(true);
+  const handleSave = async (extraFields: any = {}, skipFeedback = false) => {
+    if (!skipFeedback) setIsSaving(true);
     try {
       const payload: any = { displayName, username, bio, personalChannel, birthDate, ...extraFields };
       if (isChangingPassword && newPassword.trim() !== '') payload.password = newPassword;
@@ -75,16 +87,21 @@ export default function SettingsPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setUser(data); localStorage.setItem('mesbook_user', JSON.stringify(data));
+        setUser(data); 
+        localStorage.setItem('mesbook_user', JSON.stringify(data));
+        
         const accounts = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
         const updatedAccounts = accounts.map((a: any) => String(a.id) === String(data.id) ? data : a);
         localStorage.setItem('mesbook_accounts', JSON.stringify(updatedAccounts));
-        setNewPassword(''); setIsChangingPassword(false);
+        
+        setNewPassword(''); 
+        setIsChangingPassword(false);
+        if (!skipFeedback && window.navigator && window.navigator.vibrate) window.navigator.vibrate(50);
       } else {
         const err = await res.json(); alert(err.error || "Ошибка сохранения");
       }
     } catch (e) {}
-    setIsSaving(false);
+    if (!skipFeedback) setIsSaving(false);
   };
 
   const handleLogout = () => {
@@ -98,48 +115,121 @@ export default function SettingsPage() {
 
   if (isLoading) return <div className="flex h-screen items-center justify-center bg-[#f2f2f7] dark:bg-black"><Loader2 className="animate-spin text-gray-500" size={32} /></div>;
 
+  // ==========================================
+  // ЭКРАН 1: ГЛАВНОЕ МЕНЮ НАСТРОЕК (TELEGRAM STYLE)
+  // ==========================================
+  if (currentView === 'main') {
+    return (
+      <div className="flex h-screen flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 font-sans">
+        <header className="flex items-center gap-6 px-4 pt-12 pb-4 sticky top-0 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
+          <button onClick={() => setLocation('/')} className="text-black dark:text-white transition-colors active:scale-95">
+            <ArrowLeft size={26} strokeWidth={2} />
+          </button>
+        </header>
+
+        <main className="flex-1 overflow-y-auto px-4 pb-20 w-full max-w-lg mx-auto">
+          {/* Блок профиля сверху */}
+          <div className="flex flex-col items-center pb-8 pt-2">
+            <div 
+              className="relative w-[100px] h-[100px] rounded-full shadow-md bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200/50 dark:border-zinc-800 mb-4 cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {user?.avatarUrl && user.avatarUrl.length > 5 ? (
+                <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[36px] font-medium text-black dark:text-white">{user?.displayName?.charAt(0).toUpperCase()}</span>
+              )}
+              {isUploading && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><Loader2 className="animate-spin text-white" size={24} /></div>
+              )}
+              <div className="absolute bottom-1.5 right-1/2 translate-x-1/2 text-white bg-black/40 backdrop-blur-sm rounded-full p-1.5 shadow-sm">
+                <Camera size={14} />
+              </div>
+            </div>
+            <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
+            <h2 className="text-[22px] font-bold text-black dark:text-white leading-tight">{user?.displayName}</h2>
+            <p className="text-[15px] text-gray-500 dark:text-zinc-400 mt-1">{user?.username}</p>
+          </div>
+
+          {/* Список настроек */}
+          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm border border-gray-100/50 dark:border-zinc-800/50 overflow-hidden flex flex-col">
+            <button 
+              onClick={() => setCurrentView('profile')}
+              className="flex items-center px-4 py-3 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 w-full text-left"
+            >
+              <div className="w-[36px] h-[36px] rounded-[10px] bg-blue-500 flex items-center justify-center text-white shrink-0 shadow-sm">
+                <UserCircle size={22} />
+              </div>
+              <div className="ml-4 flex-1">
+                <h3 className="text-[16px] text-black dark:text-white font-medium">Аккаунт</h3>
+                <p className="text-[13px] text-gray-400 mt-0.5">Номер, имя пользователя, «О себе»</p>
+              </div>
+              <ChevronRight size={20} className="text-gray-300 dark:text-zinc-600" />
+            </button>
+
+            <button 
+              onClick={() => alert("Настройки чатов в разработке")}
+              className="flex items-center px-4 py-3 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 w-full text-left"
+            >
+              <div className="w-[36px] h-[36px] rounded-[10px] bg-green-500 flex items-center justify-center text-white shrink-0 shadow-sm">
+                <MessageCircle size={22} />
+              </div>
+              <div className="ml-4 flex-1">
+                <h3 className="text-[16px] text-black dark:text-white font-medium">Настройки чатов</h3>
+                <p className="text-[13px] text-gray-400 mt-0.5">Обои, ночной режим, анимации</p>
+              </div>
+              <ChevronRight size={20} className="text-gray-300 dark:text-zinc-600" />
+            </button>
+
+            <button 
+              onClick={() => alert("Выбор языка в разработке")}
+              className="flex items-center px-4 py-3 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
+            >
+              <div className="w-[36px] h-[36px] rounded-[10px] bg-purple-500 flex items-center justify-center text-white shrink-0 shadow-sm">
+                <Globe size={22} />
+              </div>
+              <div className="ml-4 flex-1">
+                <h3 className="text-[16px] text-black dark:text-white font-medium">Язык</h3>
+                <p className="text-[13px] text-gray-400 mt-0.5">Русский</p>
+              </div>
+              <ChevronRight size={20} className="text-gray-300 dark:text-zinc-600" />
+            </button>
+          </div>
+          
+          <div className="mt-8">
+             <button 
+              onClick={handleLogout} 
+              className="w-full bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm px-5 py-4 flex items-center justify-center gap-3 text-red-500 font-semibold active:bg-gray-50 dark:active:bg-zinc-800 transition-colors text-[16px] border border-gray-100/50 dark:border-zinc-800/50"
+            >
+              <LogOut size={20} /> Выйти из аккаунта
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // ЭКРАН 2: РЕДАКТИРОВАНИЕ ПРОФИЛЯ
+  // ==========================================
   return (
-    <div className="flex h-screen flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative overflow-y-auto font-sans">
+    <div className="flex h-screen flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative overflow-y-auto font-sans animate-in slide-in-from-right duration-200">
       
       <header className="flex items-center gap-6 px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900/50 sticky top-0 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10 shadow-sm">
-        <button onClick={() => setLocation('/')} className="text-black dark:text-white transition-colors active:scale-95">
+        <button onClick={() => setCurrentView('main')} className="text-black dark:text-white transition-colors active:scale-95">
           <ArrowLeft size={26} strokeWidth={2} />
         </button>
         <h1 className="text-[20px] font-semibold text-black dark:text-white tracking-wide">
-          Профиль
+          Редактировать
         </h1>
       </header>
 
       <main className="flex-1 p-4 pb-32 w-full max-w-lg mx-auto">
-        
-        {/* АВАТАР */}
-        <div className="flex justify-center mb-6 relative">
-          <div 
-            className="relative w-[120px] h-[120px] rounded-full shadow-md bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-800 cursor-pointer" 
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {user?.avatarUrl && user.avatarUrl.length > 5 ? (
-              <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-[40px] font-medium text-black dark:text-white">{user?.displayName?.charAt(0).toUpperCase()}</span>
-            )}
-            {isUploading && (
-              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                <Loader2 className="animate-spin text-white" size={24} />
-              </div>
-            )}
-            <div className="absolute bottom-2 right-1/2 translate-x-1/2 text-white bg-black/50 backdrop-blur-sm rounded-full p-1.5 shadow-sm">
-              <Camera size={16} />
-            </div>
-          </div>
-          <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
-        </div>
-
         <div className="space-y-5">
           
           {/* БЛОК 1: ИМЯ И НИКНЕЙМ */}
-          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm border border-gray-100 dark:border-zinc-800/50 overflow-hidden">
-            <div className="px-5 py-2.5 border-b border-gray-100 dark:border-zinc-900/60">
+          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm border border-gray-100/50 dark:border-zinc-800/50 overflow-hidden mt-2">
+            <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-900/60">
               <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mt-1">Имя в чате</label>
               <input 
                 type="text" 
@@ -160,7 +250,7 @@ export default function SettingsPage() {
           </div>
 
           {/* БЛОК 2: О СЕБЕ */}
-          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm border border-gray-100 dark:border-zinc-800/50 p-5">
+          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm border border-gray-100/50 dark:border-zinc-800/50 p-5">
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">О себе</label>
             <textarea 
               rows={3} 
@@ -172,8 +262,8 @@ export default function SettingsPage() {
           </div>
 
           {/* БЛОК 3: КАНАЛ И ДЕНЬ РОЖДЕНИЯ */}
-          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm border border-gray-100 dark:border-zinc-800/50 overflow-hidden">
-            <div className="px-5 py-3 border-b border-gray-100 dark:border-zinc-900/60 flex items-center gap-4">
+          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm border border-gray-100/50 dark:border-zinc-800/50 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100/50 dark:border-zinc-900/60 flex items-center gap-4">
               <Volume2 size={22} className="text-gray-400" />
               <div className="flex-1">
                 <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Личный Канал</label>
@@ -202,7 +292,7 @@ export default function SettingsPage() {
           <p className="text-[12px] text-gray-500 px-4 text-center">Эта информация будет видна в вашем профиле.</p>
 
           {/* БЛОК 4: ПАРОЛЬ */}
-          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm border border-gray-100 dark:border-zinc-800/50 overflow-hidden">
+          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm border border-gray-100/50 dark:border-zinc-800/50 overflow-hidden">
             {!isChangingPassword ? (
               <button 
                 onClick={() => setIsChangingPassword(true)} 
@@ -229,17 +319,6 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
-
-          {/* БЛОК 5: ВЫХОД */}
-          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm border border-gray-100 dark:border-zinc-800/50 overflow-hidden mt-6">
-             <button 
-              onClick={handleLogout} 
-              className="w-full px-5 py-4 flex items-center justify-center gap-3 text-red-500 font-semibold active:bg-gray-50 dark:active:bg-zinc-800 transition-colors text-[16px]"
-            >
-              Выйти из аккаунта
-            </button>
-          </div>
-          
         </div>
       </main>
 
@@ -248,7 +327,7 @@ export default function SettingsPage() {
         <button 
           onClick={() => handleSave()} 
           disabled={isSaving || isUploading} 
-          className="w-full max-w-sm py-4 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-[20px] shadow-xl active:scale-95 transition-transform flex items-center justify-center pointer-events-auto text-[17px]"
+          className="w-full max-w-sm py-4 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-[24px] shadow-xl active:scale-95 transition-transform flex items-center justify-center pointer-events-auto text-[17px]"
         >
           {isSaving ? <Loader2 className="animate-spin" size={22} /> : 'Сохранить изменения'}
         </button>
