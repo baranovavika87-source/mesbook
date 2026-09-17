@@ -5,25 +5,12 @@ import { broadcastToChat, broadcastToWall } from "../lib/realtime";
 const router: IRouter = Router();
 
 function userFromRow(row: any) {
-  return {
-    id: Number(row.id),
-    username: row.username,
-    displayName: row.display_name,
-    avatarUrl: row.avatar_url,
-    bio: row.bio || "", 
-    lastSeen: Number(row.last_seen) || 0,
-    personalChannel: row.personal_channel || "",
-    birthDate: row.birth_date || "",
-  };
+  return { id: Number(row.id), username: row.username, displayName: row.display_name, avatarUrl: row.avatar_url, bio: row.bio || "", lastSeen: Number(row.last_seen) || 0, personalChannel: row.personal_channel || "", birthDate: row.birth_date || "" };
 }
 
 async function getUser(database: any, id: number) {
-  const result = await database.execute({
-    sql: "SELECT id, username, display_name, avatar_url, bio, last_seen, personal_channel, birth_date FROM users WHERE id = ?", 
-    args: [id],
-  });
-  const row = result.rows[0];
-  return row ? userFromRow(row) : null;
+  const result = await database.execute({ sql: "SELECT id, username, display_name, avatar_url, bio, last_seen, personal_channel, birth_date FROM users WHERE id = ?", args: [id] });
+  return result.rows[0] ? userFromRow(result.rows[0]) : null;
 }
 
 function parseChatId(currentUserId: number, paramId: string) {
@@ -78,11 +65,33 @@ router.patch("/me", async (req, res): Promise<void> => {
   if (avatarUrl !== undefined) await database.execute({ sql: "UPDATE users SET avatar_url = ? WHERE id = ?", args: [avatarUrl, currentUserId] });
   if (bio !== undefined) await database.execute({ sql: "UPDATE users SET bio = ? WHERE id = ?", args: [bio, currentUserId] });
   if (password !== undefined && password.trim() !== "") await database.execute({ sql: "UPDATE users SET password = ? WHERE id = ?", args: [password, currentUserId] });
-  
   if (personalChannel !== undefined) await database.execute({ sql: "UPDATE users SET personal_channel = ? WHERE id = ?", args: [personalChannel, currentUserId] });
   if (birthDate !== undefined) await database.execute({ sql: "UPDATE users SET birth_date = ? WHERE id = ?", args: [birthDate, currentUserId] });
   
   res.json(await getUser(database, currentUserId));
+});
+
+// НОВЫЙ РОУТ ДЛЯ РЕДАКТИРОВАНИЯ КАНАЛОВ И ГРУПП
+router.patch("/chats/:chatId", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
+  const chatId = Number(req.params.chatId);
+  const { name, description, avatarUrl } = req.body;
+  const database = await getDatabase();
+  
+  const memberRes = await database.execute({ sql: "SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] });
+  if (!memberRes.rows.length || memberRes.rows[0].role !== 'admin') { res.status(403).json({ error: "Только администратор может изменять этот чат" }); return; }
+
+  const updates = [];
+  const args = [];
+  if (name !== undefined) { updates.push("name = ?"); args.push(name); }
+  if (description !== undefined) { updates.push("description = ?"); args.push(description); }
+  if (avatarUrl !== undefined) { updates.push("avatar_url = ?"); args.push(avatarUrl); }
+
+  if (updates.length > 0) {
+    args.push(chatId - 100000000);
+    await database.execute({ sql: `UPDATE chats SET ${updates.join(", ")} WHERE id = ?`, args });
+  }
+  res.json({ success: true });
 });
 
 router.get("/users/search", async (req, res) => {
@@ -98,16 +107,14 @@ router.get("/users/search", async (req, res) => {
   });
 
   const chatsResult = await db.execute({
-    sql: "SELECT id, name, is_group, is_channel, avatar_url FROM chats WHERE name LIKE ?",
+    sql: "SELECT id, name, is_group, is_channel, avatar_url, description FROM chats WHERE name LIKE ?",
     args: [searchPattern1]
   });
 
   const foundChats = chatsResult.rows.map((r: any) => ({
-    id: Number(r.id) + 100000000,
-    displayName: r.name,
-    isGroup: Number(r.is_group) === 1,
-    isChannel: Number(r.is_channel) === 1,
-    avatarUrl: r.avatar_url || ""
+    id: Number(r.id) + 100000000, displayName: r.name,
+    isGroup: Number(r.is_group) === 1, isChannel: Number(r.is_channel) === 1,
+    avatarUrl: r.avatar_url || "", description: r.description || ""
   }));
 
   return res.json([...usersResult.rows, ...foundChats]);
@@ -123,30 +130,23 @@ router.get("/users/:id", async (req, res): Promise<void> => {
 
 router.post("/chats/create", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const { name, isGroup, isChannel, avatarUrl } = req.body;
+  const { name, description, isGroup, isChannel, avatarUrl } = req.body;
   if (!name) { res.status(400).json({ error: "Name is required" }); return; }
   
   const database = await getDatabase();
   await ensureMembersTable(database);
 
   await database.execute({
-    sql: "INSERT INTO chats (participant_id, created_at, name, is_group, is_channel, avatar_url) VALUES (?, ?, ?, ?, ?, ?)",
-    args: [currentUserId, new Date().toISOString(), name, isGroup ? 1 : 0, isChannel ? 1 : 0, avatarUrl || ""]
+    sql: "INSERT INTO chats (participant_id, created_at, name, description, is_group, is_channel, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    args: [currentUserId, new Date().toISOString(), name, description || "", isGroup ? 1 : 0, isChannel ? 1 : 0, avatarUrl || ""]
   });
   const result = await database.execute("SELECT last_insert_rowid() as id");
   const groupId = Number(result.rows[0]?.id) + 100000000;
   
-  await database.execute({
-    sql: "INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, 'admin')",
-    args: [groupId, currentUserId]
-  });
-
-  await database.execute({
-    sql: "INSERT INTO messages (chat_id, sender_id, content, created_at, read_by_me) VALUES (?, ?, ?, ?, 1)",
-    args: [groupId, currentUserId, isGroup ? "Группа создана" : "Канал создан", new Date().toISOString()]
-  });
+  await database.execute({ sql: "INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, 'admin')", args: [groupId, currentUserId] });
+  await database.execute({ sql: "INSERT INTO messages (chat_id, sender_id, content, created_at, read_by_me) VALUES (?, ?, ?, ?, 1)", args: [groupId, currentUserId, isGroup ? "Группа создана" : "Канал создан", new Date().toISOString()] });
   
-  res.json({ id: groupId, name, isGroup, isChannel, avatarUrl });
+  res.json({ id: groupId, name, isGroup, isChannel, avatarUrl, description });
 });
 
 router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
@@ -155,11 +155,8 @@ router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
   const database = await getDatabase();
   await ensureMembersTable(database);
   
-  const result = await database.execute({
-    sql: "SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?",
-    args: [chatId, currentUserId]
-  });
-  res.json({ isMember: result.rows.length > 0 });
+  const result = await database.execute({ sql: "SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] });
+  res.json({ isMember: result.rows.length > 0, role: result.rows[0]?.role });
 });
 
 router.post("/chats/:chatId/join", async (req, res): Promise<void> => {
@@ -167,14 +164,7 @@ router.post("/chats/:chatId/join", async (req, res): Promise<void> => {
   const chatId = Number(req.params.chatId);
   const database = await getDatabase();
   await ensureMembersTable(database);
-  
-  try {
-    await database.execute({
-      sql: "INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, 'member')",
-      args: [chatId, currentUserId]
-    });
-  } catch(e) {}
-
+  try { await database.execute({ sql: "INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, 'member')", args: [chatId, currentUserId] }); } catch(e) {}
   res.json({ success: true });
 });
 
@@ -184,18 +174,9 @@ router.get("/chats", async (req, res): Promise<void> => {
   await ensureMembersTable(database);
   
   const chatRows = await database.execute({
-    sql: `SELECT 
-        m.chat_id, 
-        m.content as last_message,
-        m.created_at as last_message_at,
-        (SELECT COUNT(*) FROM messages WHERE chat_id = m.chat_id AND sender_id != ? AND read_by_me = 0) AS unread_count
-     FROM messages m
-     WHERE m.id IN (SELECT MAX(id) FROM messages GROUP BY chat_id)
-     AND (
-       CAST(m.chat_id / 10000 AS INT) = ? 
-       OR m.chat_id % 10000 = ? 
-       OR (m.chat_id >= 100000000 AND EXISTS (SELECT 1 FROM chat_members cm WHERE cm.chat_id = m.chat_id AND cm.user_id = ?))
-     )
+    sql: `SELECT m.chat_id, m.content as last_message, m.created_at as last_message_at, (SELECT COUNT(*) FROM messages WHERE chat_id = m.chat_id AND sender_id != ? AND read_by_me = 0) AS unread_count
+     FROM messages m WHERE m.id IN (SELECT MAX(id) FROM messages GROUP BY chat_id)
+     AND (CAST(m.chat_id / 10000 AS INT) = ? OR m.chat_id % 10000 = ? OR (m.chat_id >= 100000000 AND EXISTS (SELECT 1 FROM chat_members cm WHERE cm.chat_id = m.chat_id AND cm.user_id = ?)))
      ORDER BY m.created_at DESC`,
     args: [currentUserId, currentUserId, currentUserId, currentUserId]
   });
@@ -207,10 +188,10 @@ router.get("/chats", async (req, res): Promise<void> => {
     }
     if (cId >= 100000000) {
       const internalId = cId - 100000000;
-      const groupResult = await database.execute({ sql: "SELECT name, is_group, is_channel, avatar_url FROM chats WHERE id = ?", args: [internalId] });
+      const groupResult = await database.execute({ sql: "SELECT name, is_group, is_channel, avatar_url, description FROM chats WHERE id = ?", args: [internalId] });
       const gRow = groupResult.rows[0];
       if (gRow) {
-        return { id: cId, participant: { id: cId, displayName: gRow.name, avatarUrl: gRow.avatar_url || "", isGroup: Number(gRow.is_group)===1, isChannel: Number(gRow.is_channel)===1 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, unreadCount: Number(row.unread_count) };
+        return { id: cId, participant: { id: cId, displayName: gRow.name, avatarUrl: gRow.avatar_url || "", description: gRow.description || "", isGroup: Number(gRow.is_group)===1, isChannel: Number(gRow.is_channel)===1 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, unreadCount: Number(row.unread_count) };
       }
       return null;
     }
@@ -241,8 +222,7 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const database = await getDatabase();
   const result = await database.execute({
     sql: `SELECT m.id, m.chat_id, m.sender_id, u.display_name AS sender_name, m.content, m.created_at, m.read_by_me
-     FROM messages m LEFT JOIN users u ON u.id = m.sender_id
-     WHERE m.chat_id = ? ORDER BY m.id ASC`,
+     FROM messages m LEFT JOIN users u ON u.id = m.sender_id WHERE m.chat_id = ? ORDER BY m.id ASC`,
     args: [chatId]
   });
 
@@ -272,8 +252,7 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   
   const result = await database.execute({
     sql: `SELECT m.id, m.chat_id, m.sender_id, u.display_name AS sender_name, m.content, m.created_at, m.read_by_me
-     FROM messages m LEFT JOIN users u ON u.id = m.sender_id
-     WHERE m.chat_id = ? ORDER BY m.id DESC LIMIT 1`,
+     FROM messages m LEFT JOIN users u ON u.id = m.sender_id WHERE m.chat_id = ? ORDER BY m.id DESC LIMIT 1`,
     args: [chatId]
   });
   
@@ -298,33 +277,14 @@ router.get("/wall/feed", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
   await ensureMembersTable(database);
-  
   try {
     const feedResult = await database.execute({
-      sql: `
-        SELECT m.id, m.chat_id, c.name as channel_name, m.content, m.created_at
-        FROM messages m
-        JOIN chat_members cm ON m.chat_id = cm.chat_id
-        JOIN chats c ON (m.chat_id - 100000000) = c.id
-        WHERE cm.user_id = ? AND c.is_channel = 1
-        ORDER BY m.created_at DESC
-        LIMIT 50
-      `,
+      sql: `SELECT m.id, m.chat_id, c.name as channel_name, m.content, m.created_at FROM messages m JOIN chat_members cm ON m.chat_id = cm.chat_id JOIN chats c ON (m.chat_id - 100000000) = c.id WHERE cm.user_id = ? AND c.is_channel = 1 ORDER BY m.created_at DESC LIMIT 50`,
       args: [currentUserId]
     });
-
-    const posts = feedResult.rows.map((row: any) => ({
-      id: Number(row.id),
-      chatId: Number(row.chat_id),
-      channelName: row.channel_name,
-      content: row.content,
-      createdAt: row.created_at
-    }));
-
+    const posts = feedResult.rows.map((row: any) => ({ id: Number(row.id), chatId: Number(row.chat_id), channelName: row.channel_name, content: row.content, createdAt: row.created_at }));
     res.json(posts);
-  } catch (e) {
-    res.json([]);
-  }
+  } catch (e) { res.json([]); }
 });
 
 router.post("/register", async (req, res) => {
