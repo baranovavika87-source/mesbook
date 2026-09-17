@@ -4,49 +4,23 @@ const url = process.env.TURSO_DATABASE_URL?.replace("libsql://", "https://") as 
 const authToken = process.env.TURSO_AUTH_TOKEN as string;
 
 function formatArg(arg: any) {
-  if (arg === null || arg === undefined) {
-    return { type: "null" };
-  }
-  if (typeof arg === "number") {
-    if (Number.isInteger(arg)) {
-      return { type: "integer", value: String(arg) };
-    }
-    return { type: "float", value: arg };
-  }
-  if (typeof arg === "boolean") {
-    return { type: "integer", value: arg ? "1" : "0" };
-  }
+  if (arg === null || arg === undefined) return { type: "null" };
+  if (typeof arg === "number") return Number.isInteger(arg) ? { type: "integer", value: String(arg) } : { type: "float", value: arg };
+  if (typeof arg === "boolean") return { type: "integer", value: arg ? "1" : "0" };
   return { type: "text", value: String(arg) };
 }
 
 async function tursoQuery(sql: string, args: any[] = []) {
   const formattedArgs = args.map(formatArg);
-  
   const response = await fetch(`${url}/v2/pipeline`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${authToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      requests: [
-        { type: "execute", stmt: { sql, args: formattedArgs } },
-        { type: "close" }
-      ]
-    }),
+    method: "POST", headers: { "Authorization": `Bearer ${authToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ requests: [ { type: "execute", stmt: { sql, args: formattedArgs } }, { type: "close" } ] }),
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Turso HTTP error: ${response.status} - ${errText}`);
-  }
-
+  if (!response.ok) throw new Error(`Turso HTTP error`);
   const data: any = await response.json();
   const result = data.results[0];
-  
-  if (result.type === "error") {
-    throw new Error(`Turso SQL error: ${result.error.message}`);
-  }
+  if (result.type === "error") throw new Error(`Turso SQL error`);
 
   const cols = result.response.result.cols.map((c: any) => c.name);
   const rows = result.response.result.rows.map((row: any[]) => {
@@ -57,7 +31,6 @@ async function tursoQuery(sql: string, args: any[] = []) {
     });
     return obj;
   });
-
   return { rows };
 }
 
@@ -71,18 +44,17 @@ export async function initializeDatabase() {
     try { await tursoQuery(`ALTER TABLE chats ADD COLUMN name TEXT`); } catch (e) {}
     try { await tursoQuery(`ALTER TABLE chats ADD COLUMN is_group INTEGER DEFAULT 0`); } catch (e) {}
     try { await tursoQuery(`ALTER TABLE chats ADD COLUMN is_channel INTEGER DEFAULT 0`); } catch (e) {}
-    
-    // НОВЫЕ ПОЛЯ ПРОФИЛЯ И АВАТАРКИ ЧАТОВ
     try { await tursoQuery(`ALTER TABLE chats ADD COLUMN avatar_url TEXT DEFAULT ''`); } catch (e) {}
+    try { await tursoQuery(`ALTER TABLE chats ADD COLUMN description TEXT DEFAULT ''`); } catch (e) {}
+    
     try { await tursoQuery(`ALTER TABLE users ADD COLUMN personal_channel TEXT DEFAULT ''`); } catch (e) {}
     try { await tursoQuery(`ALTER TABLE users ADD COLUMN birth_date TEXT DEFAULT ''`); } catch (e) {}
 
     logger.info("✅ Таблицы в Turso успешно созданы/обновлены через HTTP API");
   } catch (error: any) {
-    logger.error({ message: error?.message }, "❌ Ошибка инициализации Turso HTTP");
+    logger.error("❌ Ошибка инициализации Turso HTTP");
   }
 }
-
 initializeDatabase();
 
 const dbAdapter = {
@@ -92,37 +64,19 @@ const dbAdapter = {
     return await tursoQuery(sql, args);
   }
 };
-
-export async function getDatabase() {
-  return dbAdapter;
-}
+export async function getDatabase() { return dbAdapter; }
 
 export async function getUserByUsername(database: any, username: string) {
-  const result = await database.execute({
-    // Добавлены новые колонки для отдачи полных профилей
-    sql: "SELECT id, username, password, display_name, avatar_url, bio, last_seen, personal_channel, birth_date FROM users WHERE username = ?",
-    args: [username],
-  });
+  const result = await database.execute({ sql: "SELECT id, username, password, display_name, avatar_url, bio, last_seen, personal_channel, birth_date FROM users WHERE username = ?", args: [username] });
   return result.rows[0] || null;
 }
-
 export async function createUser(database: any, username: string, password: string, displayName: string, avatarUrl?: string) {
-  await database.execute({
-    sql: "INSERT INTO users (username, password, display_name, avatar_url, bio, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
-    args: [username, password, displayName, avatarUrl || "", "", Date.now()],
-  });
-  
+  await database.execute({ sql: "INSERT INTO users (username, password, display_name, avatar_url, bio, last_seen) VALUES (?, ?, ?, ?, ?, ?)", args: [username, password, displayName, avatarUrl || "", "", Date.now()] });
   const result = await database.execute("SELECT last_insert_rowid() as id");
   return Number(result.rows[0]?.id) || 1;
 }
-
 export async function searchUsers(database: any, query: string, currentUserId: number) {
   const searchPattern = "%" + query + "%";
-  const result = await database.execute({
-    // Добавлены новые колонки для отдачи полных профилей
-    sql: "SELECT id, display_name as displayName, avatar_url as avatarUrl, bio, last_seen, personal_channel, birth_date FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?",
-    args: [searchPattern, searchPattern, currentUserId],
-  });
+  const result = await database.execute({ sql: "SELECT id, display_name as displayName, avatar_url as avatarUrl, bio, last_seen, personal_channel, birth_date FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?", args: [searchPattern, searchPattern, currentUserId] });
   return result.rows;
 }
-
