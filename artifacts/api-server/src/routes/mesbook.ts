@@ -5,12 +5,25 @@ import { broadcastToChat, broadcastToWall } from "../lib/realtime";
 const router: IRouter = Router();
 
 function userFromRow(row: any) {
-  return { id: Number(row.id), username: row.username, displayName: row.display_name, avatarUrl: row.avatar_url, bio: row.bio || "", lastSeen: Number(row.last_seen) || 0, personalChannel: row.personal_channel || "", birthDate: row.birth_date || "" };
+  return {
+    id: Number(row.id),
+    username: row.username,
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url,
+    bio: row.bio || "", 
+    lastSeen: Number(row.last_seen) || 0,
+    personalChannel: row.personal_channel || "",
+    birthDate: row.birth_date || "",
+  };
 }
 
 async function getUser(database: any, id: number) {
-  const result = await database.execute({ sql: "SELECT id, username, display_name, avatar_url, bio, last_seen, personal_channel, birth_date FROM users WHERE id = ?", args: [id] });
-  return result.rows[0] ? userFromRow(result.rows[0]) : null;
+  const result = await database.execute({
+    sql: "SELECT id, username, display_name, avatar_url, bio, last_seen, personal_channel, birth_date FROM users WHERE id = ?", 
+    args: [id],
+  });
+  const row = result.rows[0];
+  return row ? userFromRow(row) : null;
 }
 
 function parseChatId(currentUserId: number, paramId: string) {
@@ -65,21 +78,31 @@ router.patch("/me", async (req, res): Promise<void> => {
   if (avatarUrl !== undefined) await database.execute({ sql: "UPDATE users SET avatar_url = ? WHERE id = ?", args: [avatarUrl, currentUserId] });
   if (bio !== undefined) await database.execute({ sql: "UPDATE users SET bio = ? WHERE id = ?", args: [bio, currentUserId] });
   if (password !== undefined && password.trim() !== "") await database.execute({ sql: "UPDATE users SET password = ? WHERE id = ?", args: [password, currentUserId] });
+  
   if (personalChannel !== undefined) await database.execute({ sql: "UPDATE users SET personal_channel = ? WHERE id = ?", args: [personalChannel, currentUserId] });
   if (birthDate !== undefined) await database.execute({ sql: "UPDATE users SET birth_date = ? WHERE id = ?", args: [birthDate, currentUserId] });
   
   res.json(await getUser(database, currentUserId));
 });
 
-// НОВЫЙ РОУТ ДЛЯ РЕДАКТИРОВАНИЯ КАНАЛОВ И ГРУПП
+// РОУТ ДЛЯ РЕДАКТИРОВАНИЯ КАНАЛОВ И ГРУПП С УМНЫМ ФОЛЛБЕКОМ
 router.patch("/chats/:chatId", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const chatId = Number(req.params.chatId);
   const { name, description, avatarUrl } = req.body;
   const database = await getDatabase();
   
+  let isAdmin = false;
   const memberRes = await database.execute({ sql: "SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] });
-  if (!memberRes.rows.length || memberRes.rows[0].role !== 'admin') { res.status(403).json({ error: "Только администратор может изменять этот чат" }); return; }
+  if (memberRes.rows.length && memberRes.rows[0].role === 'admin') {
+    isAdmin = true;
+  } else if (chatId >= 100000000) {
+    // Если в chat_members пусто, проверяем создателя
+    const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
+    if (chatRes.rows[0]?.participant_id === currentUserId) isAdmin = true;
+  }
+
+  if (!isAdmin) { res.status(403).json({ error: "Только администратор может изменять этот чат" }); return; }
 
   const updates = [];
   const args = [];
@@ -156,7 +179,21 @@ router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
   await ensureMembersTable(database);
   
   const result = await database.execute({ sql: "SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] });
-  res.json({ isMember: result.rows.length > 0, role: result.rows[0]?.role });
+  
+  let role = result.rows[0]?.role;
+  let isMember = result.rows.length > 0;
+
+  // ФОЛЛБЕК ДЛЯ СТАРЫХ ГРУПП: если пользователь - создатель, он админ
+  if (!role && chatId >= 100000000) {
+     const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
+     if (chatRes.rows[0]?.participant_id === currentUserId) {
+        role = 'admin';
+        isMember = true;
+        try { await database.execute({ sql: "INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, 'admin')", args: [chatId, currentUserId] }); } catch(e) {}
+     }
+  }
+
+  res.json({ isMember, role: role || 'member' });
 });
 
 router.post("/chats/:chatId/join", async (req, res): Promise<void> => {
@@ -309,3 +346,4 @@ router.post("/login", async (req, res) => {
 });
 
 export default router;
+
