@@ -262,24 +262,29 @@ export default function ChatPage() {
     }
     
     if (msgContent.startsWith('> ')) {
+      const parts = msgContent.split('\n\n');
+      let quotedText = parts[0].replace('> ', '');
+      if (quotedText.startsWith('[MEDIA]')) {
+        quotedText = 'Фотография';
+      }
+      const replyText = parts.slice(1).join('\n\n');
+
       return (
-        <div className="mb-1">
-          <div className={'pl-2 border-l-[3px] text-[11px] opacity-70 mb-1 ' + (isMe ? 'border-white/40 dark:border-black/40' : 'border-black/30 dark:border-white/30')}>
-            {msgContent.split('\n\n')[0].replace('> ', '')}
+        <div className="mb-1 flex flex-col w-full overflow-hidden">
+          <div className={'pl-2 border-l-[3px] text-[12px] font-medium opacity-80 mb-1.5 truncate max-w-full ' + (isMe ? 'border-white/40 dark:border-black/40' : 'border-black/30 dark:border-white/30')}>
+            {quotedText}
           </div>
-          <p className="text-[15px] leading-snug break-words">{msgContent.split('\n\n').slice(1).join('\n\n')}</p>
+          <p className="text-[15px] leading-snug break-words whitespace-pre-wrap">{replyText}</p>
         </div>
       );
     }
-    return <p className="text-[15px] leading-[1.3] break-words">{msgContent}</p>;
+    return <p className="text-[15px] leading-[1.3] break-words whitespace-pre-wrap">{msgContent}</p>;
   };
 
   return (
     <div className="flex flex-col h-screen bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative font-sans">
       
-      {/* ---------------------------------------------------------
-          ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА
-      --------------------------------------------------------- */}
+      {/* ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА */}
       {showProfile && chatInfo?.participant && (
         <div className="fixed inset-0 z-50 bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-bottom duration-200 overflow-y-auto">
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900 sticky top-0 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
@@ -315,7 +320,7 @@ export default function ChatPage() {
               </div>
 
               <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100/50 dark:border-zinc-800/50">
-                <div className="px-5 py-2.5 border-b border-gray-100 dark:border-zinc-900/60">
+                <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-900/60">
                   <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mt-1">Название</label>
                   <input 
                     type="text" 
@@ -387,9 +392,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ---------------------------------------------------------
-          ШАПКА ЧАТА
-      --------------------------------------------------------- */}
+      {/* ШАПКА ЧАТА */}
       <header className="px-3 pt-10 pb-3 border-b border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-3 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-md relative z-10 shadow-sm">
         <Link href="/"><a className="p-2 text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
@@ -406,9 +409,7 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* ---------------------------------------------------------
-          ОСНОВНОЕ ОКНО СООБЩЕНИЙ
-      --------------------------------------------------------- */}
+      {/* ОСНОВНОЕ ОКНО СООБЩЕНИЙ */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4">
         <div className="flex flex-col">
           {(() => {
@@ -463,7 +464,7 @@ export default function ChatPage() {
                               </div>
                             )}
                             
-                            {/* ИКОНКА УДАЛЕНИЯ (ЗАМЕТНАЯ И КЛИКАБЕЛЬНАЯ) */}
+                            {/* ИКОНКА УДАЛЕНИЯ */}
                             {!msg.isSending && (
                               <button 
                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(msg.id); }} 
@@ -490,7 +491,7 @@ export default function ChatPage() {
           <div className="flex items-center justify-between mb-2 mx-1 px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-[16px] border-l-[3px] border-black dark:border-white shadow-sm">
             <div className="flex flex-col overflow-hidden mr-4">
               <span className="text-[11px] font-bold text-black dark:text-white uppercase tracking-wider mb-0.5">Ответ</span>
-              <span className="text-[13px] text-gray-500 dark:text-zinc-400 truncate">{replyingTo.content.startsWith('[MEDIA]') ? 'Вложение' : replyingTo.content.replace(/^> .*\n\n/, '')}</span>
+              <span className="text-[13px] text-gray-500 dark:text-zinc-400 truncate">{replyingTo.content.startsWith('[MEDIA]') ? 'Фотография' : replyingTo.content.replace(/^> .*\n\n/, '')}</span>
             </div>
             <button type="button" onClick={() => setReplyingTo(null)} className="p-1.5 flex-shrink-0 text-gray-400 hover:text-black dark:hover:text-white rounded-full transition-colors"><X size={18} /></button>
           </div>
@@ -510,7 +511,6 @@ export default function ChatPage() {
             </button>
             <input className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" value={content} onChange={(e) => setContent(e.target.value)} placeholder="Сообщение" />
             
-            {/* ИСПРАВЛЕНИЕ: СИНЯЯ КНОПКА ОТПРАВИТЬ С ФОНОМ */}
             <button 
               type="submit" 
               disabled={!content.trim()} 
@@ -524,4 +524,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
