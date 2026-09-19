@@ -39,6 +39,7 @@ export default function ChatPage() {
   
   const [isMember, setIsMember] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isMuted, setIsMuted] = useState(false); // Состояние для кнопки звука
   
   const [membersCount, setMembersCount] = useState<number | null>(null);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
@@ -228,14 +229,8 @@ export default function ChatPage() {
     try {
       const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.secure_url) {
-        setEditChatAvatar(data.secure_url);
-      } else {
-        alert("Ошибка загрузки: " + (data.error?.message || "неизвестная ошибка"));
-      }
-    } catch (err) {
-      alert("Ошибка сети при загрузке аватара");
-    }
+      if (data.secure_url) setEditChatAvatar(data.secure_url);
+    } catch (err) {}
     setIsSavingChat(false);
   };
 
@@ -376,16 +371,17 @@ export default function ChatPage() {
                     className="w-full bg-transparent py-1.5 text-[17px] font-medium text-black dark:text-white outline-none" 
                   />
                 </div>
-                {/* ИСПРАВЛЕНИЕ: Поле описания доступно для групп и каналов */}
-                <div className="px-5 py-4">
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</label>
-                  <textarea 
-                    rows={4} 
-                    value={editChatDesc} 
-                    onChange={e => setEditChatDesc(e.target.value)} 
-                    className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
-                  />
-                </div>
+                {isChannel && (
+                  <div className="px-5 py-4">
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</label>
+                    <textarea 
+                      rows={4} 
+                      value={editChatDesc} 
+                      onChange={e => setEditChatDesc(e.target.value)} 
+                      className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
+                    />
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -558,6 +554,15 @@ export default function ChatPage() {
               {isChannel ? 'Подписаться' : 'Вступить в группу'}
             </button>
           </div>
+        ) : (isChannel && !isAdmin) ? (
+          <div className="flex items-center justify-center pt-2 pb-2">
+            <button 
+              onClick={() => setIsMuted(!isMuted)}
+              className="text-gray-500 hover:text-black dark:hover:text-white transition-colors text-[16px] font-medium active:scale-95"
+            >
+              {isMuted ? 'Включить звук' : 'Убрать звук'}
+            </button>
+          </div>
         ) : (
           <form onSubmit={handleSend} className="flex items-center gap-2 px-1">
             <input type="file" accept="image/*,video/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
@@ -565,8 +570,6 @@ export default function ChatPage() {
               {isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={24} />}
             </button>
             <input className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" value={content} onChange={(e) => setContent(e.target.value)} placeholder="Сообщение" />
-            
-            {/* КНОПКА ОТПРАВКИ */}
             <button 
               type="submit" 
               disabled={!content.trim()} 
