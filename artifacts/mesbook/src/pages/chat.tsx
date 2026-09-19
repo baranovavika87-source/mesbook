@@ -173,8 +173,14 @@ export default function ChatPage() {
     try {
       const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.secure_url) { await sendMessageToServer(`[MEDIA] ${data.secure_url}`); } else { alert("Ошибка при загрузке"); }
-    } catch (err: any) { alert("Ошибка при загрузке"); } finally {
+      if (data.secure_url) { 
+        await sendMessageToServer(`[MEDIA] ${data.secure_url}`); 
+      } else { 
+        alert("Ошибка облака Cloudinary: " + (data.error?.message || "неизвестная ошибка")); 
+      }
+    } catch (err: any) { 
+      alert("Ошибка сети при загрузке медиа"); 
+    } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -239,15 +245,17 @@ export default function ChatPage() {
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
       if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic\vert{}heif)$/i, '.jpg');
       
-      const radiusClass = isMe ? 'rounded-[20px] rounded-tr-[4px]' : 'rounded-[20px] rounded-tl-[4px]';
-      
       return (
-        // Жестко заданные размеры (220x220), чтобы фото НИКОГДА не сжималось, с тонкой рамкой!
-        <div style={{ width: '220px', height: '220px' }} className={`relative bg-gray-100 dark:bg-zinc-800 overflow-hidden border border-gray-200/60 dark:border-zinc-800/60 shadow-sm ${radiusClass}`}>
+        <div className="relative flex items-center justify-center overflow-hidden rounded-[16px]">
           {isVideo ? (
-            <video src={url} controls className="absolute inset-0 w-full h-full object-cover" />
+            <video src={url} controls className="w-full h-auto max-w-[280px] max-h-[400px] object-contain" />
           ) : (
-            <img src={url} alt="Media" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.currentTarget.src = 'https://placehold.co/220x220/png?text=Ошибка'; }} />
+            <img 
+              src={url} 
+              alt="Media" 
+              className="w-full h-auto max-w-[280px] max-h-[400px] object-contain min-h-[120px] min-w-[120px] bg-gray-100/5 dark:bg-white/5" 
+              onError={(e) => { e.currentTarget.src = 'https://placehold.co/280x200/1c1c1e/ffffff?text=Image+Not+Found'; }}
+            />
           )}
         </div>
       );
@@ -269,7 +277,9 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-screen bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative font-sans">
       
-      {/* ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА */}
+      {/* ---------------------------------------------------------
+          ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА
+      --------------------------------------------------------- */}
       {showProfile && chatInfo?.participant && (
         <div className="fixed inset-0 z-50 bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-bottom duration-200 overflow-y-auto">
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900 sticky top-0 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
@@ -377,7 +387,9 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ШАПКА ЧАТА */}
+      {/* ---------------------------------------------------------
+          ШАПКА ЧАТА
+      --------------------------------------------------------- */}
       <header className="px-3 pt-10 pb-3 border-b border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-3 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-md relative z-10 shadow-sm">
         <Link href="/"><a className="p-2 text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
@@ -394,7 +406,9 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* ОСНОВНОЕ ОКНО СООБЩЕНИЙ */}
+      {/* ---------------------------------------------------------
+          ОСНОВНОЕ ОКНО СООБЩЕНИЙ
+      --------------------------------------------------------- */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4">
         <div className="flex flex-col">
           {(() => {
@@ -411,7 +425,7 @@ export default function ChatPage() {
               if (showDate) lastDateStr = currentDateStr;
 
               return (
-                <div key={msg.id} className="flex flex-col w-full mb-1">
+                <div key={msg.id} className="flex flex-col w-full mb-1.5">
                   
                   {/* Плашка с датой */}
                   {showDate && (
@@ -424,17 +438,16 @@ export default function ChatPage() {
                   
                   <div className={'flex flex-col max-w-[80%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')} onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }} onTouchEnd={(e) => { if (touchStartRef.current !== null) { const touchEndX = e.changedTouches[0].clientX; const diff = touchStartRef.current - touchEndX; if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } touchStartRef.current = null; } }}>
                     
-                    {/* РАЗДЕЛИЛИ СТИЛИ ДЛЯ КАРТИНОК И ТЕКСТА */}
                     <div className={
                       isMedia 
-                        ? `relative shadow-sm` // Для картинок: обертка без отступов, рамку рисует функция renderMessageContent
+                        ? `relative shadow-sm p-1 bg-white dark:bg-[#1c1c1e] border border-gray-100/50 dark:border-zinc-800 rounded-[20px] ${isMe ? 'rounded-tr-[4px]' : 'rounded-tl-[4px]'}`
                         : `shadow-sm relative min-w-[75px] px-3.5 pt-2 pb-5 pr-12 rounded-[20px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-[4px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-tl-[4px] border border-gray-100/50 dark:border-zinc-800'}`
                     }>
                       
                       {renderMessageContent(msg.content, isMe)}
                       
-                      {/* БЛОК С ГАЛОЧКАМИ И ВРЕМЕНЕМ */}
-                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium ${isMedia ? 'bottom-2.5 right-2.5 bg-black/50 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10' : 'bottom-1 right-2.5 text-gray-400 dark:text-zinc-500'}`}>
+                      {/* БЛОК С ГАЛОЧКАМИ, ВРЕМЕНЕМ И КОРЗИНОЙ */}
+                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium ${isMedia ? 'bottom-2.5 right-2.5 bg-black/50 text-white px-2.5 py-1 rounded-full backdrop-blur-md z-10' : 'bottom-1 right-2.5 text-gray-400 dark:text-zinc-500'}`}>
                         <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                         
                         {isMe && (
@@ -448,6 +461,16 @@ export default function ChatPage() {
                                 <Check size={11} strokeWidth={2.5} />
                                 {(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && <Check size={11} strokeWidth={2.5} />}
                               </div>
+                            )}
+                            
+                            {/* ИКОНКА УДАЛЕНИЯ (ЗАМЕТНАЯ И КЛИКАБЕЛЬНАЯ) */}
+                            {!msg.isSending && (
+                              <button 
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(msg.id); }} 
+                                className="hover:text-red-500 ml-1.5 transition-colors cursor-pointer z-20"
+                              >
+                                <Trash2 size={13} />
+                              </button>
                             )}
                           </div>
                         )}
@@ -487,9 +510,13 @@ export default function ChatPage() {
             </button>
             <input className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" value={content} onChange={(e) => setContent(e.target.value)} placeholder="Сообщение" />
             
-            {/* ИСПРАВЛЕНИЕ: КНОПКА-СТРЕЛОЧКА В СТИЛЕ APPLE (БЕЗ ФОНА) */}
-            <button type="submit" disabled={!content.trim()} className="w-10 h-10 flex-shrink-0 flex items-center justify-center disabled:opacity-30 transition-transform active:scale-95 text-black dark:text-white">
-              <ChevronRight size={28} strokeWidth={2.5} />
+            {/* ИСПРАВЛЕНИЕ: СИНЯЯ КНОПКА ОТПРАВИТЬ С ФОНОМ */}
+            <button 
+              type="submit" 
+              disabled={!content.trim()} 
+              className="w-[36px] h-[36px] flex-shrink-0 rounded-full bg-blue-500 text-white flex items-center justify-center disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600 transition-colors active:scale-95 shadow-sm ml-1"
+            >
+              <ChevronRight size={22} strokeWidth={2.5} className="ml-0.5" />
             </button>
           </form>
         )}
@@ -497,3 +524,4 @@ export default function ChatPage() {
     </div>
   );
 }
+
