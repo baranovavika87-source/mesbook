@@ -146,6 +146,8 @@ export default function ChatsPage() {
       participant: { id: currentUserId, displayName: 'Избранное', isSaved: true, avatarUrl: '' },
       lastMessage: lastSavedMsg.content,
       lastMessageAt: lastSavedMsg.createdAt,
+      lastMessageSenderId: currentUserId, // Для сохраненных мы всегда отправитель
+      lastMessageRead: 1
     });
   } else if (hasSavedInServer && lastSavedMsg) {
     const serverSaved = allDynamicChats.find(c => String(c.id) === 'saved');
@@ -155,6 +157,8 @@ export default function ChatsPage() {
       if (localTime > serverTime) {
         serverSaved.lastMessage = lastSavedMsg.content;
         serverSaved.lastMessageAt = lastSavedMsg.createdAt;
+        serverSaved.lastMessageSenderId = currentUserId;
+        serverSaved.lastMessageRead = 1;
       }
     }
   }
@@ -287,6 +291,10 @@ export default function ChatsPage() {
     const isSaved = participant.isSaved || String(chat.id) === 'saved';
     const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 3 * 60 * 1000) : false;
     const timeRaw = chat.lastMessageAt || chat.lastMessageTime;
+    
+    // ИСПРАВЛЕНИЕ: Галочки рисуются только если это ТВОЕ сообщение
+    const isLastMessageMine = chat.lastMessageSenderId === currentUserId;
+    const isLastMessageRead = chat.lastMessageRead === 1;
 
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
@@ -324,9 +332,19 @@ export default function ChatsPage() {
                 {chat.lastMessage?.startsWith('[MEDIA]') ? 'Вложение' : (chat.lastMessage || 'Нет сообщений')}
               </p>
               {chat.lastMessage && (
-                <div className="flex -space-x-1 shrink-0 text-black dark:text-white">
-                  <Check size={14} />
-                  {(chat.isRead || chat.readAt || chat.status === 'read' || String(chat.id).startsWith('group_') || String(chat.id).startsWith('channel_') || String(chat.id).startsWith('custom_') || participant.isGroup || participant.isChannel || isSaved) && <Check size={14} />}
+                <div className="flex -space-x-1 shrink-0 text-black dark:text-white items-center">
+                  {isSaved ? (
+                    <><Check size={14} /><Check size={14} /></>
+                  ) : isLastMessageMine ? (
+                    <>
+                      <Check size={14} />
+                      {(isLastMessageRead || participant.isGroup || participant.isChannel) && <Check size={14} />}
+                    </>
+                  ) : chat.unreadCount > 0 ? (
+                    <div className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ml-1">
+                      {chat.unreadCount}
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -367,10 +385,6 @@ export default function ChatsPage() {
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      
-      {/* ---------------------------------------------------------
-          САЙДБАР
-      --------------------------------------------------------- */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/40 z-40 transition-opacity backdrop-blur-sm"
@@ -379,7 +393,6 @@ export default function ChatsPage() {
       )}
 
       <div className={`fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-[#f2f2f7] dark:bg-black z-50 transform transition-transform duration-300 ease-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        
         <div className="p-6 pb-4 flex justify-between items-start relative bg-white dark:bg-[#1c1c1e] shadow-sm">
           <div className="flex flex-col">
             <div className="w-[60px] h-[60px] bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-[22px] font-bold text-black dark:text-white mb-3 overflow-hidden shadow-sm border border-gray-200/50 dark:border-zinc-700/50">
@@ -480,9 +493,6 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* ---------------------------------------------------------
-          МОДАЛКИ СОЗДАНИЯ / ДОБАВЛЕНИЯ
-      --------------------------------------------------------- */}
       {showAddAccountModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-[#f2f2f7] dark:bg-black rounded-3xl w-full max-w-sm p-6 shadow-2xl border border-gray-200/50 dark:border-zinc-800/50">
@@ -567,7 +577,6 @@ export default function ChatsPage() {
               </div>
             </div>
 
-            {/* ОПИСАНИЕ: Теперь доступно и для групп, и для каналов */}
             <div className="mt-4 bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden p-4 border border-gray-100/50 dark:border-zinc-800/50">
               <p className="text-xs font-bold text-gray-400 dark:text-zinc-500 mb-2 uppercase tracking-wider">Описание</p>
               <textarea 
@@ -582,9 +591,6 @@ export default function ChatsPage() {
         </div>
       )}
 
-      {/* ---------------------------------------------------------
-          ЭКРАН ПОИСКА (ПОЛНОЭКРАННЫЙ)
-      --------------------------------------------------------- */}
       {isSearchOpen ? (
         <div className="flex flex-col h-full bg-[#f2f2f7] dark:bg-black">
           <header className="px-4 pt-12 pb-0 bg-white dark:bg-[#1c1c1e] relative z-10 flex flex-col shadow-sm border-b border-gray-200/50 dark:border-zinc-900/50">
@@ -677,9 +683,6 @@ export default function ChatsPage() {
           </main>
         </div>
       ) : (
-        /* ---------------------------------------------------------
-            ГЛАВНЫЙ ЭКРАН (СПИСОК ЧАТОВ)
-        --------------------------------------------------------- */
         <>
           <header className="px-6 pt-12 pb-4 relative z-10 bg-[#f2f2f7] dark:bg-black">
             <div className="flex justify-between items-center h-full">
@@ -744,3 +747,4 @@ export default function ChatsPage() {
     </div>
   );
 }
+
