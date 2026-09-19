@@ -6,7 +6,6 @@ const getUserId = () => {
   try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
 };
 
-// Функция для правильных окончаний (1 подписчик, 2 подписчика, 5 подписчиков)
 function declOfNum(n: number, text_forms: string[]) {
   n = Math.abs(n) % 100;
   const n1 = n % 10;
@@ -41,9 +40,9 @@ export default function ChatPage() {
   const [isMember, setIsMember] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   
-  // СОСТОЯНИЯ СЧЕТЧИКОВ
-  const [membersCount, setMembersCount] = useState(1);
-  const [onlineCount, setOnlineCount] = useState(1);
+  // ИСПРАВЛЕНИЕ: Значение по умолчанию null, чтобы не было "скачка" с 1
+  const [membersCount, setMembersCount] = useState<number | null>(null);
+  const [onlineCount, setOnlineCount] = useState<number | null>(null);
 
   const [isEditingChat, setIsEditingChat] = useState(false);
   const [editChatName, setEditChatName] = useState('');
@@ -256,14 +255,18 @@ export default function ChatPage() {
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
   
-  // УМНЫЕ ПОДПИСИ
+  // ИСПРАВЛЕНИЕ: Логика плавной загрузки счетчиков
   let subtitleText = "";
   if (!isSavedChat) {
     if (isGroupOrChannel) {
-      if (isChannel) {
-        subtitleText = `${membersCount} ${declOfNum(membersCount, ['подписчик', 'подписчика', 'подписчиков'])}`;
+      if (membersCount === null) {
+        subtitleText = isChannel ? "Канал" : "Группа";
       } else {
-        subtitleText = `${membersCount} ${declOfNum(membersCount, ['участник', 'участника', 'участников'])}, ${onlineCount} в сети`;
+        if (isChannel) {
+          subtitleText = `${membersCount} ${declOfNum(membersCount, ['подписчик', 'подписчика', 'подписчиков'])}`;
+        } else {
+          subtitleText = `${membersCount} ${declOfNum(membersCount, ['участник', 'участника', 'участников'])}, ${onlineCount || 1} в сети`;
+        }
       }
     } else {
       subtitleText = isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно");
@@ -364,15 +367,17 @@ export default function ChatPage() {
                     className="w-full bg-transparent py-1.5 text-[17px] font-medium text-black dark:text-white outline-none" 
                   />
                 </div>
-                <div className="px-5 py-4">
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</label>
-                  <textarea 
-                    rows={4} 
-                    value={editChatDesc} 
-                    onChange={e => setEditChatDesc(e.target.value)} 
-                    className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
-                  />
-                </div>
+                {isChannel && (
+                  <div className="px-5 py-4">
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</label>
+                    <textarea 
+                      rows={4} 
+                      value={editChatDesc} 
+                      onChange={e => setEditChatDesc(e.target.value)} 
+                      className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
+                    />
+                  </div>
+                )}
               </div>
             </div>
           ) : (
