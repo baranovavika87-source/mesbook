@@ -85,7 +85,6 @@ router.patch("/me", async (req, res): Promise<void> => {
   res.json(await getUser(database, currentUserId));
 });
 
-// ИСПРАВЛЕНИЕ 403 ОШИБКИ: Точное приведение типов для проверки создателя
 router.patch("/chats/:chatId", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const chatId = Number(req.params.chatId);
@@ -93,12 +92,14 @@ router.patch("/chats/:chatId", async (req, res): Promise<void> => {
   const database = await getDatabase();
   
   let isAdmin = false;
+  if (chatId >= 100000000) {
+    const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
+    if (Number(chatRes.rows[0]?.participant_id) === currentUserId) isAdmin = true;
+  }
+  
   const memberRes = await database.execute({ sql: "SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] });
   if (memberRes.rows.length && memberRes.rows[0].role === 'admin') {
     isAdmin = true;
-  } else if (chatId >= 100000000) {
-    const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
-    if (Number(chatRes.rows[0]?.participant_id) === currentUserId) isAdmin = true;
   }
 
   if (!isAdmin) { res.status(403).json({ error: "Только администратор может изменять этот чат" }); return; }
@@ -171,7 +172,6 @@ router.post("/chats/create", async (req, res): Promise<void> => {
   res.json({ id: groupId, name, isGroup, isChannel, avatarUrl, description });
 });
 
-// ДОБАВЛЕН ПОДСЧЕТ УЧАСТНИКОВ И ОНЛАЙНА
 router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const chatId = Number(req.params.chatId);
@@ -183,12 +183,13 @@ router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
   let role = result.rows[0]?.role;
   let isMember = result.rows.length > 0;
 
-  if (!role && chatId >= 100000000) {
+  // ЖЕЛЕЗОБЕТОННАЯ ПРОВЕРКА СОЗДАТЕЛЯ
+  if (chatId >= 100000000) {
      const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
      if (Number(chatRes.rows[0]?.participant_id) === currentUserId) {
         role = 'admin';
         isMember = true;
-        try { await database.execute({ sql: "INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, 'admin')", args: [chatId, currentUserId] }); } catch(e) {}
+        try { await database.execute({ sql: "UPDATE chat_members SET role = 'admin' WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] }); } catch(e) {}
      }
   }
 
