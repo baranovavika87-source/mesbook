@@ -64,19 +64,19 @@ export default function ChatPage() {
   }, [messages, chatId, currentUserId, isSavedChat]);
 
   useEffect(() => {
-    if (!isGroup && !isChannel && !isGroupOrChannel) return;
+    if (!isGroupOrChannel) return;
     const checkMembership = async () => {
       try {
         const res = await fetch(`/api/chats/${chatId}/is_member`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
         if (res.ok) { 
           const data = await res.json(); 
           setIsMember(data.isMember); 
-          setIsAdmin(data.role === 'admin');
+          setIsAdmin(data.role === 'admin' || data.role === 'creator');
         }
       } catch(e) {}
     };
     checkMembership();
-  }, [chatId, isGroup, isChannel, isGroupOrChannel, currentUserId]);
+  }, [chatId, isGroupOrChannel, currentUserId]);
 
   const loadData = async () => {
     if (isSavedChat) return;
@@ -199,7 +199,7 @@ export default function ChatPage() {
 
   const handleEditChatClick = () => {
     setEditChatName(chatInfo?.participant?.displayName || '');
-    setEditChatDesc(chatInfo?.participant?.description || '');
+    setEditChatDesc(chatInfo?.participant?.description || chatInfo?.participant?.bio || '');
     setEditChatAvatar(chatInfo?.participant?.avatarUrl || '');
     setIsEditingChat(true);
   };
@@ -237,7 +237,16 @@ export default function ChatPage() {
 
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
-  const subtitleText = isSavedChat ? "" : isGroupOrChannel ? "Канал/Группа" : (isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно"));
+  
+  // ИСПРАВЛЕНИЕ: Четкое разделение подписи "Канал" и "Группа"
+  let subtitleText = "";
+  if (!isSavedChat) {
+    if (isGroupOrChannel) {
+      subtitleText = isGroup ? "Группа" : "Канал";
+    } else {
+      subtitleText = isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно");
+    }
+  }
 
   const renderMessageContent = (msgContent: string, isMe: boolean) => {
     if (msgContent.startsWith('[MEDIA] ')) {
@@ -284,7 +293,9 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-screen bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative font-sans">
       
-      {/* ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА */}
+      {/* ---------------------------------------------------------
+          ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА
+      --------------------------------------------------------- */}
       {showProfile && chatInfo?.participant && (
         <div className="fixed inset-0 z-50 bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-bottom duration-200 overflow-y-auto">
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900 sticky top-0 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
@@ -292,9 +303,12 @@ export default function ChatPage() {
               <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
               <h1 className="text-[20px] font-semibold text-black dark:text-white">Информация</h1>
             </div>
-            {isAdmin && !isEditingChat && (
+            
+            {/* ИСПРАВЛЕНИЕ: Кнопка "Редактировать" теперь доступна для любого канала/группы */}
+            {isGroupOrChannel && !isEditingChat && (
               <button onClick={handleEditChatClick} className="p-1 text-black dark:text-white active:scale-95 transition-transform"><Edit3 size={24} /></button>
             )}
+            
             {isEditingChat && (
               <button onClick={handleSaveChatSettings} disabled={isSavingChat} className="p-1 text-black dark:text-white active:scale-95 transition-transform">
                 {isSavingChat ? <Loader2 size={24} className="animate-spin" /> : <Check size={26} strokeWidth={2.5} />}
@@ -329,17 +343,15 @@ export default function ChatPage() {
                     className="w-full bg-transparent py-1.5 text-[17px] font-medium text-black dark:text-white outline-none" 
                   />
                 </div>
-                {isChannel && (
-                  <div className="px-5 py-4">
-                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</label>
-                    <textarea 
-                      rows={4} 
-                      value={editChatDesc} 
-                      onChange={e => setEditChatDesc(e.target.value)} 
-                      className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
-                    />
-                  </div>
-                )}
+                <div className="px-5 py-4">
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</label>
+                  <textarea 
+                    rows={4} 
+                    value={editChatDesc} 
+                    onChange={e => setEditChatDesc(e.target.value)} 
+                    className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
+                  />
+                </div>
               </div>
             </div>
           ) : (
@@ -392,7 +404,9 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ШАПКА ЧАТА */}
+      {/* ---------------------------------------------------------
+          ШАПКА ЧАТА
+      --------------------------------------------------------- */}
       <header className="px-3 pt-10 pb-3 border-b border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-3 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-md relative z-10 shadow-sm">
         <Link href="/"><a className="p-2 text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
@@ -409,7 +423,9 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* ОСНОВНОЕ ОКНО СООБЩЕНИЙ */}
+      {/* ---------------------------------------------------------
+          ОСНОВНОЕ ОКНО СООБЩЕНИЙ
+      --------------------------------------------------------- */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4">
         <div className="flex flex-col">
           {(() => {
@@ -524,3 +540,4 @@ export default function ChatPage() {
     </div>
   );
 }
+
