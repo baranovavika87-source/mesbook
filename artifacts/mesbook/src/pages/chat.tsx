@@ -40,7 +40,6 @@ export default function ChatPage() {
   const [isMember, setIsMember] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   
-  // ИСПРАВЛЕНИЕ: Значение по умолчанию null, чтобы не было "скачка" с 1
   const [membersCount, setMembersCount] = useState<number | null>(null);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
 
@@ -229,8 +228,14 @@ export default function ChatPage() {
     try {
       const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.secure_url) setEditChatAvatar(data.secure_url);
-    } catch (err) {}
+      if (data.secure_url) {
+        setEditChatAvatar(data.secure_url);
+      } else {
+        alert("Ошибка загрузки: " + (data.error?.message || "неизвестная ошибка"));
+      }
+    } catch (err) {
+      alert("Ошибка сети при загрузке аватара");
+    }
     setIsSavingChat(false);
   };
 
@@ -255,7 +260,6 @@ export default function ChatPage() {
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
   
-  // ИСПРАВЛЕНИЕ: Логика плавной загрузки счетчиков
   let subtitleText = "";
   if (!isSavedChat) {
     if (isGroupOrChannel) {
@@ -348,7 +352,12 @@ export default function ChatPage() {
                   onClick={() => editAvatarRef.current?.click()}
                 >
                   {editChatAvatar && editChatAvatar.length > 5 ? (
-                    <img src={editChatAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                    <img 
+                      src={editChatAvatar} 
+                      alt="Avatar" 
+                      className="w-full h-full object-cover" 
+                      onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(editChatName || 'U')}&background=random&color=fff&size=120`; }} 
+                    />
                   ) : (
                     <Camera size={36} className="text-gray-400" />
                   )}
@@ -367,17 +376,16 @@ export default function ChatPage() {
                     className="w-full bg-transparent py-1.5 text-[17px] font-medium text-black dark:text-white outline-none" 
                   />
                 </div>
-                {isChannel && (
-                  <div className="px-5 py-4">
-                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</label>
-                    <textarea 
-                      rows={4} 
-                      value={editChatDesc} 
-                      onChange={e => setEditChatDesc(e.target.value)} 
-                      className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
-                    />
-                  </div>
-                )}
+                {/* ИСПРАВЛЕНИЕ: Поле описания доступно для групп и каналов */}
+                <div className="px-5 py-4">
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</label>
+                  <textarea 
+                    rows={4} 
+                    value={editChatDesc} 
+                    onChange={e => setEditChatDesc(e.target.value)} 
+                    className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
+                  />
+                </div>
               </div>
             </div>
           ) : (
@@ -385,7 +393,12 @@ export default function ChatPage() {
               <div className="flex flex-col items-center pt-8 pb-4">
                 <div className="w-[120px] h-[120px] rounded-full shadow-md bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-800 mb-4">
                   {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? (
-                    <img src={chatInfo.participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    <img 
+                      src={chatInfo.participant.avatarUrl} 
+                      alt="Avatar" 
+                      className="w-full h-full object-cover" 
+                      onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chatInfo.participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+                    />
                   ) : (
                     <span className="text-[40px] font-medium text-black dark:text-white">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>
                   )}
@@ -438,7 +451,7 @@ export default function ChatPage() {
         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
           <div className="relative">
             <div className={`w-[44px] h-[44px] rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSavedChat ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
-              {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} alt="" className="w-full h-full object-cover" /> : displayName.charAt(0).toUpperCase()}
+              {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chatInfo?.participant?.displayName || 'U')}&background=random&color=fff&size=120`; }} /> : displayName.charAt(0).toUpperCase()}
             </div>
             {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-[#1c1c1e] rounded-full"></div>}
           </div>
@@ -553,6 +566,7 @@ export default function ChatPage() {
             </button>
             <input className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" value={content} onChange={(e) => setContent(e.target.value)} placeholder="Сообщение" />
             
+            {/* КНОПКА ОТПРАВКИ */}
             <button 
               type="submit" 
               disabled={!content.trim()} 
