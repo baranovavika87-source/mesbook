@@ -85,7 +85,7 @@ router.patch("/me", async (req, res): Promise<void> => {
   res.json(await getUser(database, currentUserId));
 });
 
-// РОУТ ДЛЯ РЕДАКТИРОВАНИЯ КАНАЛОВ И ГРУПП С УМНЫМ ФОЛЛБЕКОМ
+// ИСПРАВЛЕНИЕ 403 ОШИБКИ: Точное приведение типов для проверки создателя
 router.patch("/chats/:chatId", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const chatId = Number(req.params.chatId);
@@ -97,9 +97,8 @@ router.patch("/chats/:chatId", async (req, res): Promise<void> => {
   if (memberRes.rows.length && memberRes.rows[0].role === 'admin') {
     isAdmin = true;
   } else if (chatId >= 100000000) {
-    // Если в chat_members пусто, проверяем создателя
     const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
-    if (chatRes.rows[0]?.participant_id === currentUserId) isAdmin = true;
+    if (Number(chatRes.rows[0]?.participant_id) === currentUserId) isAdmin = true;
   }
 
   if (!isAdmin) { res.status(403).json({ error: "Только администратор может изменять этот чат" }); return; }
@@ -172,6 +171,7 @@ router.post("/chats/create", async (req, res): Promise<void> => {
   res.json({ id: groupId, name, isGroup, isChannel, avatarUrl, description });
 });
 
+// ДОБАВЛЕН ПОДСЧЕТ УЧАСТНИКОВ И ОНЛАЙНА
 router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const chatId = Number(req.params.chatId);
@@ -183,17 +183,33 @@ router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
   let role = result.rows[0]?.role;
   let isMember = result.rows.length > 0;
 
-  // ФОЛЛБЕК ДЛЯ СТАРЫХ ГРУПП: если пользователь - создатель, он админ
   if (!role && chatId >= 100000000) {
      const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
-     if (chatRes.rows[0]?.participant_id === currentUserId) {
+     if (Number(chatRes.rows[0]?.participant_id) === currentUserId) {
         role = 'admin';
         isMember = true;
         try { await database.execute({ sql: "INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, 'admin')", args: [chatId, currentUserId] }); } catch(e) {}
      }
   }
 
-  res.json({ isMember, role: role || 'member' });
+  let membersCount = 1;
+  let onlineCount = 1;
+
+  if (chatId >= 100000000) {
+    try {
+      const countRes = await database.execute({ sql: "SELECT COUNT(*) as c FROM chat_members WHERE chat_id = ?", args: [chatId] });
+      membersCount = Number(countRes.rows[0]?.c) || 1;
+
+      const fiveMinsAgo = Date.now() - 3 * 60 * 1000;
+      const onlineRes = await database.execute({
+        sql: "SELECT COUNT(*) as c FROM chat_members cm JOIN users u ON cm.user_id = u.id WHERE cm.chat_id = ? AND u.last_seen > ?",
+        args: [chatId, fiveMinsAgo]
+      });
+      onlineCount = Number(onlineRes.rows[0]?.c) || 1;
+    } catch (e) {}
+  }
+
+  res.json({ isMember, role: role || 'member', membersCount, onlineCount });
 });
 
 router.post("/chats/:chatId/join", async (req, res): Promise<void> => {
@@ -346,4 +362,3 @@ router.post("/login", async (req, res) => {
 });
 
 export default router;
-
