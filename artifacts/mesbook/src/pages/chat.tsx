@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Send, Trash2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera } from 'lucide-react';
+import { ArrowLeft, Trash2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight } from 'lucide-react';
 
 const getUserId = () => {
   try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
@@ -31,7 +31,6 @@ export default function ChatPage() {
   const [isMember, setIsMember] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // СОСТОЯНИЯ ДЛЯ РЕДАКТИРОВАНИЯ
   const [isEditingChat, setIsEditingChat] = useState(false);
   const [editChatName, setEditChatName] = useState('');
   const [editChatDesc, setEditChatDesc] = useState('');
@@ -240,8 +239,12 @@ export default function ChatPage() {
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
       if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic\vert{}heif)$/i, '.jpg');
       return (
-        <div className="mt-0.5 mb-0.5">
-          {isVideo ? <video src={url} controls className="w-full max-w-[220px] rounded-[16px] bg-black/10" /> : <img src={url} alt="Media" className="w-full max-w-[220px] rounded-[16px] object-cover" />}
+        <div className="mt-0.5 mb-0.5 relative">
+          {isVideo ? (
+            <video src={url} controls className="w-full h-auto min-w-[150px] min-h-[150px] max-w-[220px] rounded-[16px] bg-black/10" />
+          ) : (
+            <img src={url} alt="Media" className="w-full h-auto min-w-[150px] min-h-[150px] max-w-[220px] rounded-[16px] object-cover bg-gray-100 dark:bg-zinc-800" />
+          )}
         </div>
       );
     }
@@ -298,8 +301,8 @@ export default function ChatPage() {
                 <input type="file" accept="image/*" className="hidden" ref={editAvatarRef} onChange={handleEditAvatarUpload} />
               </div>
 
-              <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100 dark:border-zinc-800/50">
-                <div className="px-5 py-2.5 border-b border-gray-100 dark:border-zinc-900/60">
+              <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100/50 dark:border-zinc-800/50">
+                <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-900/60">
                   <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mt-1">Название</label>
                   <input 
                     type="text" 
@@ -338,15 +341,15 @@ export default function ChatPage() {
               
               <div className="px-4 pb-12 w-full max-w-lg mx-auto flex flex-col gap-4">
                 {(chatInfo.participant.bio || chatInfo.participant.description) && (
-                  <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm p-5 border border-gray-100 dark:border-zinc-800/50">
+                  <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm p-5 border border-gray-100/50 dark:border-zinc-800/50">
                     <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</p>
                     <p className="text-[16px] text-black dark:text-white leading-relaxed whitespace-pre-wrap">{chatInfo.participant.bio || chatInfo.participant.description}</p>
                   </div>
                 )}
                 {(chatInfo.participant.personalChannel || chatInfo.participant.birthDate) && (
-                  <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100 dark:border-zinc-800/50">
+                  <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100/50 dark:border-zinc-800/50">
                     {chatInfo.participant.personalChannel && (
-                      <div className="px-5 py-4 border-b border-gray-100 dark:border-zinc-900/60 flex items-center gap-4">
+                      <div className="px-5 py-4 border-b border-gray-100/50 dark:border-zinc-900/60 flex items-center gap-4">
                         <Volume2 size={22} className="text-gray-400" />
                         <div>
                           <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Канал</p>
@@ -390,43 +393,65 @@ export default function ChatPage() {
         </div>
       </header>
 
-      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">
-        {messages.map((msg: any) => {
-          const isMe = String(msg.senderId) === String(currentUserId);
-          const isMedia = msg.content.startsWith('[MEDIA] ');
-          return (
-            <div key={msg.id} className={'flex flex-col max-w-[80%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')} onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }} onTouchEnd={(e) => { if (touchStartRef.current !== null) { const touchEndX = e.changedTouches[0].clientX; const diff = touchStartRef.current - touchEndX; if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } touchStartRef.current = null; } }}>
+      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4">
+        <div className="flex flex-col">
+          {(() => {
+            let lastDateStr = '';
+            return messages.map((msg: any) => {
+              const isMe = String(msg.senderId) === String(currentUserId);
+              const isMedia = msg.content.startsWith('[MEDIA] ');
               
-              <div className={(isMedia ? 'p-1 ' : 'px-4 pt-3 pb-6 pr-14 ') + 'shadow-sm relative min-w-[85px] rounded-[20px] ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-sm' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-tl-sm border border-gray-100/50 dark:border-zinc-800')}>
-                
-                {renderMessageContent(msg.content, isMe)}
-                
-                {/* БЛОК С ГАЛОЧКАМИ И ВРЕМЕНЕМ */}
-                <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium ${isMedia ? 'bottom-2.5 right-2.5 bg-black/50 text-white px-2 py-0.5 rounded-full backdrop-blur-sm' : 'bottom-1.5 right-3'} ${isMe && !isMedia ? 'text-gray-400 dark:text-zinc-500' : 'text-gray-400 dark:text-zinc-500'}`}>
-                  <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
-                  
-                  {isMe && (
-                    <div className="flex items-center ml-0.5">
-                      {isSavedChat || isGroupOrChannel ? (
-                        <div className="flex -space-x-1"><Check size={12} strokeWidth={2.5} /><Check size={12} strokeWidth={2.5} /></div>
-                      ) : msg.isSending ? (
-                        <Loader2 size={10} className="animate-spin" />
-                      ) : (
-                        <div className="flex -space-x-1">
-                          <Check size={12} strokeWidth={2.5} />
-                          {(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && <Check size={12} strokeWidth={2.5} />}
-                        </div>
-                      )}
-                      {!msg.isSending && (
-                        <button onClick={() => handleDelete(msg.id)} className="hover:text-red-500 ml-1.5 transition-colors"><Trash2 size={11} /></button>
-                      )}
+              // ГРУППИРОВКА ДАТ
+              const dateObj = new Date(msg.createdAt);
+              const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+              const showDate = currentDateStr !== '' && currentDateStr !== lastDateStr;
+              if (showDate) lastDateStr = currentDateStr;
+
+              return (
+                <div key={msg.id} className="flex flex-col w-full mb-1.5">
+                  {showDate && (
+                    <div className="flex justify-center my-3 w-full">
+                      <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm">
+                        {currentDateStr}
+                      </span>
                     </div>
                   )}
+                  
+                  <div className={'flex flex-col max-w-[80%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')} onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }} onTouchEnd={(e) => { if (touchStartRef.current !== null) { const touchEndX = e.changedTouches[0].clientX; const diff = touchStartRef.current - touchEndX; if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } touchStartRef.current = null; } }}>
+                    
+                    <div className={(isMedia ? 'p-1 ' : 'px-4 pt-3 pb-6 pr-14 ') + 'shadow-sm relative min-w-[85px] rounded-[20px] ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-sm' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-tl-sm border border-gray-100/50 dark:border-zinc-800')}>
+                      
+                      {renderMessageContent(msg.content, isMe)}
+                      
+                      {/* БЛОК С ГАЛОЧКАМИ И ВРЕМЕНЕМ */}
+                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium ${isMedia ? 'bottom-2.5 right-2.5 bg-black/50 text-white px-2 py-0.5 rounded-full backdrop-blur-sm' : 'bottom-1.5 right-3'} ${isMe && !isMedia ? 'text-gray-400 dark:text-zinc-500' : 'text-gray-400 dark:text-zinc-500'}`}>
+                        <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                        
+                        {isMe && (
+                          <div className="flex items-center ml-0.5">
+                            {isSavedChat || isGroupOrChannel ? (
+                              <div className="flex -space-x-1"><Check size={12} strokeWidth={2.5} /><Check size={12} strokeWidth={2.5} /></div>
+                            ) : msg.isSending ? (
+                              <Loader2 size={10} className="animate-spin" />
+                            ) : (
+                              <div className="flex -space-x-1">
+                                <Check size={12} strokeWidth={2.5} />
+                                {(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && <Check size={12} strokeWidth={2.5} />}
+                              </div>
+                            )}
+                            {!msg.isSending && (
+                              <button onClick={() => handleDelete(msg.id)} className="hover:text-red-500 ml-1.5 transition-colors"><Trash2 size={11} /></button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          );
-        })}
+              );
+            });
+          })()}
+        </div>
       </main>
 
       <div className="p-3 bg-[#f2f2f7] dark:bg-black border-t border-gray-200/50 dark:border-zinc-900/50 pb-6 relative z-10 flex flex-col">
@@ -453,10 +478,13 @@ export default function ChatPage() {
               {isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={24} />}
             </button>
             <input className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" value={content} onChange={(e) => setContent(e.target.value)} placeholder="Сообщение" />
-            <button type="submit" disabled={!content.trim()} className="w-[42px] h-[42px] flex-shrink-0 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:opacity-30 transition-transform active:scale-95 shadow-sm"><Send size={18} className="ml-1 pl-0.5" /></button>
+            <button type="submit" disabled={!content.trim()} className="w-[42px] h-[42px] flex-shrink-0 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:opacity-30 transition-transform active:scale-95 shadow-sm">
+              <ChevronRight size={24} className="ml-0.5" strokeWidth={2.5} />
+            </button>
           </form>
         )}
       </div>
     </div>
   );
 }
+
