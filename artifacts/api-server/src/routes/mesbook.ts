@@ -92,14 +92,12 @@ router.patch("/chats/:chatId", async (req, res): Promise<void> => {
   const database = await getDatabase();
   
   let isAdmin = false;
-  if (chatId >= 100000000) {
-    const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
-    if (Number(chatRes.rows[0]?.participant_id) === currentUserId) isAdmin = true;
-  }
-  
   const memberRes = await database.execute({ sql: "SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] });
   if (memberRes.rows.length && memberRes.rows[0].role === 'admin') {
     isAdmin = true;
+  } else if (chatId >= 100000000) {
+    const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
+    if (Number(chatRes.rows[0]?.participant_id) === currentUserId) isAdmin = true;
   }
 
   if (!isAdmin) { res.status(403).json({ error: "Только администратор может изменять этот чат" }); return; }
@@ -183,13 +181,12 @@ router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
   let role = result.rows[0]?.role;
   let isMember = result.rows.length > 0;
 
-  // ЖЕЛЕЗОБЕТОННАЯ ПРОВЕРКА СОЗДАТЕЛЯ
-  if (chatId >= 100000000) {
+  if (!role && chatId >= 100000000) {
      const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
      if (Number(chatRes.rows[0]?.participant_id) === currentUserId) {
         role = 'admin';
         isMember = true;
-        try { await database.execute({ sql: "UPDATE chat_members SET role = 'admin' WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] }); } catch(e) {}
+        try { await database.execute({ sql: "INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, 'admin')", args: [chatId, currentUserId] }); } catch(e) {}
      }
   }
 
@@ -227,8 +224,9 @@ router.get("/chats", async (req, res): Promise<void> => {
   const database = await getDatabase();
   await ensureMembersTable(database);
   
+  // ИСПРАВЛЕНИЕ: Вытаскиваем sender_id и read_by_me последнего сообщения, чтобы правильно рисовать галочки
   const chatRows = await database.execute({
-    sql: `SELECT m.chat_id, m.content as last_message, m.created_at as last_message_at, (SELECT COUNT(*) FROM messages WHERE chat_id = m.chat_id AND sender_id != ? AND read_by_me = 0) AS unread_count
+    sql: `SELECT m.chat_id, m.content as last_message, m.created_at as last_message_at, m.sender_id as last_message_sender_id, m.read_by_me as last_message_read, (SELECT COUNT(*) FROM messages WHERE chat_id = m.chat_id AND sender_id != ? AND read_by_me = 0) AS unread_count
      FROM messages m WHERE m.id IN (SELECT MAX(id) FROM messages GROUP BY chat_id)
      AND (CAST(m.chat_id / 10000 AS INT) = ? OR m.chat_id % 10000 = ? OR (m.chat_id >= 100000000 AND EXISTS (SELECT 1 FROM chat_members cm WHERE cm.chat_id = m.chat_id AND cm.user_id = ?)))
      ORDER BY m.created_at DESC`,
@@ -238,14 +236,14 @@ router.get("/chats", async (req, res): Promise<void> => {
   const chats = await Promise.all(chatRows.rows.map(async (row: any) => {
     const cId = Number(row.chat_id);
     if (cId === currentUserId * 10000 + currentUserId) {
-      return { id: "saved", participant: { id: currentUserId, displayName: "Избранное", avatarUrl: "", isSaved: true }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, unreadCount: Number(row.unread_count) };
+      return { id: "saved", participant: { id: currentUserId, displayName: "Избранное", avatarUrl: "", isSaved: true }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, lastMessageSenderId: Number(row.last_message_sender_id), lastMessageRead: Number(row.last_message_read), unreadCount: Number(row.unread_count) };
     }
     if (cId >= 100000000) {
       const internalId = cId - 100000000;
       const groupResult = await database.execute({ sql: "SELECT name, is_group, is_channel, avatar_url, description FROM chats WHERE id = ?", args: [internalId] });
       const gRow = groupResult.rows[0];
       if (gRow) {
-        return { id: cId, participant: { id: cId, displayName: gRow.name, avatarUrl: gRow.avatar_url || "", description: gRow.description || "", isGroup: Number(gRow.is_group)===1, isChannel: Number(gRow.is_channel)===1 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, unreadCount: Number(row.unread_count) };
+        return { id: cId, participant: { id: cId, displayName: gRow.name, avatarUrl: gRow.avatar_url || "", description: gRow.description || "", isGroup: Number(gRow.is_group)===1, isChannel: Number(gRow.is_channel)===1 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, lastMessageSenderId: Number(row.last_message_sender_id), lastMessageRead: Number(row.last_message_read), unreadCount: Number(row.unread_count) };
       }
       return null;
     }
@@ -253,7 +251,7 @@ router.get("/chats", async (req, res): Promise<void> => {
     const u2 = cId % 10000;
     const otherUserId = (u1 === currentUserId) ? u2 : u1;
     const participant = await getUser(database, otherUserId);
-    return { id: cId, participant: participant || { id: otherUserId, username: "Пользователь", displayName: "Пользователь", avatarUrl: "", lastSeen: 0 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, unreadCount: Number(row.unread_count) };
+    return { id: cId, participant: participant || { id: otherUserId, username: "Пользователь", displayName: "Пользователь", avatarUrl: "", lastSeen: 0 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, lastMessageSenderId: Number(row.last_message_sender_id), lastMessageRead: Number(row.last_message_read), unreadCount: Number(row.unread_count) };
   }));
 
   res.json(chats.filter(c => c !== null));
@@ -297,6 +295,21 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   if (!chatId || !content) { res.status(400).json({ error: "Message required" }); return; }
   
   const database = await getDatabase();
+
+  // ИСПРАВЛЕНИЕ ЗАЩИТЫ: Блокируем отправку в канал, если пользователь не админ
+  if (chatId >= 100000000) {
+    const chatInfo = await database.execute({ sql: "SELECT is_channel FROM chats WHERE id = ?", args: [chatId - 100000000] });
+    if (Number(chatInfo.rows[0]?.is_channel) === 1) {
+       const memberRes = await database.execute({ sql: "SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] });
+       let isAd = memberRes.rows[0]?.role === 'admin';
+       if (!isAd) {
+           const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
+           if (Number(chatRes.rows[0]?.participant_id) === currentUserId) isAd = true;
+       }
+       if (!isAd) { res.status(403).json({ error: "Только админы могут писать в канал" }); return; }
+    }
+  }
+
   const isSaved = req.params.chatId === "saved";
   
   await database.execute({
