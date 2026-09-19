@@ -6,6 +6,16 @@ const getUserId = () => {
   try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
 };
 
+// Функция для правильных окончаний (1 подписчик, 2 подписчика, 5 подписчиков)
+function declOfNum(n: number, text_forms: string[]) {
+  n = Math.abs(n) % 100;
+  const n1 = n % 10;
+  if (n > 10 && n < 20) return text_forms[2];
+  if (n1 > 1 && n1 < 5) return text_forms[1];
+  if (n1 === 1) return text_forms[0];
+  return text_forms[2];
+}
+
 export default function ChatPage() {
   const [match, params] = useRoute('/chat/:chatId');
   const chatId = params?.chatId;
@@ -30,6 +40,10 @@ export default function ChatPage() {
   
   const [isMember, setIsMember] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  
+  // СОСТОЯНИЯ СЧЕТЧИКОВ
+  const [membersCount, setMembersCount] = useState(1);
+  const [onlineCount, setOnlineCount] = useState(1);
 
   const [isEditingChat, setIsEditingChat] = useState(false);
   const [editChatName, setEditChatName] = useState('');
@@ -72,6 +86,8 @@ export default function ChatPage() {
           const data = await res.json(); 
           setIsMember(data.isMember); 
           setIsAdmin(data.role === 'admin' || data.role === 'creator');
+          setMembersCount(data.membersCount || 1);
+          setOnlineCount(data.onlineCount || 1);
         }
       } catch(e) {}
     };
@@ -230,6 +246,8 @@ export default function ChatPage() {
       if (res.ok) {
         setIsEditingChat(false);
         loadData();
+      } else {
+        alert("У вас нет прав на редактирование");
       }
     } catch(e) {}
     setIsSavingChat(false);
@@ -238,11 +256,15 @@ export default function ChatPage() {
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
   
-  // ИСПРАВЛЕНИЕ: Четкое разделение подписи "Канал" и "Группа"
+  // УМНЫЕ ПОДПИСИ
   let subtitleText = "";
   if (!isSavedChat) {
     if (isGroupOrChannel) {
-      subtitleText = isGroup ? "Группа" : "Канал";
+      if (isChannel) {
+        subtitleText = `${membersCount} ${declOfNum(membersCount, ['подписчик', 'подписчика', 'подписчиков'])}`;
+      } else {
+        subtitleText = `${membersCount} ${declOfNum(membersCount, ['участник', 'участника', 'участников'])}, ${onlineCount} в сети`;
+      }
     } else {
       subtitleText = isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно");
     }
@@ -304,8 +326,7 @@ export default function ChatPage() {
               <h1 className="text-[20px] font-semibold text-black dark:text-white">Информация</h1>
             </div>
             
-            {/* ИСПРАВЛЕНИЕ: Кнопка "Редактировать" теперь доступна для любого канала/группы */}
-            {isGroupOrChannel && !isEditingChat && (
+            {isAdmin && !isEditingChat && (
               <button onClick={handleEditChatClick} className="p-1 text-black dark:text-white active:scale-95 transition-transform"><Edit3 size={24} /></button>
             )}
             
@@ -364,7 +385,7 @@ export default function ChatPage() {
                     <span className="text-[40px] font-medium text-black dark:text-white">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>
                   )}
                 </div>
-                <h2 className="text-[22px] font-bold text-black dark:text-white mb-1">{chatInfo.participant.displayName}</h2>
+                <h2 className="text-[22px] font-bold text-black dark:text-white mb-1 text-center px-4">{chatInfo.participant.displayName}</h2>
                 {chatInfo.participant.username && <p className="text-[15px] text-gray-500">{chatInfo.participant.username}</p>}
                 <p className={`mt-1.5 text-[13px] font-medium ${isOnline && !isGroupOrChannel ? 'text-green-500' : 'text-gray-400'}`}>{subtitleText}</p>
               </div>
@@ -417,7 +438,7 @@ export default function ChatPage() {
             {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-[#1c1c1e] rounded-full"></div>}
           </div>
           <div className="flex flex-col">
-            <h2 className="font-semibold text-black dark:text-white text-[16px] leading-tight">{displayName}</h2>
+            <h2 className="font-semibold text-black dark:text-white text-[16px] leading-tight truncate pr-2">{displayName}</h2>
             {subtitleText && <p className={`text-[12px] font-medium mt-0.5 ${isGroupOrChannel ? 'text-gray-500' : (isOnline ? 'text-green-500' : 'text-gray-400')}`}>{subtitleText}</p>}
           </div>
         </div>
@@ -540,4 +561,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
