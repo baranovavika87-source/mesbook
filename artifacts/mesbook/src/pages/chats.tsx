@@ -136,7 +136,6 @@ export default function ChatsPage() {
     touchStartX.current = null;
   };
 
-  // ДИНАМИЧЕСКАЯ СОРТИРОВКА И ДОБАВЛЕНИЕ "ИЗБРАННОГО"
   const allDynamicChats = [...chats];
   const hasSavedInServer = allDynamicChats.some(c => String(c.id) === 'saved');
   const lastSavedMsg = savedMessages.length > 0 ? savedMessages[savedMessages.length - 1] : null;
@@ -160,7 +159,6 @@ export default function ChatsPage() {
     }
   }
 
-  // Строгая сортировка всех чатов по времени
   allDynamicChats.sort((a, b) => {
     const timeA = new Date(a.lastMessageAt || a.lastMessageTime || 0).getTime();
     const timeB = new Date(b.lastMessageAt || b.lastMessageTime || 0).getTime();
@@ -223,8 +221,14 @@ export default function ChatsPage() {
     try {
       const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.secure_url) setModalAvatarUrl(data.secure_url);
-    } catch (err) {}
+      if (data.secure_url) {
+        setModalAvatarUrl(data.secure_url);
+      } else {
+        alert("Ошибка загрузки: " + (data.error?.message || "неизвестная ошибка"));
+      }
+    } catch (err) {
+      alert("Ошибка сети при загрузке аватара");
+    }
     setIsUploadingModalAvatar(false);
   };
 
@@ -278,15 +282,10 @@ export default function ChatsPage() {
     return 0;
   });
 
-  // ==============================
-  // РЕНДЕР КАРТОЧКИ ЧАТА
-  // ==============================
   const renderChatCard = (chat: any) => {
     const participant = chat.participant || {};
     const isSaved = participant.isSaved || String(chat.id) === 'saved';
     const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 3 * 60 * 1000) : false;
-    
-    // ИСПРАВЛЕНИЕ ВРЕМЕНИ: Берем любую доступную переменную времени
     const timeRaw = chat.lastMessageAt || chat.lastMessageTime;
 
     return (
@@ -296,7 +295,12 @@ export default function ChatsPage() {
             {isSaved ? (
               <Bookmark size={24} fill="currentColor" />
             ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
-              <img src={participant.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              <img 
+                src={participant.avatarUrl} 
+                alt="Avatar" 
+                className="w-full h-full object-cover" 
+                onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+              />
             ) : (
               <span className="text-[20px] font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
             )}
@@ -341,7 +345,12 @@ export default function ChatsPage() {
         <div className="flex items-center gap-4">
           <div className="w-[52px] h-[52px] rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden shadow-sm border border-gray-200/50 dark:border-zinc-700/50">
             {user.avatarUrl && user.avatarUrl.length > 5 ? (
-              <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              <img 
+                src={user.avatarUrl} 
+                alt="Avatar" 
+                className="w-full h-full object-cover" 
+                onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+              />
             ) : (
               <span className="text-black dark:text-white font-medium text-[20px]">{user.displayName?.charAt(0) || "U"}</span>
             )}
@@ -359,7 +368,9 @@ export default function ChatsPage() {
       onTouchEnd={handleTouchEnd}
     >
       
-      {/* САЙДБАР */}
+      {/* ---------------------------------------------------------
+          САЙДБАР
+      --------------------------------------------------------- */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/40 z-40 transition-opacity backdrop-blur-sm"
@@ -373,7 +384,12 @@ export default function ChatsPage() {
           <div className="flex flex-col">
             <div className="w-[60px] h-[60px] bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-[22px] font-bold text-black dark:text-white mb-3 overflow-hidden shadow-sm border border-gray-200/50 dark:border-zinc-700/50">
               {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
-                <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                <img 
+                  src={currentUser.avatarUrl} 
+                  alt="Avatar" 
+                  className="w-full h-full object-cover" 
+                  onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+                />
               ) : (
                 currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"
               )}
@@ -408,7 +424,7 @@ export default function ChatsPage() {
                       className={`flex items-center gap-3 px-4 py-3 transition-colors w-full text-left border-b border-gray-100/50 dark:border-zinc-800/50 last:border-0 ${isActive ? 'cursor-default' : 'active:bg-gray-50 dark:active:bg-zinc-800'}`}
                     >
                       <div className="w-8 h-8 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center overflow-hidden shrink-0 text-black dark:text-white font-medium text-xs border border-gray-200/50 dark:border-zinc-700/50">
-                        {acc.avatarUrl && acc.avatarUrl.length > 5 ? <img src={acc.avatarUrl} className="w-full h-full object-cover" /> : acc.displayName?.charAt(0).toUpperCase()}
+                        {acc.avatarUrl && acc.avatarUrl.length > 5 ? <img src={acc.avatarUrl} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(acc.displayName || 'U')}&background=random&color=fff&size=120`; }} /> : acc.displayName?.charAt(0).toUpperCase()}
                       </div>
                       <span className={`text-[15px] font-medium flex-1 truncate ${isActive ? 'text-black dark:text-white' : 'text-gray-500 dark:text-zinc-400'}`}>
                         {acc.displayName}
@@ -452,6 +468,7 @@ export default function ChatsPage() {
                 <span className="text-[15px] font-medium">Избранное</span>
               </a>
             </Link>
+            
             <Link href="/settings">
               <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors">
                 <Settings size={20} className="text-gray-400 dark:text-zinc-400" />
@@ -463,7 +480,9 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* МОДАЛКИ */}
+      {/* ---------------------------------------------------------
+          МОДАЛКИ СОЗДАНИЯ / ДОБАВЛЕНИЯ
+      --------------------------------------------------------- */}
       {showAddAccountModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-[#f2f2f7] dark:bg-black rounded-3xl w-full max-w-sm p-6 shadow-2xl border border-gray-200/50 dark:border-zinc-800/50">
@@ -524,7 +543,7 @@ export default function ChatsPage() {
                 onClick={() => fileInputRef.current?.click()}
               >
                 {modalAvatarUrl ? (
-                  <img src={modalAvatarUrl} className="w-full h-full object-cover" />
+                  <img src={modalAvatarUrl} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=U&background=random&color=fff&size=120`; }} />
                 ) : (
                   <Camera size={28} className="text-gray-400 dark:text-zinc-500" />
                 )}
@@ -548,44 +567,24 @@ export default function ChatsPage() {
               </div>
             </div>
 
-            {modalType === 'channel' && (
-              <div className="mt-4 bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden p-4 border border-gray-100/50 dark:border-zinc-800/50">
-                <p className="text-xs font-bold text-gray-400 dark:text-zinc-500 mb-2 uppercase tracking-wider">Описание</p>
-                <textarea 
-                  rows={3}
-                  value={channelDesc}
-                  onChange={e => setChannelDesc(e.target.value)}
-                  className="w-full bg-transparent text-[15px] text-black dark:text-white outline-none resize-none placeholder-gray-400" 
-                  placeholder="Можете указать дополнительное описание канала." 
-                />
-              </div>
-            )}
-
-            {modalType === 'group' && (
-              <div className="mt-6 bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden border border-gray-100/50 dark:border-zinc-800/50">
-                <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-900 bg-gray-50/50 dark:bg-black/20">
-                  <span className="text-[13px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">1 участник</span>
-                </div>
-                <div className="flex items-center gap-4 px-4 py-3">
-                  <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center font-bold text-black dark:text-white text-lg overflow-hidden border border-gray-300/30 dark:border-zinc-700/50">
-                     {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
-                       <img src={currentUser.avatarUrl} className="w-full h-full object-cover" />
-                     ) : (
-                       currentUser?.displayName?.charAt(0).toUpperCase()
-                     )}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-[15px] text-black dark:text-white">{currentUser?.displayName}</p>
-                    <p className="text-[13px] text-gray-500 dark:text-zinc-500 mt-0.5">был(а) недавно</p>
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* ОПИСАНИЕ: Теперь доступно и для групп, и для каналов */}
+            <div className="mt-4 bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden p-4 border border-gray-100/50 dark:border-zinc-800/50">
+              <p className="text-xs font-bold text-gray-400 dark:text-zinc-500 mb-2 uppercase tracking-wider">Описание</p>
+              <textarea 
+                rows={3}
+                value={channelDesc}
+                onChange={e => setChannelDesc(e.target.value)}
+                className="w-full bg-transparent text-[15px] text-black dark:text-white outline-none resize-none placeholder-gray-400" 
+                placeholder={`Можете указать дополнительное описание ${modalType === 'group' ? 'группы' : 'канала'}.`} 
+              />
+            </div>
           </div>
         </div>
       )}
 
-      {/* ЭКРАН ПОИСКА (ПОЛНОЭКРАННЫЙ) */}
+      {/* ---------------------------------------------------------
+          ЭКРАН ПОИСКА (ПОЛНОЭКРАННЫЙ)
+      --------------------------------------------------------- */}
       {isSearchOpen ? (
         <div className="flex flex-col h-full bg-[#f2f2f7] dark:bg-black">
           <header className="px-4 pt-12 pb-0 bg-white dark:bg-[#1c1c1e] relative z-10 flex flex-col shadow-sm border-b border-gray-200/50 dark:border-zinc-900/50">
@@ -678,7 +677,9 @@ export default function ChatsPage() {
           </main>
         </div>
       ) : (
-        /* ГЛАВНЫЙ ЭКРАН (СПИСОК ЧАТОВ) */
+        /* ---------------------------------------------------------
+            ГЛАВНЫЙ ЭКРАН (СПИСОК ЧАТОВ)
+        --------------------------------------------------------- */
         <>
           <header className="px-6 pt-12 pb-4 relative z-10 bg-[#f2f2f7] dark:bg-black">
             <div className="flex justify-between items-center h-full">
@@ -687,7 +688,12 @@ export default function ChatsPage() {
                 className="w-9 h-9 shrink-0 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-300/30 dark:border-zinc-700/50 shadow-sm"
               >
                 {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
-                  <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  <img 
+                    src={currentUser.avatarUrl} 
+                    alt="Avatar" 
+                    className="w-full h-full object-cover" 
+                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+                  />
                 ) : (
                   <span className="text-black dark:text-white font-medium text-sm">{currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"}</span>
                 )}
@@ -738,4 +744,3 @@ export default function ChatsPage() {
     </div>
   );
 }
-
