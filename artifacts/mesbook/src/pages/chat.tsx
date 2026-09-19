@@ -234,20 +234,20 @@ export default function ChatPage() {
   const subtitleText = isSavedChat ? "" : isGroupOrChannel ? "Канал/Группа" : (isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно"));
 
   const renderMessageContent = (msgContent: string, isMe: boolean) => {
+    // Рендер картинки или видео
     if (msgContent.startsWith('[MEDIA] ')) {
       let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
       if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic\vert{}heif)$/i, '.jpg');
-      return (
-        <div className="mt-0.5 mb-0.5 relative">
-          {isVideo ? (
-            <video src={url} controls className="w-full h-auto min-w-[150px] min-h-[150px] max-w-[220px] rounded-[16px] bg-black/10" />
-          ) : (
-            <img src={url} alt="Media" className="w-full h-auto min-w-[150px] min-h-[150px] max-w-[220px] rounded-[16px] object-cover bg-gray-100 dark:bg-zinc-800" />
-          )}
-        </div>
+      
+      return isVideo ? (
+        <video src={url} controls className="block w-full max-w-[280px] h-auto object-cover bg-gray-100 dark:bg-zinc-800" />
+      ) : (
+        <img src={url} alt="Media" className="block w-full max-w-[280px] h-auto object-cover bg-gray-100 dark:bg-zinc-800" />
       );
     }
+    
+    // Рендер ответа на сообщение (цитаты)
     if (msgContent.startsWith('> ')) {
       return (
         <div className="mb-1.5">
@@ -258,6 +258,8 @@ export default function ChatPage() {
         </div>
       );
     }
+    
+    // Обычный текст
     return <p className="text-[15px] leading-[1.3] break-words">{msgContent}</p>;
   };
 
@@ -302,7 +304,7 @@ export default function ChatPage() {
               </div>
 
               <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100/50 dark:border-zinc-800/50">
-                <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-900/60">
+                <div className="px-5 py-2.5 border-b border-gray-100 dark:border-zinc-900/60">
                   <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mt-1">Название</label>
                   <input 
                     type="text" 
@@ -393,22 +395,28 @@ export default function ChatPage() {
         </div>
       </header>
 
+      {/* ---------------------------------------------------------
+          ОСНОВНОЕ ОКНО СООБЩЕНИЙ
+      --------------------------------------------------------- */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4">
         <div className="flex flex-col">
           {(() => {
             let lastDateStr = '';
+            
             return messages.map((msg: any) => {
               const isMe = String(msg.senderId) === String(currentUserId);
               const isMedia = msg.content.startsWith('[MEDIA] ');
               
-              // ГРУППИРОВКА ДАТ
+              // Логика группировки дат (появление плашки с датой)
               const dateObj = new Date(msg.createdAt);
               const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
               const showDate = currentDateStr !== '' && currentDateStr !== lastDateStr;
               if (showDate) lastDateStr = currentDateStr;
 
               return (
-                <div key={msg.id} className="flex flex-col w-full mb-1.5">
+                <div key={msg.id} className="flex flex-col w-full mb-1">
+                  
+                  {/* Плашка с датой (появляется только если день изменился) */}
                   {showDate && (
                     <div className="flex justify-center my-3 w-full">
                       <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm">
@@ -419,12 +427,17 @@ export default function ChatPage() {
                   
                   <div className={'flex flex-col max-w-[80%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')} onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }} onTouchEnd={(e) => { if (touchStartRef.current !== null) { const touchEndX = e.changedTouches[0].clientX; const diff = touchStartRef.current - touchEndX; if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } touchStartRef.current = null; } }}>
                     
-                    <div className={(isMedia ? 'p-1 ' : 'px-4 pt-3 pb-6 pr-14 ') + 'shadow-sm relative min-w-[85px] rounded-[20px] ' + (isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-sm' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-tl-sm border border-gray-100/50 dark:border-zinc-800')}>
+                    {/* РАЗДЕЛИЛИ СТИЛИ ДЛЯ КАРТИНОК И ТЕКСТА */}
+                    <div className={
+                      isMedia 
+                        ? `relative overflow-hidden shadow-sm border border-gray-200/50 dark:border-zinc-800/50 rounded-[20px] ${isMe ? 'rounded-tr-sm' : 'rounded-tl-sm'}`
+                        : `shadow-sm relative min-w-[85px] px-4 pt-3 pb-6 pr-14 rounded-[20px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-sm' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-tl-sm border border-gray-100/50 dark:border-zinc-800'}`
+                    }>
                       
                       {renderMessageContent(msg.content, isMe)}
                       
                       {/* БЛОК С ГАЛОЧКАМИ И ВРЕМЕНЕМ */}
-                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium ${isMedia ? 'bottom-2.5 right-2.5 bg-black/50 text-white px-2 py-0.5 rounded-full backdrop-blur-sm' : 'bottom-1.5 right-3'} ${isMe && !isMedia ? 'text-gray-400 dark:text-zinc-500' : 'text-gray-400 dark:text-zinc-500'}`}>
+                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium ${isMedia ? 'bottom-2 right-2 bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md' : 'bottom-1.5 right-3'} ${isMe && !isMedia ? 'text-gray-400 dark:text-zinc-500' : 'text-gray-400 dark:text-zinc-500'}`}>
                         <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                         
                         {isMe && (
@@ -446,6 +459,7 @@ export default function ChatPage() {
                         )}
                       </div>
                     </div>
+
                   </div>
                 </div>
               );
@@ -478,8 +492,10 @@ export default function ChatPage() {
               {isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={24} />}
             </button>
             <input className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" value={content} onChange={(e) => setContent(e.target.value)} placeholder="Сообщение" />
-            <button type="submit" disabled={!content.trim()} className="w-[42px] h-[42px] flex-shrink-0 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:opacity-30 transition-transform active:scale-95 shadow-sm">
-              <ChevronRight size={24} className="ml-0.5" strokeWidth={2.5} />
+            
+            {/* ИСПРАВЛЕНИЕ: КНОПКА-СТРЕЛОЧКА БЕЗ КРУГЛОГО ФОНА */}
+            <button type="submit" disabled={!content.trim()} className="w-[42px] h-[42px] flex-shrink-0 flex items-center justify-center disabled:opacity-30 transition-transform active:scale-95 text-blue-500">
+              <ChevronRight size={30} strokeWidth={2.5} />
             </button>
           </form>
         )}
@@ -487,4 +503,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
