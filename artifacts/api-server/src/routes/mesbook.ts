@@ -4,7 +4,6 @@ import { broadcastToChat, broadcastToWall } from "../lib/realtime";
 
 const router: IRouter = Router();
 
-// ПАМЯТЬ ДЛЯ ИНДИКАЦИИ ПЕЧАТИ (живет 4 секунды)
 const typingStates = new Map<string, { time: number, name: string }>();
 
 function userFromRow(row: any) {
@@ -201,10 +200,11 @@ router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
       const countRes = await database.execute({ sql: "SELECT COUNT(*) as c FROM chat_members WHERE chat_id = ?", args: [chatId] });
       membersCount = Number(countRes.rows[0]?.c) || 1;
 
-      const fiveMinsAgo = Date.now() - 3 * 60 * 1000;
+      // ИСПРАВЛЕНИЕ: Таймер онлайна снижен до 1 минуты (60000 мс)
+      const oneMinAgo = Date.now() - 60 * 1000;
       const onlineRes = await database.execute({
         sql: "SELECT COUNT(*) as c FROM chat_members cm JOIN users u ON cm.user_id = u.id WHERE cm.chat_id = ? AND u.last_seen > ?",
-        args: [chatId, fiveMinsAgo]
+        args: [chatId, oneMinAgo]
       });
       onlineCount = Number(onlineRes.rows[0]?.c) || 1;
     } catch (e) {}
@@ -222,7 +222,6 @@ router.post("/chats/:chatId/join", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
-// РОУТ ИНДИКАТОРА ПЕЧАТИ
 router.post("/chats/:chatId/typing", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]);
   if (!currentUserId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -257,7 +256,6 @@ router.get("/chats", async (req, res): Promise<void> => {
   const chats = await Promise.all(chatRows.rows.map(async (row: any) => {
     const cId = Number(row.chat_id);
     
-    // Кто печатает в этом чате?
     const typing: string[] = [];
     for (const [key, data] of typingStates.entries()) {
       if (now - data.time < 4000) {
@@ -317,7 +315,6 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
     isMine: Number(row.sender_id) === currentUserId, isRead: Number(row.read_by_me) === 1,
   }));
 
-  // Кто печатает?
   const now = Date.now();
   const typing: string[] = [];
   for (const [key, data] of typingStates.entries()) {
