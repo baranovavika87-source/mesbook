@@ -11,9 +11,89 @@ const getUserId = () => {
   }
 };
 
+// ==========================================
+// СЛОВАРЬ ПЕРЕВОДОВ (МУЛЬТИЯЗЫЧНОСТЬ)
+// ==========================================
+const translations = {
+  ru: {
+    chats: "Чаты",
+    wall: "Стена",
+    search: "Поиск",
+    channels: "Каналы",
+    globalSearch: "Глобальный поиск",
+    yourChats: "Ваши чаты",
+    yourChannels: "Ваши каналы",
+    nothingFound: "Ничего не найдено",
+    startTyping: "Начните вводить имя или название",
+    noChats: "Нет чатов",
+    addAccount: "Добавить аккаунт",
+    createGroup: "Создать группу",
+    createChannel: "Создать канал",
+    saved: "Избранное",
+    settings: "Настройки",
+    loginAcc: "Войти в аккаунт",
+    newAcc: "Новый аккаунт",
+    login: "Войти",
+    create: "Создать",
+    namePlaceholder: "Имя (например, Игорь)",
+    usernamePlaceholder: "Никнейм (@username)",
+    passwordPlaceholder: "Пароль",
+    continue: "Продолжить",
+    groupName: "Название группы",
+    channelName: "Название канала",
+    description: "Описание",
+    descPlaceholderGroup: "Можете указать дополнительное описание группы.",
+    descPlaceholderChannel: "Можете указать дополнительное описание канала.",
+    attachment: "Вложение",
+    noMessages: "Нет сообщений",
+    companion: "Собеседник",
+    errorLogin: "Ошибка при входе",
+    errorNet: "Ошибка сети"
+  },
+  en: {
+    chats: "Chats",
+    wall: "Wall",
+    search: "Search",
+    channels: "Channels",
+    globalSearch: "Global Search",
+    yourChats: "Your Chats",
+    yourChannels: "Your Channels",
+    nothingFound: "Nothing found",
+    startTyping: "Start typing a name or title",
+    noChats: "No chats",
+    addAccount: "Add Account",
+    createGroup: "Create Group",
+    createChannel: "Create Channel",
+    saved: "Saved Messages",
+    settings: "Settings",
+    loginAcc: "Log In",
+    newAcc: "New Account",
+    login: "Log In",
+    create: "Create",
+    namePlaceholder: "Name (e.g., Igor)",
+    usernamePlaceholder: "Username (@username)",
+    passwordPlaceholder: "Password",
+    continue: "Continue",
+    groupName: "Group Name",
+    channelName: "Channel Name",
+    description: "Description",
+    descPlaceholderGroup: "You can add an optional group description.",
+    descPlaceholderChannel: "You can add an optional channel description.",
+    attachment: "Attachment",
+    noMessages: "No messages",
+    companion: "Companion",
+    errorLogin: "Login error",
+    errorNet: "Network error"
+  }
+};
+
 export default function ChatsPage() {
   const [search, setSearch] = useState('');
   const currentUserId = getUserId();
+  
+  // Установка языка из памяти
+  const [lang, setLang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
+  const t = translations[lang] || translations.ru;
   
   const [chats, setChats] = useState<any[]>(() => {
     try {
@@ -143,15 +223,16 @@ export default function ChatsPage() {
   if (!hasSavedInServer && lastSavedMsg) {
     allDynamicChats.push({
       id: 'saved',
-      participant: { id: currentUserId, displayName: 'Избранное', isSaved: true, avatarUrl: '' },
+      participant: { id: currentUserId, displayName: t.saved, isSaved: true, avatarUrl: '' },
       lastMessage: lastSavedMsg.content,
       lastMessageAt: lastSavedMsg.createdAt,
-      lastMessageSenderId: currentUserId, // Для сохраненных мы всегда отправитель
+      lastMessageSenderId: currentUserId,
       lastMessageRead: 1
     });
   } else if (hasSavedInServer && lastSavedMsg) {
     const serverSaved = allDynamicChats.find(c => String(c.id) === 'saved');
     if (serverSaved) {
+      serverSaved.participant.displayName = t.saved; // Применяем перевод
       const serverTime = new Date(serverSaved.lastMessageAt || serverSaved.lastMessageTime || 0).getTime();
       const localTime = new Date(lastSavedMsg.createdAt || 0).getTime();
       if (localTime > serverTime) {
@@ -228,10 +309,10 @@ export default function ChatsPage() {
       if (data.secure_url) {
         setModalAvatarUrl(data.secure_url);
       } else {
-        alert("Ошибка загрузки: " + (data.error?.message || "неизвестная ошибка"));
+        alert("Ошибка загрузки");
       }
     } catch (err) {
-      alert("Ошибка сети при загрузке аватара");
+      alert("Ошибка сети");
     }
     setIsUploadingModalAvatar(false);
   };
@@ -266,11 +347,10 @@ export default function ChatsPage() {
         setShowAddAccountModal(false);
         window.location.reload();
       } else {
-        const err = await res.json();
-        alert(err.error || "Ошибка при входе");
+        alert(t.errorLogin);
       }
     } catch (e) {
-      alert("Ошибка сети");
+      alert(t.errorNet);
     }
     setIsAddingAccount(false);
   };
@@ -292,7 +372,6 @@ export default function ChatsPage() {
     const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 3 * 60 * 1000) : false;
     const timeRaw = chat.lastMessageAt || chat.lastMessageTime;
     
-    // ИСПРАВЛЕНИЕ: Галочки рисуются только если это ТВОЕ сообщение
     const isLastMessageMine = chat.lastMessageSenderId === currentUserId;
     const isLastMessageRead = chat.lastMessageRead === 1;
 
@@ -319,7 +398,7 @@ export default function ChatsPage() {
           <div className="ml-4 flex-1 overflow-hidden">
             <div className="flex justify-between items-baseline mb-0.5">
               <h3 className="font-semibold text-black dark:text-white text-[16px] truncate pr-2">
-                {participant.displayName || 'Собеседник'}
+                {isSaved ? t.saved : (participant.displayName || t.companion)}
               </h3>
               {timeRaw && (
                 <span className="text-[12px] text-gray-400 dark:text-zinc-500 shrink-0 font-medium">
@@ -329,7 +408,7 @@ export default function ChatsPage() {
             </div>
             <div className="flex items-center justify-between">
               <p className="text-[15px] text-gray-500 dark:text-zinc-400 truncate pr-2">
-                {chat.lastMessage?.startsWith('[MEDIA]') ? 'Вложение' : (chat.lastMessage || 'Нет сообщений')}
+                {chat.lastMessage?.startsWith('[MEDIA]') ? t.attachment : (chat.lastMessage || t.noMessages)}
               </p>
               {chat.lastMessage && (
                 <div className="flex -space-x-1 shrink-0 text-black dark:text-white items-center">
@@ -453,7 +532,7 @@ export default function ChatsPage() {
               className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors w-full text-left"
             >
               <UserPlus size={20} className="text-gray-400 dark:text-zinc-400" />
-              <span className="text-[15px] font-medium">Добавить аккаунт</span>
+              <span className="text-[15px] font-medium">{t.addAccount}</span>
             </button>
           </div>
 
@@ -463,14 +542,14 @@ export default function ChatsPage() {
               className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors w-full text-left border-b border-gray-100/50 dark:border-zinc-800/50"
             >
               <Users size={20} className="text-gray-400 dark:text-zinc-400" />
-              <span className="text-[15px] font-medium">Создать группу</span>
+              <span className="text-[15px] font-medium">{t.createGroup}</span>
             </button>
             <button 
               onClick={() => setModalType('channel')} 
               className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors w-full text-left"
             >
               <Volume2 size={20} className="text-gray-400 dark:text-zinc-400" />
-              <span className="text-[15px] font-medium">Создать канал</span>
+              <span className="text-[15px] font-medium">{t.createChannel}</span>
             </button>
           </div>
 
@@ -478,14 +557,14 @@ export default function ChatsPage() {
             <Link href="/chat/saved">
               <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50">
                 <Bookmark size={20} className="text-gray-400 dark:text-zinc-400" />
-                <span className="text-[15px] font-medium">Избранное</span>
+                <span className="text-[15px] font-medium">{t.saved}</span>
               </a>
             </Link>
             
             <Link href="/settings">
               <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors">
                 <Settings size={20} className="text-gray-400 dark:text-zinc-400" />
-                <span className="text-[15px] font-medium">Настройки</span>
+                <span className="text-[15px] font-medium">{t.settings}</span>
               </a>
             </Link>
           </div>
@@ -498,7 +577,7 @@ export default function ChatsPage() {
           <div className="bg-[#f2f2f7] dark:bg-black rounded-3xl w-full max-w-sm p-6 shadow-2xl border border-gray-200/50 dark:border-zinc-800/50">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold text-black dark:text-white">
-                {isLoginMode ? 'Войти в аккаунт' : 'Новый аккаунт'}
+                {isLoginMode ? t.loginAcc : t.newAcc}
               </h3>
               <button onClick={() => setShowAddAccountModal(false)} className="p-1 text-gray-400 hover:text-black dark:hover:text-white rounded-full transition-colors">
                 <X size={20} />
@@ -506,20 +585,20 @@ export default function ChatsPage() {
             </div>
             
             <div className="flex bg-gray-200/80 dark:bg-zinc-900 rounded-lg p-1 mb-6">
-               <button type="button" onClick={() => setIsLoginMode(true)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${isLoginMode ? 'bg-white dark:bg-zinc-800 shadow-sm text-black dark:text-white' : 'text-gray-500'}`}>Войти</button>
-               <button type="button" onClick={() => setIsLoginMode(false)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${!isLoginMode ? 'bg-white dark:bg-zinc-800 shadow-sm text-black dark:text-white' : 'text-gray-500'}`}>Создать</button>
+               <button type="button" onClick={() => setIsLoginMode(true)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${isLoginMode ? 'bg-white dark:bg-zinc-800 shadow-sm text-black dark:text-white' : 'text-gray-500'}`}>{t.login}</button>
+               <button type="button" onClick={() => setIsLoginMode(false)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${!isLoginMode ? 'bg-white dark:bg-zinc-800 shadow-sm text-black dark:text-white' : 'text-gray-500'}`}>{t.create}</button>
             </div>
 
             <form onSubmit={handleAddAccountSubmit} className="space-y-4">
               <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl overflow-hidden shadow-sm border border-gray-100/50 dark:border-zinc-800/50">
                 {!isLoginMode && (
-                  <input type="text" placeholder="Имя (например, Игорь)" value={newName} onChange={e => setNewName(e.target.value)} className="w-full bg-transparent border-b border-gray-100 dark:border-zinc-800 px-4 py-3.5 text-[15px] text-black dark:text-white placeholder-gray-400 outline-none focus:bg-gray-50 dark:focus:bg-zinc-800/50 transition-colors" />
+                  <input type="text" placeholder={t.namePlaceholder} value={newName} onChange={e => setNewName(e.target.value)} className="w-full bg-transparent border-b border-gray-100 dark:border-zinc-800 px-4 py-3.5 text-[15px] text-black dark:text-white placeholder-gray-400 outline-none focus:bg-gray-50 dark:focus:bg-zinc-800/50 transition-colors" />
                 )}
-                <input type="text" placeholder="Никнейм (@username)" value={newUsername} onChange={e => setNewUsername(e.target.value)} className="w-full bg-transparent border-b border-gray-100 dark:border-zinc-800 px-4 py-3.5 text-[15px] text-black dark:text-white placeholder-gray-400 outline-none focus:bg-gray-50 dark:focus:bg-zinc-800/50 transition-colors" />
-                <input type="password" placeholder="Пароль" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full bg-transparent px-4 py-3.5 text-[15px] text-black dark:text-white placeholder-gray-400 outline-none focus:bg-gray-50 dark:focus:bg-zinc-800/50 transition-colors" />
+                <input type="text" placeholder={t.usernamePlaceholder} value={newUsername} onChange={e => setNewUsername(e.target.value)} className="w-full bg-transparent border-b border-gray-100 dark:border-zinc-800 px-4 py-3.5 text-[15px] text-black dark:text-white placeholder-gray-400 outline-none focus:bg-gray-50 dark:focus:bg-zinc-800/50 transition-colors" />
+                <input type="password" placeholder={t.passwordPlaceholder} value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full bg-transparent px-4 py-3.5 text-[15px] text-black dark:text-white placeholder-gray-400 outline-none focus:bg-gray-50 dark:focus:bg-zinc-800/50 transition-colors" />
               </div>
               <button type="submit" disabled={isAddingAccount} className="w-full py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-2xl transition-transform active:scale-95 mt-2 flex items-center justify-center h-12 shadow-sm">
-                {isAddingAccount ? <Loader2 size={18} className="animate-spin" /> : (isLoginMode ? 'Войти' : 'Продолжить')}
+                {isAddingAccount ? <Loader2 size={18} className="animate-spin" /> : (isLoginMode ? t.login : t.continue)}
               </button>
             </form>
           </div>
@@ -534,7 +613,7 @@ export default function ChatsPage() {
                 <ArrowLeft size={26} strokeWidth={2} />
               </button>
               <h2 className="text-[20px] font-semibold text-black dark:text-white">
-                {modalType === 'group' ? 'Создать группу' : 'Создать канал'}
+                {modalType === 'group' ? t.createGroup : t.createChannel}
               </h2>
             </div>
             <button 
@@ -569,7 +648,7 @@ export default function ChatsPage() {
                 <input
                   autoFocus
                   type="text"
-                  placeholder={modalType === 'group' ? 'Название группы' : 'Название канала'}
+                  placeholder={modalType === 'group' ? t.groupName : t.channelName}
                   value={modalType === 'group' ? groupName : channelName}
                   onChange={e => modalType === 'group' ? setGroupName(e.target.value) : setChannelName(e.target.value)}
                   className="w-full bg-transparent border-b border-gray-200 dark:border-zinc-800 py-2.5 text-[17px] font-medium text-black dark:text-white placeholder-gray-400 outline-none focus:border-black dark:focus:border-white transition-colors"
@@ -578,13 +657,13 @@ export default function ChatsPage() {
             </div>
 
             <div className="mt-4 bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden p-4 border border-gray-100/50 dark:border-zinc-800/50">
-              <p className="text-xs font-bold text-gray-400 dark:text-zinc-500 mb-2 uppercase tracking-wider">Описание</p>
+              <p className="text-xs font-bold text-gray-400 dark:text-zinc-500 mb-2 uppercase tracking-wider">{t.description}</p>
               <textarea 
                 rows={3}
                 value={channelDesc}
                 onChange={e => setChannelDesc(e.target.value)}
                 className="w-full bg-transparent text-[15px] text-black dark:text-white outline-none resize-none placeholder-gray-400" 
-                placeholder={`Можете указать дополнительное описание ${modalType === 'group' ? 'группы' : 'канала'}.`} 
+                placeholder={modalType === 'group' ? t.descPlaceholderGroup : t.descPlaceholderChannel} 
               />
             </div>
           </div>
@@ -604,7 +683,7 @@ export default function ChatsPage() {
               <input
                 autoFocus
                 type="text"
-                placeholder="Поиск"
+                placeholder={t.search}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="flex-1 bg-transparent border-none outline-none text-[18px] text-black dark:text-white placeholder-gray-400"
@@ -615,13 +694,13 @@ export default function ChatsPage() {
                 onClick={() => setSearchTab('chats')}
                 className={`flex-1 pb-3 text-[15px] font-semibold transition-colors border-b-[2.5px] ${searchTab === 'chats' ? 'border-black dark:border-white text-black dark:text-white' : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-zinc-400'}`}
               >
-                Чаты
+                {t.chats}
               </button>
               <button
                 onClick={() => setSearchTab('channels')}
                 className={`flex-1 pb-3 text-[15px] font-semibold transition-colors border-b-[2.5px] ${searchTab === 'channels' ? 'border-black dark:border-white text-black dark:text-white' : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-zinc-400'}`}
               >
-                Каналы
+                {t.channels}
               </button>
             </div>
           </header>
@@ -630,7 +709,7 @@ export default function ChatsPage() {
             {search.length < 2 && searchResults.length === 0 && (
               <div className="text-center py-20 text-gray-400">
                  <Search size={40} className="mx-auto mb-3 opacity-20" />
-                 <p className="text-sm">Начните вводить имя или название</p>
+                 <p className="text-sm">{t.startTyping}</p>
               </div>
             )}
 
@@ -639,7 +718,7 @@ export default function ChatsPage() {
                 {searchUsersGlobal.length > 0 && (
                   <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
                     <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-800/50 bg-gray-50/50 dark:bg-black/20">
-                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Глобальный поиск</span>
+                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">{t.globalSearch}</span>
                     </div>
                     {searchUsersGlobal.map(renderGlobalUserCard)}
                   </div>
@@ -647,7 +726,7 @@ export default function ChatsPage() {
                 {localChatsFiltered.length > 0 && (
                   <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
                     <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-800/50 bg-gray-50/50 dark:bg-black/20">
-                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Ваши чаты</span>
+                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">{t.yourChats}</span>
                     </div>
                     {localChatsFiltered.map(renderChatCard)}
                   </div>
@@ -658,7 +737,7 @@ export default function ChatsPage() {
                 {searchChannelsGlobal.length > 0 && (
                   <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
                     <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-800/50 bg-gray-50/50 dark:bg-black/20">
-                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Глобальный поиск</span>
+                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">{t.globalSearch}</span>
                     </div>
                     {searchChannelsGlobal.map(renderGlobalUserCard)}
                   </div>
@@ -666,7 +745,7 @@ export default function ChatsPage() {
                 {localChannelsFiltered.length > 0 && (
                   <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
                     <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-800/50 bg-gray-50/50 dark:bg-black/20">
-                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Ваши каналы</span>
+                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">{t.yourChannels}</span>
                     </div>
                     {localChannelsFiltered.map(renderChatCard)}
                   </div>
@@ -677,7 +756,7 @@ export default function ChatsPage() {
             {search.length >= 2 && searchUsersGlobal.length === 0 && searchChannelsGlobal.length === 0 && localChatsFiltered.length === 0 && localChannelsFiltered.length === 0 && (
                <div className="text-center py-20 text-gray-400">
                   <Search size={40} className="mx-auto mb-3 opacity-20" />
-                  <p>Ничего не найдено</p>
+                  <p>{t.nothingFound}</p>
                </div>
             )}
           </main>
@@ -703,7 +782,7 @@ export default function ChatsPage() {
               </button>
               
               <h1 className="text-[20px] font-semibold text-black dark:text-white tracking-wide">
-                Чаты
+                {t.chats}
               </h1>
               
               <button 
@@ -723,7 +802,7 @@ export default function ChatsPage() {
             {filteredChats.length === 0 && (
               <div className="text-center py-20 text-gray-400">
                 <MessageSquare size={48} className="mx-auto mb-3 opacity-20" />
-                <p>Нет чатов</p>
+                <p>{t.noChats}</p>
               </div>
             )}
           </main>
@@ -732,13 +811,13 @@ export default function ChatsPage() {
             <Link href="/">
               <a className="flex flex-col items-center text-black dark:text-white transition-transform active:scale-95">
                 <MessageSquare size={26} className="mb-1" fill="currentColor" />
-                <span className="text-[10px] font-medium">Чаты</span>
+                <span className="text-[10px] font-medium">{t.chats}</span>
               </a>
             </Link>
             <Link href="/wall">
               <a className="flex flex-col items-center text-gray-400 hover:text-black dark:hover:text-white transition-colors active:scale-95">
                 <Users size={26} className="mb-1" />
-                <span className="text-[10px] font-medium">Стена</span>
+                <span className="text-[10px] font-medium">{t.wall}</span>
               </a>
             </Link>
           </nav>
@@ -746,5 +825,4 @@ export default function ChatsPage() {
       )}
     </div>
   );
-}
-
+                                                              }
