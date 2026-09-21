@@ -149,7 +149,6 @@ export default function ChatsPage() {
   const [, setLocation] = useLocation();
   const touchStartX = useRef<number | null>(null);
 
-  // ВОССТАНОВЛЕНИЕ ОНЛАЙНА: Каждые 10 сек отправляем Ping
   useEffect(() => {
     const sendPing = async () => {
       try { await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
@@ -379,13 +378,14 @@ export default function ChatsPage() {
   const renderChatCard = (chat: any) => {
     const participant = chat.participant || {};
     const isSaved = participant.isSaved || String(chat.id) === 'saved';
-    const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 3 * 60 * 1000) : false;
+    
+    // ИСПРАВЛЕНИЕ: Таймер "В сети" снижен до 1 минуты (60 секунд)
+    const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 60 * 1000) : false;
     const timeRaw = chat.lastMessageAt || chat.lastMessageTime;
     
     const isLastMessageMine = chat.lastMessageSenderId === currentUserId;
     const isLastMessageRead = chat.lastMessageRead === 1;
 
-    // ЛОГИКА ИНДИКАТОРА ПЕЧАТИ
     const typingNames = chat.typing || [];
     const isTyping = typingNames.length > 0;
     
@@ -402,23 +402,30 @@ export default function ChatsPage() {
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
         <a className="flex items-center px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 bg-white dark:bg-[#1c1c1e]">
-          <div className={`w-[52px] h-[52px] shrink-0 rounded-full flex items-center justify-center relative shadow-sm overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSaved ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
-            {isSaved ? (
-              <Bookmark size={24} fill="currentColor" />
-            ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
-              <img 
-                src={participant.avatarUrl} 
-                alt="Avatar" 
-                className="w-full h-full object-cover" 
-                onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
-              />
-            ) : (
-              <span className="text-[20px] font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
-            )}
+          
+          {/* ИСПРАВЛЕНИЕ ВЕРСТКИ АВАТАРА: Индикатор вынесен поверх контейнера, чтобы не обрезался */}
+          <div className="relative w-[52px] h-[52px] shrink-0">
+            <div className={`w-full h-full rounded-full flex items-center justify-center overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 shadow-sm ${isSaved ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
+              {isSaved ? (
+                <Bookmark size={24} fill="currentColor" />
+              ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
+                <img 
+                  src={participant.avatarUrl} 
+                  alt="Avatar" 
+                  className="w-full h-full object-cover" 
+                  onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+                />
+              ) : (
+                <span className="text-[20px] font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
+              )}
+            </div>
+            
+            {/* ИНДИКАТОР В СЕТИ: Абсолютное позиционирование поверх всего */}
             {isOnline && !participant.isGroup && !participant.isChannel && !isSaved && (
-              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-[#1c1c1e] rounded-full"></div>
+              <div className="absolute bottom-[1px] right-[1px] w-[14px] h-[14px] bg-green-500 border-[2.5px] border-white dark:border-[#1c1c1e] rounded-full z-10"></div>
             )}
           </div>
+
           <div className="ml-4 flex-1 overflow-hidden">
             <div className="flex justify-between items-baseline mb-0.5">
               <h3 className="font-semibold text-black dark:text-white text-[16px] truncate pr-2">
@@ -849,4 +856,4 @@ export default function ChatsPage() {
       )}
     </div>
   );
-      }
+  }
