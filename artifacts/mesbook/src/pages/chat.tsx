@@ -6,9 +6,6 @@ const getUserId = () => {
   try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
 };
 
-// ==========================================
-// СЛОВАРЬ ПЕРЕВОДОВ И ЛОГИКА СКЛОНЕНИЙ
-// ==========================================
 const translations = {
   ru: {
     saved: "Избранное",
@@ -39,7 +36,9 @@ const translations = {
     errCloudinary: "Ошибка облака Cloudinary: ",
     errUnknown: "неизвестная ошибка",
     errNetMedia: "Ошибка сети при загрузке медиа",
-    errNoRights: "У вас нет прав на редактирование"
+    errNoRights: "У вас нет прав на редактирование",
+    isTyping: "печатает...",
+    areTyping: "печатают..."
   },
   en: {
     saved: "Saved Messages",
@@ -70,7 +69,9 @@ const translations = {
     errCloudinary: "Cloudinary error: ",
     errUnknown: "unknown error",
     errNetMedia: "Network error during media upload",
-    errNoRights: "You don't have permission to edit"
+    errNoRights: "You don't have permission to edit",
+    isTyping: "is typing...",
+    areTyping: "are typing..."
   }
 };
 
@@ -116,6 +117,10 @@ export default function ChatPage() {
   const [membersCount, setMembersCount] = useState<number | null>(null);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
 
+  // ИНДИКАЦИЯ ПЕЧАТИ
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const lastTypingTime = useRef(0);
+
   const [isEditingChat, setIsEditingChat] = useState(false);
   const [editChatName, setEditChatName] = useState('');
   const [editChatDesc, setEditChatDesc] = useState('');
@@ -147,6 +152,16 @@ export default function ChatPage() {
       localStorage.setItem('mesbook_messages_cache_' + currentUserId + '_' + chatId, JSON.stringify(confirmedMsgs));
     }
   }, [messages, chatId, currentUserId, isSavedChat]);
+
+  // ПИНГ ДЛЯ ОНЛАЙНА
+  useEffect(() => {
+    const sendPing = async () => {
+      try { await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
+    };
+    sendPing();
+    const interval = setInterval(sendPing, 10000);
+    return () => clearInterval(interval);
+  }, [currentUserId]);
 
   useEffect(() => {
     if (!isGroupOrChannel) return;
@@ -185,9 +200,10 @@ export default function ChatPage() {
       const msgRes = await fetch('/api/chats/' + chatId + '/messages', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
       if (msgRes.ok) {
         const data = await msgRes.json();
+        const serverMsgs = Array.isArray(data.messages) ? data.messages : (Array.isArray(data) ? data : []);
+        setTypingUsers(data.typing || []); // Записываем тех, кто печатает
         setMessages((prev: any) => {
           const sendingMsgs = prev.filter((m: any) => m.isSending);
-          const serverMsgs = Array.isArray(data) ? data : [];
           const filteredSending = sendingMsgs.filter((sm: any) => !serverMsgs.find((dm: any) => dm.content === sm.content));
           return [...serverMsgs, ...filteredSending].sort((a: any, b: any) => a.id - b.id);
         });
@@ -328,7 +344,17 @@ export default function ChatPage() {
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
   
   let subtitleText = "";
-  if (!isSavedChat) {
+  let subtitleColor = "text-gray-400 dark:text-zinc-500"; // Цвет по умолчанию
+
+  // ЛОГИКА ТЕКСТА: Если кто-то печатает, текст синий
+  if (typingUsers.length > 0) {
+    subtitleColor = "text-blue-500";
+    if (typingUsers.length === 1) {
+      subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping;
+    } else {
+      subtitleText = `${typingUsers.join(', ')} ${t.areTyping}`;
+    }
+  } else if (!isSavedChat) {
     if (isGroupOrChannel) {
       if (membersCount === null) {
         subtitleText = isChannel ? t.channel : t.group;
@@ -340,6 +366,7 @@ export default function ChatPage() {
         }
       }
     } else {
+      subtitleColor = isOnline ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500';
       subtitleText = isOnline ? t.online : (lastSeen ? `${t.lastSeenAt} ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : t.recently);
     }
   }
@@ -348,7 +375,7 @@ export default function ChatPage() {
     if (msgContent.startsWith('[MEDIA] ')) {
       let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
-      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic\vert{}heif)$/i, '.jpg');
+      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic|heif)$/i, '.jpg');
       
       return (
         <div className="relative flex items-center justify-center overflow-hidden rounded-[16px]">
@@ -389,7 +416,9 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-screen bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative font-sans">
       
-      {/* ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА */}
+      {/* ---------------------------------------------------------
+          ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА
+      --------------------------------------------------------- */}
       {showProfile && chatInfo?.participant && (
         <div className="fixed inset-0 z-50 bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-bottom duration-200 overflow-y-auto">
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900 sticky top-0 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
@@ -469,7 +498,9 @@ export default function ChatPage() {
                 </div>
                 <h2 className="text-[22px] font-bold text-black dark:text-white mb-1 text-center px-4">{chatInfo.participant.displayName}</h2>
                 {chatInfo.participant.username && <p className="text-[15px] text-gray-500">{chatInfo.participant.username}</p>}
-                <p className={`mt-1.5 text-[13px] font-medium ${isOnline && !isGroupOrChannel ? 'text-green-500' : 'text-gray-400'}`}>{subtitleText}</p>
+                
+                {/* Подзаголовок (онлайн или количество подписчиков) */}
+                <p className={`mt-1.5 text-[13px] font-medium ${subtitleColor}`}>{subtitleText}</p>
               </div>
               
               <div className="px-4 pb-12 w-full max-w-lg mx-auto flex flex-col gap-4">
@@ -507,7 +538,9 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ШАПКА ЧАТА */}
+      {/* ---------------------------------------------------------
+          ШАПКА ЧАТА
+      --------------------------------------------------------- */}
       <header className="px-3 pt-10 pb-3 border-b border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-3 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-md relative z-10 shadow-sm">
         <Link href="/"><a className="p-2 text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
@@ -519,12 +552,14 @@ export default function ChatPage() {
           </div>
           <div className="flex flex-col">
             <h2 className="font-semibold text-black dark:text-white text-[16px] leading-tight truncate pr-2">{displayName}</h2>
-            {subtitleText && <p className={`text-[12px] font-medium mt-0.5 ${isGroupOrChannel ? 'text-gray-500' : (isOnline ? 'text-green-500' : 'text-gray-400')}`}>{subtitleText}</p>}
+            {subtitleText && <p className={`text-[12px] font-medium mt-0.5 ${subtitleColor}`}>{subtitleText}</p>}
           </div>
         </div>
       </header>
 
-      {/* ОСНОВНОЕ ОКНО СООБЩЕНИЙ */}
+      {/* ---------------------------------------------------------
+          ОСНОВНОЕ ОКНО СООБЩЕНИЙ
+      --------------------------------------------------------- */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4">
         <div className="flex flex-col">
           {(() => {
@@ -534,7 +569,7 @@ export default function ChatPage() {
               const isMe = String(msg.senderId) === String(currentUserId);
               const isMedia = msg.content.startsWith('[MEDIA] ');
               
-              // ГРУППИРОВКА ДАТ (с учетом языка!)
+              // ГРУППИРОВКА ДАТ
               const dateObj = new Date(msg.createdAt);
               const dateLocale = lang === 'ru' ? 'ru-RU' : 'en-US';
               const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString(dateLocale, { day: 'numeric', month: 'long' });
@@ -634,7 +669,19 @@ export default function ChatPage() {
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-10 h-10 shrink-0 flex items-center justify-center text-gray-500 hover:text-black dark:hover:text-white transition-colors disabled:opacity-50">
               {isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={24} />}
             </button>
-            <input className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" value={content} onChange={(e) => setContent(e.target.value)} placeholder={t.messagePlaceholder} />
+            <input 
+              className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" 
+              value={content} 
+              onChange={(e) => {
+                setContent(e.target.value);
+                // Отправка сигнала печати
+                if (Date.now() - lastTypingTime.current > 2000) {
+                  lastTypingTime.current = Date.now();
+                  fetch(`/api/chats/${chatId}/typing`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } });
+                }
+              }} 
+              placeholder={t.messagePlaceholder} 
+            />
             
             <button 
               type="submit" 
