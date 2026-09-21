@@ -344,9 +344,8 @@ export default function ChatPage() {
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
   
   let subtitleText = "";
-  let subtitleColor = "text-gray-400 dark:text-zinc-500"; // Цвет по умолчанию
+  let subtitleColor = "text-gray-400 dark:text-zinc-500"; 
 
-  // ЛОГИКА ТЕКСТА: Если кто-то печатает, текст синий
   if (typingUsers.length > 0) {
     subtitleColor = "text-blue-500";
     if (typingUsers.length === 1) {
@@ -375,7 +374,7 @@ export default function ChatPage() {
     if (msgContent.startsWith('[MEDIA] ')) {
       let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
-      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic|heif)$/i, '.jpg');
+      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic\vert{}heif)$/i, '.jpg');
       
       return (
         <div className="relative flex items-center justify-center overflow-hidden rounded-[16px]">
@@ -498,8 +497,6 @@ export default function ChatPage() {
                 </div>
                 <h2 className="text-[22px] font-bold text-black dark:text-white mb-1 text-center px-4">{chatInfo.participant.displayName}</h2>
                 {chatInfo.participant.username && <p className="text-[15px] text-gray-500">{chatInfo.participant.username}</p>}
-                
-                {/* Подзаголовок (онлайн или количество подписчиков) */}
                 <p className={`mt-1.5 text-[13px] font-medium ${subtitleColor}`}>{subtitleText}</p>
               </div>
               
@@ -674,7 +671,6 @@ export default function ChatPage() {
               value={content} 
               onChange={(e) => {
                 setContent(e.target.value);
-                // Отправка сигнала печати
                 if (Date.now() - lastTypingTime.current > 2000) {
                   lastTypingTime.current = Date.now();
                   fetch(`/api/chats/${chatId}/typing`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } });
@@ -695,4 +691,4 @@ export default function ChatPage() {
       </div>
     </div>
   );
-    }
+        }
