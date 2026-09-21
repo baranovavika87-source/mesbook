@@ -6,8 +6,77 @@ const getUserId = () => {
   try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
 };
 
-function declOfNum(n: number, text_forms: string[]) {
+// ==========================================
+// СЛОВАРЬ ПЕРЕВОДОВ И ЛОГИКА СКЛОНЕНИЙ
+// ==========================================
+const translations = {
+  ru: {
+    saved: "Избранное",
+    companion: "Собеседник",
+    attachment: "Вложение",
+    photo: "Фотография",
+    info: "Информация",
+    name: "Название",
+    desc: "Описание",
+    bio: "О себе",
+    channel: "Канал",
+    personalChannel: "Личный Канал",
+    birthday: "День рождения",
+    online: "В сети",
+    lastSeenAt: "Был(а) в",
+    recently: "Недавно",
+    group: "Группа",
+    subs: ['подписчик', 'подписчика', 'подписчиков'],
+    members: ['участник', 'участника', 'участников'],
+    onlineCount: "в сети",
+    subscribe: "Подписаться",
+    joinGroup: "Вступить в группу",
+    mute: "Убрать звук",
+    unmute: "Включить звук",
+    reply: "Ответ",
+    messagePlaceholder: "Сообщение",
+    deleteConfirm: "Удалить сообщение?",
+    errCloudinary: "Ошибка облака Cloudinary: ",
+    errUnknown: "неизвестная ошибка",
+    errNetMedia: "Ошибка сети при загрузке медиа",
+    errNoRights: "У вас нет прав на редактирование"
+  },
+  en: {
+    saved: "Saved Messages",
+    companion: "Companion",
+    attachment: "Attachment",
+    photo: "Photo",
+    info: "Info",
+    name: "Name",
+    desc: "Description",
+    bio: "Bio",
+    channel: "Channel",
+    personalChannel: "Personal Channel",
+    birthday: "Birthday",
+    online: "Online",
+    lastSeenAt: "Last seen at",
+    recently: "Recently",
+    group: "Group",
+    subs: ['subscriber', 'subscribers'],
+    members: ['member', 'members'],
+    onlineCount: "online",
+    subscribe: "Subscribe",
+    joinGroup: "Join Group",
+    mute: "Mute",
+    unmute: "Unmute",
+    reply: "Reply",
+    messagePlaceholder: "Message",
+    deleteConfirm: "Delete message?",
+    errCloudinary: "Cloudinary error: ",
+    errUnknown: "unknown error",
+    errNetMedia: "Network error during media upload",
+    errNoRights: "You don't have permission to edit"
+  }
+};
+
+function declOfNum(n: number, text_forms: string[], lang: 'ru' | 'en') {
   n = Math.abs(n) % 100;
+  if (lang === 'en') return n === 1 ? text_forms[0] : text_forms[1];
   const n1 = n % 10;
   if (n > 10 && n < 20) return text_forms[2];
   if (n1 > 1 && n1 < 5) return text_forms[1];
@@ -22,6 +91,9 @@ export default function ChatPage() {
   const isGroupOrChannel = numericChatId >= 100000000;
   const isSavedChat = chatId === 'saved';
   const currentUserId = getUserId();
+
+  const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
+  const t = translations[lang] || translations.ru;
 
   const [messages, setMessages] = useState<any[]>(() => {
     try {
@@ -39,7 +111,7 @@ export default function ChatPage() {
   
   const [isMember, setIsMember] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isMuted, setIsMuted] = useState(false); // Состояние для кнопки звука
+  const [isMuted, setIsMuted] = useState(false);
   
   const [membersCount, setMembersCount] = useState<number | null>(null);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
@@ -57,7 +129,7 @@ export default function ChatPage() {
   const hasScrolledToBottom = useRef(false);
 
   const [chatInfo, setChatInfo] = useState<any>(() => {
-    if (isSavedChat) return { participant: { displayName: 'Избранное', isSaved: true } };
+    if (isSavedChat) return { participant: { displayName: t.saved, isSaved: true } };
     try {
       const savedChats = JSON.parse(localStorage.getItem('mesbook_chats_' + currentUserId) || '[]');
       return savedChats.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId)) || null;
@@ -65,7 +137,7 @@ export default function ChatPage() {
   });
 
   const savedName = typeof window !== 'undefined' ? sessionStorage.getItem('chat_name_' + chatId) : null;
-  const displayName = isSavedChat ? 'Избранное' : (chatInfo?.participant?.displayName || chatInfo?.name || savedName || 'Собеседник');
+  const displayName = isSavedChat ? t.saved : (chatInfo?.participant?.displayName || chatInfo?.name || savedName || t.companion);
   const isGroup = chatInfo?.participant?.isGroup;
   const isChannel = chatInfo?.participant?.isChannel;
 
@@ -191,10 +263,10 @@ export default function ChatPage() {
       if (data.secure_url) { 
         await sendMessageToServer(`[MEDIA] ${data.secure_url}`); 
       } else { 
-        alert("Ошибка облака Cloudinary: " + (data.error?.message || "неизвестная ошибка")); 
+        alert(t.errCloudinary + (data.error?.message || t.errUnknown)); 
       }
     } catch (err: any) { 
-      alert("Ошибка сети при загрузке медиа"); 
+      alert(t.errNetMedia); 
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -202,7 +274,7 @@ export default function ChatPage() {
   };
 
   const handleDelete = async (msgId: number) => {
-    if (!window.confirm("Удалить сообщение?")) return;
+    if (!window.confirm(t.deleteConfirm)) return;
     if (isSavedChat) {
       const updated = messages.filter((m: any) => m.id !== msgId);
       setMessages(updated);
@@ -246,7 +318,7 @@ export default function ChatPage() {
         setIsEditingChat(false);
         loadData();
       } else {
-        alert("У вас нет прав на редактирование");
+        alert(t.errNoRights);
       }
     } catch(e) {}
     setIsSavingChat(false);
@@ -259,16 +331,16 @@ export default function ChatPage() {
   if (!isSavedChat) {
     if (isGroupOrChannel) {
       if (membersCount === null) {
-        subtitleText = isChannel ? "Канал" : "Группа";
+        subtitleText = isChannel ? t.channel : t.group;
       } else {
         if (isChannel) {
-          subtitleText = `${membersCount} ${declOfNum(membersCount, ['подписчик', 'подписчика', 'подписчиков'])}`;
+          subtitleText = `${membersCount} ${declOfNum(membersCount, t.subs, lang)}`;
         } else {
-          subtitleText = `${membersCount} ${declOfNum(membersCount, ['участник', 'участника', 'участников'])}, ${onlineCount || 1} в сети`;
+          subtitleText = `${membersCount} ${declOfNum(membersCount, t.members, lang)}, ${onlineCount || 1} ${t.onlineCount}`;
         }
       }
     } else {
-      subtitleText = isOnline ? "В сети" : (lastSeen ? `Был(а) в ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Недавно");
+      subtitleText = isOnline ? t.online : (lastSeen ? `${t.lastSeenAt} ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : t.recently);
     }
   }
 
@@ -298,7 +370,7 @@ export default function ChatPage() {
       const parts = msgContent.split('\n\n');
       let quotedText = parts[0].replace('> ', '');
       if (quotedText.startsWith('[MEDIA]')) {
-        quotedText = 'Фотография';
+        quotedText = t.photo;
       }
       const replyText = parts.slice(1).join('\n\n');
 
@@ -317,15 +389,13 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-screen bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative font-sans">
       
-      {/* ---------------------------------------------------------
-          ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА
-      --------------------------------------------------------- */}
+      {/* ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА */}
       {showProfile && chatInfo?.participant && (
         <div className="fixed inset-0 z-50 bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-bottom duration-200 overflow-y-auto">
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900 sticky top-0 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
             <div className="flex items-center gap-6">
               <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
-              <h1 className="text-[20px] font-semibold text-black dark:text-white">Информация</h1>
+              <h1 className="text-[20px] font-semibold text-black dark:text-white">{t.info}</h1>
             </div>
             
             {isAdmin && !isEditingChat && (
@@ -363,7 +433,7 @@ export default function ChatPage() {
 
               <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100/50 dark:border-zinc-800/50">
                 <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-900/60">
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mt-1">Название</label>
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mt-1">{t.name}</label>
                   <input 
                     type="text" 
                     value={editChatName} 
@@ -371,17 +441,15 @@ export default function ChatPage() {
                     className="w-full bg-transparent py-1.5 text-[17px] font-medium text-black dark:text-white outline-none" 
                   />
                 </div>
-                {isChannel && (
-                  <div className="px-5 py-4">
-                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</label>
-                    <textarea 
-                      rows={4} 
-                      value={editChatDesc} 
-                      onChange={e => setEditChatDesc(e.target.value)} 
-                      className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
-                    />
-                  </div>
-                )}
+                <div className="px-5 py-4">
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t.desc}</label>
+                  <textarea 
+                    rows={4} 
+                    value={editChatDesc} 
+                    onChange={e => setEditChatDesc(e.target.value)} 
+                    className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
+                  />
+                </div>
               </div>
             </div>
           ) : (
@@ -407,7 +475,7 @@ export default function ChatPage() {
               <div className="px-4 pb-12 w-full max-w-lg mx-auto flex flex-col gap-4">
                 {(chatInfo.participant.bio || chatInfo.participant.description) && (
                   <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm p-5 border border-gray-100/50 dark:border-zinc-800/50">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Описание</p>
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t.bio}</p>
                     <p className="text-[16px] text-black dark:text-white leading-relaxed whitespace-pre-wrap">{chatInfo.participant.bio || chatInfo.participant.description}</p>
                   </div>
                 )}
@@ -417,7 +485,7 @@ export default function ChatPage() {
                       <div className="px-5 py-4 border-b border-gray-100/50 dark:border-zinc-900/60 flex items-center gap-4">
                         <Volume2 size={22} className="text-gray-400" />
                         <div>
-                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Канал</p>
+                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{t.personalChannel}</p>
                           <p className="text-[16px] text-black dark:text-white">{chatInfo.participant.personalChannel}</p>
                         </div>
                       </div>
@@ -426,7 +494,7 @@ export default function ChatPage() {
                       <div className="px-5 py-4 flex items-center gap-4">
                         <Calendar size={22} className="text-gray-400" />
                         <div>
-                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">День рождения</p>
+                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{t.birthday}</p>
                           <p className="text-[16px] text-black dark:text-white">{new Date(chatInfo.participant.birthDate).toLocaleDateString()}</p>
                         </div>
                       </div>
@@ -439,9 +507,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ---------------------------------------------------------
-          ШАПКА ЧАТА
-      --------------------------------------------------------- */}
+      {/* ШАПКА ЧАТА */}
       <header className="px-3 pt-10 pb-3 border-b border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-3 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-md relative z-10 shadow-sm">
         <Link href="/"><a className="p-2 text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
@@ -458,9 +524,7 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* ---------------------------------------------------------
-          ОСНОВНОЕ ОКНО СООБЩЕНИЙ
-      --------------------------------------------------------- */}
+      {/* ОСНОВНОЕ ОКНО СООБЩЕНИЙ */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4">
         <div className="flex flex-col">
           {(() => {
@@ -470,9 +534,10 @@ export default function ChatPage() {
               const isMe = String(msg.senderId) === String(currentUserId);
               const isMedia = msg.content.startsWith('[MEDIA] ');
               
-              // ГРУППИРОВКА ДАТ
+              // ГРУППИРОВКА ДАТ (с учетом языка!)
               const dateObj = new Date(msg.createdAt);
-              const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+              const dateLocale = lang === 'ru' ? 'ru-RU' : 'en-US';
+              const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString(dateLocale, { day: 'numeric', month: 'long' });
               const showDate = currentDateStr !== '' && currentDateStr !== lastDateStr;
               if (showDate) lastDateStr = currentDateStr;
 
@@ -482,7 +547,7 @@ export default function ChatPage() {
                   {/* Плашка с датой */}
                   {showDate && (
                     <div className="flex justify-center my-3 w-full">
-                      <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm">
+                      <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm capitalize">
                         {currentDateStr}
                       </span>
                     </div>
@@ -541,8 +606,8 @@ export default function ChatPage() {
         {replyingTo && (
           <div className="flex items-center justify-between mb-2 mx-1 px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-[16px] border-l-[3px] border-black dark:border-white shadow-sm">
             <div className="flex flex-col overflow-hidden mr-4">
-              <span className="text-[11px] font-bold text-black dark:text-white uppercase tracking-wider mb-0.5">Ответ</span>
-              <span className="text-[13px] text-gray-500 dark:text-zinc-400 truncate">{replyingTo.content.startsWith('[MEDIA]') ? 'Фотография' : replyingTo.content.replace(/^> .*\n\n/, '')}</span>
+              <span className="text-[11px] font-bold text-black dark:text-white uppercase tracking-wider mb-0.5">{t.reply}</span>
+              <span className="text-[13px] text-gray-500 dark:text-zinc-400 truncate">{replyingTo.content.startsWith('[MEDIA]') ? t.photo : replyingTo.content.replace(/^> .*\n\n/, '')}</span>
             </div>
             <button type="button" onClick={() => setReplyingTo(null)} className="p-1.5 flex-shrink-0 text-gray-400 hover:text-black dark:hover:text-white rounded-full transition-colors"><X size={18} /></button>
           </div>
@@ -551,7 +616,7 @@ export default function ChatPage() {
         {!isMember ? (
           <div className="flex items-center justify-center pt-1 px-1">
             <button onClick={joinChat} className="w-full py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-[20px] shadow-sm transition-transform active:scale-95 text-[16px]">
-              {isChannel ? 'Подписаться' : 'Вступить в группу'}
+              {isChannel ? t.subscribe : t.joinGroup}
             </button>
           </div>
         ) : (isChannel && !isAdmin) ? (
@@ -560,7 +625,7 @@ export default function ChatPage() {
               onClick={() => setIsMuted(!isMuted)}
               className="text-gray-500 hover:text-black dark:hover:text-white transition-colors text-[16px] font-medium active:scale-95"
             >
-              {isMuted ? 'Включить звук' : 'Убрать звук'}
+              {isMuted ? t.unmute : t.mute}
             </button>
           </div>
         ) : (
@@ -569,7 +634,8 @@ export default function ChatPage() {
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-10 h-10 shrink-0 flex items-center justify-center text-gray-500 hover:text-black dark:hover:text-white transition-colors disabled:opacity-50">
               {isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={24} />}
             </button>
-            <input className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" value={content} onChange={(e) => setContent(e.target.value)} placeholder="Сообщение" />
+            <input className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" value={content} onChange={(e) => setContent(e.target.value)} placeholder={t.messagePlaceholder} />
+            
             <button 
               type="submit" 
               disabled={!content.trim()} 
@@ -582,4 +648,4 @@ export default function ChatPage() {
       </div>
     </div>
   );
-}
+    }
