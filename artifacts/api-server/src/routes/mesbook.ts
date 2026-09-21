@@ -4,6 +4,9 @@ import { broadcastToChat, broadcastToWall } from "../lib/realtime";
 
 const router: IRouter = Router();
 
+// ПАМЯТЬ ДЛЯ ИНДИКАЦИИ ПЕЧАТИ (живет 4 секунды)
+const typingStates = new Map<string, { time: number, name: string }>();
+
 function userFromRow(row: any) {
   return {
     id: Number(row.id),
@@ -219,12 +222,28 @@ router.post("/chats/:chatId/join", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
+// РОУТ ИНДИКАТОРА ПЕЧАТИ
+router.post("/chats/:chatId/typing", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]);
+  if (!currentUserId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (req.params.chatId === "saved") { res.json({ success: true }); return; }
+  
+  const chatId = parseChatId(currentUserId, req.params.chatId);
+  if (!chatId) { res.status(400).json({ error: "Invalid chatId" }); return; }
+  
+  const db = await getDatabase();
+  const user = await getUser(db, currentUserId);
+  if (user) {
+    typingStates.set(`${chatId}_${currentUserId}`, { time: Date.now(), name: user.displayName });
+  }
+  res.json({ success: true });
+});
+
 router.get("/chats", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
   await ensureMembersTable(database);
   
-  // ИСПРАВЛЕНИЕ: Вытаскиваем sender_id и read_by_me последнего сообщения, чтобы правильно рисовать галочки
   const chatRows = await database.execute({
     sql: `SELECT m.chat_id, m.content as last_message, m.created_at as last_message_at, m.sender_id as last_message_sender_id, m.read_by_me as last_message_read, (SELECT COUNT(*) FROM messages WHERE chat_id = m.chat_id AND sender_id != ? AND read_by_me = 0) AS unread_count
      FROM messages m WHERE m.id IN (SELECT MAX(id) FROM messages GROUP BY chat_id)
@@ -233,17 +252,31 @@ router.get("/chats", async (req, res): Promise<void> => {
     args: [currentUserId, currentUserId, currentUserId, currentUserId]
   });
 
+  const now = Date.now();
+
   const chats = await Promise.all(chatRows.rows.map(async (row: any) => {
     const cId = Number(row.chat_id);
+    
+    // Кто печатает в этом чате?
+    const typing: string[] = [];
+    for (const [key, data] of typingStates.entries()) {
+      if (now - data.time < 4000) {
+        const [tCid, tUid] = key.split('_');
+        if (Number(tCid) === cId && Number(tUid) !== currentUserId) {
+          typing.push(data.name);
+        }
+      }
+    }
+
     if (cId === currentUserId * 10000 + currentUserId) {
-      return { id: "saved", participant: { id: currentUserId, displayName: "Избранное", avatarUrl: "", isSaved: true }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, lastMessageSenderId: Number(row.last_message_sender_id), lastMessageRead: Number(row.last_message_read), unreadCount: Number(row.unread_count) };
+      return { id: "saved", participant: { id: currentUserId, displayName: "Избранное", avatarUrl: "", isSaved: true }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, lastMessageSenderId: Number(row.last_message_sender_id), lastMessageRead: Number(row.last_message_read), unreadCount: Number(row.unread_count), typing };
     }
     if (cId >= 100000000) {
       const internalId = cId - 100000000;
       const groupResult = await database.execute({ sql: "SELECT name, is_group, is_channel, avatar_url, description FROM chats WHERE id = ?", args: [internalId] });
       const gRow = groupResult.rows[0];
       if (gRow) {
-        return { id: cId, participant: { id: cId, displayName: gRow.name, avatarUrl: gRow.avatar_url || "", description: gRow.description || "", isGroup: Number(gRow.is_group)===1, isChannel: Number(gRow.is_channel)===1 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, lastMessageSenderId: Number(row.last_message_sender_id), lastMessageRead: Number(row.last_message_read), unreadCount: Number(row.unread_count) };
+        return { id: cId, participant: { id: cId, displayName: gRow.name, avatarUrl: gRow.avatar_url || "", description: gRow.description || "", isGroup: Number(gRow.is_group)===1, isChannel: Number(gRow.is_channel)===1 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, lastMessageSenderId: Number(row.last_message_sender_id), lastMessageRead: Number(row.last_message_read), unreadCount: Number(row.unread_count), typing };
       }
       return null;
     }
@@ -251,7 +284,7 @@ router.get("/chats", async (req, res): Promise<void> => {
     const u2 = cId % 10000;
     const otherUserId = (u1 === currentUserId) ? u2 : u1;
     const participant = await getUser(database, otherUserId);
-    return { id: cId, participant: participant || { id: otherUserId, username: "Пользователь", displayName: "Пользователь", avatarUrl: "", lastSeen: 0 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, lastMessageSenderId: Number(row.last_message_sender_id), lastMessageRead: Number(row.last_message_read), unreadCount: Number(row.unread_count) };
+    return { id: cId, participant: participant || { id: otherUserId, username: "Пользователь", displayName: "Пользователь", avatarUrl: "", lastSeen: 0 }, lastMessage: row.last_message, lastMessageAt: row.last_message_at, lastMessageSenderId: Number(row.last_message_sender_id), lastMessageRead: Number(row.last_message_read), unreadCount: Number(row.unread_count), typing };
   }));
 
   res.json(chats.filter(c => c !== null));
@@ -284,8 +317,20 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
     isMine: Number(row.sender_id) === currentUserId, isRead: Number(row.read_by_me) === 1,
   }));
 
+  // Кто печатает?
+  const now = Date.now();
+  const typing: string[] = [];
+  for (const [key, data] of typingStates.entries()) {
+    if (now - data.time < 4000) {
+      const [tCid, tUid] = key.split('_');
+      if (Number(tCid) === chatId && Number(tUid) !== currentUserId) {
+        typing.push(data.name);
+      }
+    }
+  }
+
   await database.execute({ sql: "UPDATE messages SET read_by_me = 1 WHERE chat_id = ? AND sender_id != ?", args: [chatId, currentUserId] });
-  res.json(messages);
+  res.json({ messages, typing });
 });
 
 router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
@@ -296,7 +341,6 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   
   const database = await getDatabase();
 
-  // ИСПРАВЛЕНИЕ ЗАЩИТЫ: Блокируем отправку в канал, если пользователь не админ
   if (chatId >= 100000000) {
     const chatInfo = await database.execute({ sql: "SELECT is_channel FROM chats WHERE id = ?", args: [chatId - 100000000] });
     if (Number(chatInfo.rows[0]?.is_channel) === 1) {
