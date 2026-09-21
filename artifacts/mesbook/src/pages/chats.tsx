@@ -11,9 +11,6 @@ const getUserId = () => {
   }
 };
 
-// ==========================================
-// СЛОВАРЬ ПЕРЕВОДОВ (МУЛЬТИЯЗЫЧНОСТЬ)
-// ==========================================
 const translations = {
   ru: {
     chats: "Чаты",
@@ -48,7 +45,9 @@ const translations = {
     noMessages: "Нет сообщений",
     companion: "Собеседник",
     errorLogin: "Ошибка при входе",
-    errorNet: "Ошибка сети"
+    errorNet: "Ошибка сети",
+    isTyping: "печатает...",
+    areTyping: "печатают..."
   },
   en: {
     chats: "Chats",
@@ -83,7 +82,9 @@ const translations = {
     noMessages: "No messages",
     companion: "Companion",
     errorLogin: "Login error",
-    errorNet: "Network error"
+    errorNet: "Network error",
+    isTyping: "is typing...",
+    areTyping: "are typing..."
   }
 };
 
@@ -91,7 +92,6 @@ export default function ChatsPage() {
   const [search, setSearch] = useState('');
   const currentUserId = getUserId();
   
-  // Установка языка из памяти
   const [lang, setLang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
   
@@ -148,6 +148,16 @@ export default function ChatsPage() {
   const [isDark, setIsDark] = useState(false);
   const [, setLocation] = useLocation();
   const touchStartX = useRef<number | null>(null);
+
+  // ВОССТАНОВЛЕНИЕ ОНЛАЙНА: Каждые 10 сек отправляем Ping
+  useEffect(() => {
+    const sendPing = async () => {
+      try { await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
+    };
+    sendPing();
+    const interval = setInterval(sendPing, 10000);
+    return () => clearInterval(interval);
+  }, [currentUserId]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -232,7 +242,7 @@ export default function ChatsPage() {
   } else if (hasSavedInServer && lastSavedMsg) {
     const serverSaved = allDynamicChats.find(c => String(c.id) === 'saved');
     if (serverSaved) {
-      serverSaved.participant.displayName = t.saved; // Применяем перевод
+      serverSaved.participant.displayName = t.saved;
       const serverTime = new Date(serverSaved.lastMessageAt || serverSaved.lastMessageTime || 0).getTime();
       const localTime = new Date(lastSavedMsg.createdAt || 0).getTime();
       if (localTime > serverTime) {
@@ -309,10 +319,10 @@ export default function ChatsPage() {
       if (data.secure_url) {
         setModalAvatarUrl(data.secure_url);
       } else {
-        alert("Ошибка загрузки");
+        alert("Ошибка загрузки: " + (data.error?.message || "неизвестная ошибка"));
       }
     } catch (err) {
-      alert("Ошибка сети");
+      alert("Ошибка сети при загрузке аватара");
     }
     setIsUploadingModalAvatar(false);
   };
@@ -375,6 +385,20 @@ export default function ChatsPage() {
     const isLastMessageMine = chat.lastMessageSenderId === currentUserId;
     const isLastMessageRead = chat.lastMessageRead === 1;
 
+    // ЛОГИКА ИНДИКАТОРА ПЕЧАТИ
+    const typingNames = chat.typing || [];
+    const isTyping = typingNames.length > 0;
+    
+    let lastMessageText = chat.lastMessage?.startsWith('[MEDIA]') ? t.attachment : (chat.lastMessage || t.noMessages);
+    
+    if (isTyping) {
+       if (typingNames.length === 1) {
+          lastMessageText = participant.isGroup || participant.isChannel ? `${typingNames[0]} ${t.isTyping}` : t.isTyping;
+       } else {
+          lastMessageText = `${typingNames.length} ${t.areTyping}`;
+       }
+    }
+
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
         <a className="flex items-center px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 bg-white dark:bg-[#1c1c1e]">
@@ -401,16 +425,16 @@ export default function ChatsPage() {
                 {isSaved ? t.saved : (participant.displayName || t.companion)}
               </h3>
               {timeRaw && (
-                <span className="text-[12px] text-gray-400 dark:text-zinc-500 shrink-0 font-medium">
+                <span className={`text-[12px] shrink-0 font-medium ${isTyping ? 'text-blue-500' : 'text-gray-400 dark:text-zinc-500'}`}>
                   {new Date(timeRaw).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               )}
             </div>
             <div className="flex items-center justify-between">
-              <p className="text-[15px] text-gray-500 dark:text-zinc-400 truncate pr-2">
-                {chat.lastMessage?.startsWith('[MEDIA]') ? t.attachment : (chat.lastMessage || t.noMessages)}
+              <p className={`text-[15px] truncate pr-2 ${isTyping ? 'text-blue-500 font-medium' : 'text-gray-500 dark:text-zinc-400'}`}>
+                {lastMessageText}
               </p>
-              {chat.lastMessage && (
+              {chat.lastMessage && !isTyping && (
                 <div className="flex -space-x-1 shrink-0 text-black dark:text-white items-center">
                   {isSaved ? (
                     <><Check size={14} /><Check size={14} /></>
@@ -825,4 +849,4 @@ export default function ChatsPage() {
       )}
     </div>
   );
-                                                              }
+      }
