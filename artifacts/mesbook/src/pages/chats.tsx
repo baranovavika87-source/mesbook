@@ -16,10 +16,8 @@ const translations = {
     chats: "Чаты",
     wall: "Стена",
     search: "Поиск",
-    channels: "Каналы",
     globalSearch: "Глобальный поиск",
     yourChats: "Ваши чаты",
-    yourChannels: "Ваши каналы",
     nothingFound: "Ничего не найдено",
     startTyping: "Начните вводить имя или название",
     noChats: "Нет чатов",
@@ -53,10 +51,8 @@ const translations = {
     chats: "Chats",
     wall: "Wall",
     search: "Search",
-    channels: "Channels",
     globalSearch: "Global Search",
     yourChats: "Your Chats",
-    yourChannels: "Your Channels",
     nothingFound: "Nothing found",
     startTyping: "Start typing a name or title",
     noChats: "No chats",
@@ -105,7 +101,6 @@ export default function ChatsPage() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [searchTab, setSearchTab] = useState<'chats' | 'channels'>('chats');
   
   const [modalType, setModalType] = useState<'group' | 'channel' | null>(null);
   const [groupName, setGroupName] = useState('');
@@ -263,11 +258,6 @@ export default function ChatsPage() {
     (c.participant?.displayName || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const searchUsersGlobal = searchResults.filter(u => !u.isGroup && !u.isChannel);
-  const searchChannelsGlobal = searchResults.filter(u => u.isGroup || u.isChannel);
-  const localChatsFiltered = filteredChats.filter(c => !c.participant?.isGroup && !c.participant?.isChannel);
-  const localChannelsFiltered = filteredChats.filter(c => c.participant?.isGroup || c.participant?.isChannel);
-
   const toggleTheme = () => {
     const html = document.documentElement;
     if (html.classList.contains('dark')) {
@@ -378,9 +368,7 @@ export default function ChatsPage() {
   const renderChatCard = (chat: any) => {
     const participant = chat.participant || {};
     const isSaved = participant.isSaved || String(chat.id) === 'saved';
-    
-    // ИСПРАВЛЕНИЕ: Таймер "В сети" снижен до 1 минуты (60 секунд)
-    const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 60 * 1000) : false;
+    const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 3 * 60 * 1000) : false;
     const timeRaw = chat.lastMessageAt || chat.lastMessageTime;
     
     const isLastMessageMine = chat.lastMessageSenderId === currentUserId;
@@ -402,43 +390,33 @@ export default function ChatsPage() {
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
         <a className="flex items-center px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 bg-white dark:bg-[#1c1c1e]">
-          
-          {/* ИСПРАВЛЕНИЕ ВЕРСТКИ АВАТАРА: Индикатор вынесен поверх контейнера, чтобы не обрезался */}
-          <div className="relative w-[52px] h-[52px] shrink-0">
-            <div className={`w-full h-full rounded-full flex items-center justify-center overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 shadow-sm ${isSaved ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
-              {isSaved ? (
-                <Bookmark size={24} fill="currentColor" />
-              ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
-                <img 
-                  src={participant.avatarUrl} 
-                  alt="Avatar" 
-                  className="w-full h-full object-cover" 
-                  onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
-                />
-              ) : (
-                <span className="text-[20px] font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
-              )}
-            </div>
-            
-            {/* ИНДИКАТОР В СЕТИ: Абсолютное позиционирование поверх всего */}
-            {isOnline && !participant.isGroup && !participant.isChannel && !isSaved && (
-              <div className="absolute bottom-[1px] right-[1px] w-[14px] h-[14px] bg-green-500 border-[2.5px] border-white dark:border-[#1c1c1e] rounded-full z-10"></div>
+          <div className={`w-[52px] h-[52px] shrink-0 rounded-full flex items-center justify-center relative shadow-sm overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSaved ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
+            {isSaved ? (
+              <Bookmark size={24} fill="currentColor" />
+            ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
+              <img 
+                src={participant.avatarUrl} 
+                alt="Avatar" 
+                className="w-full h-full object-cover" 
+                onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+              />
+            ) : (
+              <span className="text-[20px] font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
             )}
           </div>
-
           <div className="ml-4 flex-1 overflow-hidden">
             <div className="flex justify-between items-baseline mb-0.5">
               <h3 className="font-semibold text-black dark:text-white text-[16px] truncate pr-2">
                 {isSaved ? t.saved : (participant.displayName || t.companion)}
               </h3>
               {timeRaw && (
-                <span className={`text-[12px] shrink-0 font-medium ${isTyping ? 'text-blue-500' : 'text-gray-400 dark:text-zinc-500'}`}>
+                <span className={`text-[12px] shrink-0 font-medium ${isTyping ? 'text-gray-400 dark:text-zinc-500' : 'text-gray-400 dark:text-zinc-500'}`}>
                   {new Date(timeRaw).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               )}
             </div>
             <div className="flex items-center justify-between">
-              <p className={`text-[15px] truncate pr-2 ${isTyping ? 'text-blue-500 font-medium' : 'text-gray-500 dark:text-zinc-400'}`}>
+              <p className={`text-[15px] truncate pr-2 ${isTyping ? 'text-gray-500 dark:text-zinc-400 font-medium' : 'text-gray-500 dark:text-zinc-400'}`}>
                 {lastMessageText}
               </p>
               {chat.lastMessage && !isTyping && (
@@ -451,7 +429,7 @@ export default function ChatsPage() {
                       {(isLastMessageRead || participant.isGroup || participant.isChannel) && <Check size={14} />}
                     </>
                   ) : chat.unreadCount > 0 ? (
-                    <div className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ml-1">
+                    <div className="bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ml-1">
                       {chat.unreadCount}
                     </div>
                   ) : null}
@@ -701,10 +679,11 @@ export default function ChatsPage() {
         </div>
       )}
 
+      {/* ИСПРАВЛЕНИЕ: ЕДИНЫЙ ГЛОБАЛЬНЫЙ ПОИСК БЕЗ ВКЛАДОК */}
       {isSearchOpen ? (
         <div className="flex flex-col h-full bg-[#f2f2f7] dark:bg-black">
-          <header className="px-4 pt-12 pb-0 bg-white dark:bg-[#1c1c1e] relative z-10 flex flex-col shadow-sm border-b border-gray-200/50 dark:border-zinc-900/50">
-            <div className="flex items-center gap-4 h-10 mb-3">
+          <header className="px-4 pt-12 pb-3 bg-white dark:bg-[#1c1c1e] relative z-10 flex flex-col shadow-sm border-b border-gray-200/50 dark:border-zinc-900/50">
+            <div className="flex items-center gap-4 h-10">
               <button 
                 onClick={() => { setIsSearchOpen(false); setSearch(''); }} 
                 className="text-black dark:text-white active:scale-95 transition-transform"
@@ -720,20 +699,6 @@ export default function ChatsPage() {
                 className="flex-1 bg-transparent border-none outline-none text-[18px] text-black dark:text-white placeholder-gray-400"
               />
             </div>
-            <div className="flex">
-              <button
-                onClick={() => setSearchTab('chats')}
-                className={`flex-1 pb-3 text-[15px] font-semibold transition-colors border-b-[2.5px] ${searchTab === 'chats' ? 'border-black dark:border-white text-black dark:text-white' : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-zinc-400'}`}
-              >
-                {t.chats}
-              </button>
-              <button
-                onClick={() => setSearchTab('channels')}
-                className={`flex-1 pb-3 text-[15px] font-semibold transition-colors border-b-[2.5px] ${searchTab === 'channels' ? 'border-black dark:border-white text-black dark:text-white' : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-zinc-400'}`}
-              >
-                {t.channels}
-              </button>
-            </div>
           </header>
 
           <main className="flex-1 overflow-y-auto pt-4 px-4 pb-20">
@@ -744,51 +709,32 @@ export default function ChatsPage() {
               </div>
             )}
 
-            {searchTab === 'chats' ? (
+            {search.length >= 2 && (
               <div className="flex flex-col gap-4">
-                {searchUsersGlobal.length > 0 && (
+                {searchResults.length > 0 && (
                   <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
                     <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-800/50 bg-gray-50/50 dark:bg-black/20">
                       <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">{t.globalSearch}</span>
                     </div>
-                    {searchUsersGlobal.map(renderGlobalUserCard)}
+                    {searchResults.map(renderGlobalUserCard)}
                   </div>
                 )}
-                {localChatsFiltered.length > 0 && (
+                {filteredChats.length > 0 && (
                   <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
                     <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-800/50 bg-gray-50/50 dark:bg-black/20">
                       <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">{t.yourChats}</span>
                     </div>
-                    {localChatsFiltered.map(renderChatCard)}
+                    {filteredChats.map(renderChatCard)}
                   </div>
+                )}
+                
+                {searchResults.length === 0 && filteredChats.length === 0 && (
+                   <div className="text-center py-20 text-gray-400">
+                      <Search size={40} className="mx-auto mb-3 opacity-20" />
+                      <p>{t.nothingFound}</p>
+                   </div>
                 )}
               </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {searchChannelsGlobal.length > 0 && (
-                  <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
-                    <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-800/50 bg-gray-50/50 dark:bg-black/20">
-                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">{t.globalSearch}</span>
-                    </div>
-                    {searchChannelsGlobal.map(renderGlobalUserCard)}
-                  </div>
-                )}
-                {localChannelsFiltered.length > 0 && (
-                  <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
-                    <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-800/50 bg-gray-50/50 dark:bg-black/20">
-                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">{t.yourChannels}</span>
-                    </div>
-                    {localChannelsFiltered.map(renderChatCard)}
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {search.length >= 2 && searchUsersGlobal.length === 0 && searchChannelsGlobal.length === 0 && localChatsFiltered.length === 0 && localChannelsFiltered.length === 0 && (
-               <div className="text-center py-20 text-gray-400">
-                  <Search size={40} className="mx-auto mb-3 opacity-20" />
-                  <p>{t.nothingFound}</p>
-               </div>
             )}
           </main>
         </div>
@@ -856,4 +802,5 @@ export default function ChatsPage() {
       )}
     </div>
   );
-  }
+}
+
