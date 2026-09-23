@@ -117,36 +117,54 @@ router.patch("/chats/:chatId", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
-// ИСПРАВЛЕНИЕ: Умный поиск с поддержкой кириллицы через JavaScript
+// ИСПРАВЛЕНИЕ: Пуленепробиваемый глобальный поиск с поддержкой кириллицы
 router.get("/users/search", async (req, res) => {
-  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const query = String(req.query.q || "").toLowerCase();
-  const db = await getDatabase();
-  
-  // Достаем всех пользователей и фильтруем в JS (идеально для кириллицы)
-  const usersResult = await db.execute("SELECT id, username, display_name as displayName, avatar_url as avatarUrl, bio, last_seen as lastSeen, personal_channel as personalChannel, birth_date as birthDate FROM users");
-  
-  const filteredUsers = usersResult.rows.filter((u: any) => 
-    Number(u.id) !== currentUserId && 
-    (String(u.username).toLowerCase().includes(query) || 
-     String(u.displayName).toLowerCase().includes(query))
-  );
+  try {
+    const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
+    const query = String(req.query.q || "").toLowerCase().trim();
+    const db = await getDatabase();
+    
+    if (!query) return res.json([]);
 
-  // Достаем все чаты и группы и фильтруем в JS
-  const chatsResult = await db.execute("SELECT id, name, is_group, is_channel, avatar_url, description FROM chats");
-  
-  const filteredChats = chatsResult.rows.filter((c: any) => 
-    String(c.name).toLowerCase().includes(query)
-  ).map((r: any) => ({
-    id: Number(r.id) + 100000000, 
-    displayName: r.name,
-    isGroup: Number(r.is_group) === 1, 
-    isChannel: Number(r.is_channel) === 1,
-    avatarUrl: r.avatar_url || "", 
-    description: r.description || ""
-  }));
+    // Надежно достаем все сырые данные о юзерах
+    const usersResult = await db.execute({ sql: "SELECT * FROM users", args: [] });
+    
+    const filteredUsers = usersResult.rows.filter((u: any) => {
+      if (Number(u.id) === currentUserId) return false;
+      const un = String(u.username || '').toLowerCase();
+      const dn = String(u.display_name || '').toLowerCase();
+      return un.includes(query) || dn.includes(query);
+    }).map((u: any) => ({
+      id: Number(u.id),
+      username: u.username,
+      displayName: u.display_name,
+      avatarUrl: u.avatar_url || "",
+      bio: u.bio || "",
+      lastSeen: Number(u.last_seen) || 0,
+      personalChannel: u.personal_channel || "",
+      birthDate: u.birth_date || ""
+    }));
 
-  return res.json([...filteredUsers, ...filteredChats]);
+    // Надежно достаем все сырые данные о чатах
+    const chatsResult = await db.execute({ sql: "SELECT * FROM chats", args: [] });
+    
+    const filteredChats = chatsResult.rows.filter((c: any) => {
+      const cn = String(c.name || '').toLowerCase();
+      return cn.includes(query);
+    }).map((c: any) => ({
+      id: Number(c.id) + 100000000,
+      displayName: c.name,
+      isGroup: Number(c.is_group) === 1,
+      isChannel: Number(c.is_channel) === 1,
+      avatarUrl: c.avatar_url || "",
+      description: c.description || ""
+    }));
+
+    return res.json([...filteredUsers, ...filteredChats]);
+  } catch (e) {
+    console.error("Ошибка поиска API:", e);
+    return res.json([]); // Возвращаем пустой массив, чтобы фронт не ломался
+  }
 });
 
 router.get("/users/:id", async (req, res): Promise<void> => {
