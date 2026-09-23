@@ -385,8 +385,8 @@ export default function ChatPage() {
   let subtitleText = "";
   let subtitleColor = "text-gray-400 dark:text-zinc-500"; 
 
+  // ИСПРАВЛЕНИЕ: Вычищен зеленый и синий цвета, оставлен монохромный стиль
   if (typingUsers.length > 0) {
-    subtitleColor = "text-blue-500";
     if (typingUsers.length === 1) {
       subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping;
     } else {
@@ -404,7 +404,7 @@ export default function ChatPage() {
         }
       }
     } else {
-      subtitleColor = isOnline ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500';
+      subtitleColor = isOnline ? 'text-black dark:text-white font-medium' : 'text-gray-400 dark:text-zinc-500';
       subtitleText = isOnline ? t.online : (lastSeen ? `${t.lastSeenAt} ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : t.recently);
     }
   }
@@ -413,7 +413,7 @@ export default function ChatPage() {
     if (msgContent.startsWith('[MEDIA] ')) {
       let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
-      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic\vert{}heif)$/i, '.jpg');
+      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic|heif)$/i, '.jpg');
       
       return (
         <div className="relative flex items-center justify-center overflow-hidden rounded-[16px]">
@@ -580,11 +580,14 @@ export default function ChatPage() {
       <header className="px-3 pt-10 pb-3 border-b border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-3 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-md relative z-10 shadow-sm">
         <Link href="/"><a className="p-2 text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
-          <div className="relative">
-            <div className={`w-[44px] h-[44px] rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSavedChat ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
+          {/* ИСПРАВЛЕНИЕ: Точка онлайна в шапке тоже вынесена из-под обрезки и стала монохромной */}
+          <div className="relative w-[44px] h-[44px] shrink-0">
+            <div className={`w-full h-full rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSavedChat ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
               {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chatInfo?.participant?.displayName || 'U')}&background=random&color=fff&size=120`; }} /> : displayName.charAt(0).toUpperCase()}
             </div>
-            {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-[#1c1c1e] rounded-full"></div>}
+            {!isSavedChat && !isGroupOrChannel && isOnline && (
+              <div className="absolute bottom-0 right-0 w-3 h-3 bg-black dark:bg-white border-2 border-white dark:border-[#1c1c1e] rounded-full z-10"></div>
+            )}
           </div>
           <div className="flex flex-col">
             <h2 className="font-semibold text-black dark:text-white text-[16px] leading-tight truncate pr-2">{displayName}</h2>
@@ -614,6 +617,7 @@ export default function ChatPage() {
               return (
                 <div key={msg.id} className="flex flex-col w-full mb-1.5">
                   
+                  {/* Плашка с датой */}
                   {showDate && (
                     <div className="flex justify-center my-3 w-full">
                       <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm capitalize">
@@ -655,13 +659,13 @@ export default function ChatPage() {
                               <>
                                 <button 
                                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEditing(msg); }} 
-                                  className="hover:text-blue-500 ml-1.5 transition-colors cursor-pointer z-20"
+                                  className="hover:text-black dark:hover:text-white ml-1.5 transition-colors cursor-pointer z-20"
                                 >
                                   <Edit2 size={12} />
                                 </button>
                                 <button 
                                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(msg.id); }} 
-                                  className="hover:text-red-500 ml-1.5 transition-colors cursor-pointer z-20"
+                                  className="hover:text-black dark:hover:text-white ml-1.5 transition-colors cursor-pointer z-20"
                                 >
                                   <Trash2 size={13} />
                                 </button>
@@ -681,7 +685,6 @@ export default function ChatPage() {
       </main>
 
       <div className="p-3 bg-[#f2f2f7] dark:bg-black border-t border-gray-200/50 dark:border-zinc-900/50 pb-6 relative z-10 flex flex-col">
-        {/* ИСПРАВЛЕНИЕ: Плашка "Ответ" или "Редактирование" */}
         {(replyingTo || editingMsg) && (
           <div className="flex items-center justify-between mb-2 mx-1 px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-[16px] border-l-[3px] border-black dark:border-white shadow-sm">
             <div className="flex flex-col overflow-hidden mr-4">
@@ -732,10 +735,11 @@ export default function ChatPage() {
               placeholder={t.messagePlaceholder} 
             />
             
+            {/* ИСПРАВЛЕНИЕ: Кнопка стала монохромной (черно-белой) */}
             <button 
               type="submit" 
               disabled={!content.trim()} 
-              className="w-[36px] h-[36px] flex-shrink-0 rounded-full bg-blue-500 text-white flex items-center justify-center disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600 transition-colors active:scale-95 shadow-sm ml-1"
+              className="w-[36px] h-[36px] flex-shrink-0 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600 transition-colors active:scale-95 shadow-sm ml-1"
             >
               <ChevronRight size={22} strokeWidth={2.5} className="ml-0.5" />
             </button>
