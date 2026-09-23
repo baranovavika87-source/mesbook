@@ -201,12 +201,16 @@ export default function ChatsPage() {
     return () => clearInterval(interval);
   }, [currentUserId]);
 
+  // ИСПРАВЛЕНИЕ: Чтение ответа в переменную data, чтобы не блокировать поток
   useEffect(() => {
     if (search.length < 2) { setSearchResults([]); return; }
     const timer = setTimeout(async () => {
       try {
         const res = await fetch('/api/users/search?q=' + encodeURIComponent(search), { headers: { 'Authorization': 'Bearer ' + currentUserId } });
-        if (res.ok) setSearchResults(Array.isArray(await res.json()) ? await res.json() : []);
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(Array.isArray(data) ? data : []);
+        }
       } catch (e) {}
     }, 300);
     return () => clearTimeout(timer);
@@ -308,7 +312,7 @@ export default function ChatsPage() {
       if (data.secure_url) {
         setModalAvatarUrl(data.secure_url);
       } else {
-        alert("Ошибка загрузки: " + (data.error?.message || "неизвестная ошибка"));
+        alert("Ошибка загрузки");
       }
     } catch (err) {
       alert("Ошибка сети при загрузке аватара");
@@ -679,7 +683,6 @@ export default function ChatsPage() {
         </div>
       )}
 
-      {/* ИСПРАВЛЕНИЕ: ЕДИНЫЙ ГЛОБАЛЬНЫЙ ПОИСК БЕЗ ВКЛАДОК */}
       {isSearchOpen ? (
         <div className="flex flex-col h-full bg-[#f2f2f7] dark:bg-black">
           <header className="px-4 pt-12 pb-3 bg-white dark:bg-[#1c1c1e] relative z-10 flex flex-col shadow-sm border-b border-gray-200/50 dark:border-zinc-900/50">
@@ -803,4 +806,3 @@ export default function ChatsPage() {
     </div>
   );
 }
-
