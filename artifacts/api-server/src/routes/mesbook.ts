@@ -4,6 +4,7 @@ import { broadcastToChat, broadcastToWall } from "../lib/realtime";
 
 const router: IRouter = Router();
 
+// ПАМЯТЬ ДЛЯ ИНДИКАЦИИ ПЕЧАТИ (живет 4 секунды)
 const typingStates = new Map<string, { time: number, name: string }>();
 
 function userFromRow(row: any) {
@@ -117,30 +118,37 @@ router.patch("/chats/:chatId", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
+// ИСПРАВЛЕНИЕ: Поиск теперь не зависит от регистра букв (даже для русской кириллицы)
 router.get("/users/search", async (req, res) => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
-  const query = String(req.query.q || "");
-  const searchPattern1 = "%" + query + "%";
-  const searchPattern2 = "%@" + query + "%";
+  const query = String(req.query.q || "").toLowerCase();
+  if (!query) return res.json([]);
   const db = await getDatabase();
   
-  const usersResult = await db.execute({
-    sql: "SELECT id, username, display_name as displayName, avatar_url as avatarUrl, bio, last_seen as lastSeen, personal_channel as personalChannel, birth_date as birthDate FROM users WHERE (username LIKE ? OR username LIKE ? OR display_name LIKE ?) AND id != ?",
-    args: [searchPattern1, searchPattern2, searchPattern1, currentUserId]
+  const usersResult = await db.execute("SELECT id, username, display_name as displayName, avatar_url as avatarUrl, bio, last_seen as lastSeen, personal_channel as personalChannel, birth_date as birthDate FROM users");
+
+  const filteredUsers = usersResult.rows.filter((u: any) => {
+    if (Number(u.id) === currentUserId) return false;
+    const un = String(u.username || "").toLowerCase();
+    const dn = String(u.displayName || "").toLowerCase();
+    return un.includes(query) || dn.includes(query);
   });
 
-  const chatsResult = await db.execute({
-    sql: "SELECT id, name, is_group, is_channel, avatar_url, description FROM chats WHERE name LIKE ?",
-    args: [searchPattern1]
-  });
+  const chatsResult = await db.execute("SELECT id, name, is_group, is_channel, avatar_url, description FROM chats");
 
-  const foundChats = chatsResult.rows.map((r: any) => ({
-    id: Number(r.id) + 100000000, displayName: r.name,
-    isGroup: Number(r.is_group) === 1, isChannel: Number(r.is_channel) === 1,
-    avatarUrl: r.avatar_url || "", description: r.description || ""
+  const foundChats = chatsResult.rows.filter((c: any) => {
+    const cn = String(c.name || "").toLowerCase();
+    return cn.includes(query);
+  }).map((r: any) => ({
+    id: Number(r.id) + 100000000,
+    displayName: r.name,
+    isGroup: Number(r.is_group) === 1,
+    isChannel: Number(r.is_channel) === 1,
+    avatarUrl: r.avatar_url || "",
+    description: r.description || ""
   }));
 
-  return res.json([...usersResult.rows, ...foundChats]);
+  return res.json([...filteredUsers, ...foundChats]);
 });
 
 router.get("/users/:id", async (req, res): Promise<void> => {
@@ -200,11 +208,10 @@ router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
       const countRes = await database.execute({ sql: "SELECT COUNT(*) as c FROM chat_members WHERE chat_id = ?", args: [chatId] });
       membersCount = Number(countRes.rows[0]?.c) || 1;
 
-      // ИСПРАВЛЕНИЕ: Таймер онлайна снижен до 1 минуты (60000 мс)
-      const oneMinAgo = Date.now() - 60 * 1000;
+      const fiveMinsAgo = Date.now() - 3 * 60 * 1000;
       const onlineRes = await database.execute({
         sql: "SELECT COUNT(*) as c FROM chat_members cm JOIN users u ON cm.user_id = u.id WHERE cm.chat_id = ? AND u.last_seen > ?",
-        args: [chatId, oneMinAgo]
+        args: [chatId, fiveMinsAgo]
       });
       onlineCount = Number(onlineRes.rows[0]?.c) || 1;
     } catch (e) {}
@@ -417,3 +424,4 @@ router.post("/login", async (req, res) => {
 });
 
 export default router;
+
