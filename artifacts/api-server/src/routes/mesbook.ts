@@ -117,31 +117,36 @@ router.patch("/chats/:chatId", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
-// ИСПРАВЛЕНИЕ: Глобальный поиск теперь игнорирует регистр даже для кириллицы
+// ИСПРАВЛЕНИЕ: Умный поиск с поддержкой кириллицы через JavaScript
 router.get("/users/search", async (req, res) => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const query = String(req.query.q || "").toLowerCase();
-  const searchPattern1 = "%" + query + "%";
-  const searchPattern2 = "%@" + query + "%";
   const db = await getDatabase();
   
-  const usersResult = await db.execute({
-    sql: "SELECT id, username, display_name as displayName, avatar_url as avatarUrl, bio, last_seen as lastSeen, personal_channel as personalChannel, birth_date as birthDate FROM users WHERE (LOWER(username) LIKE LOWER(?) OR LOWER(username) LIKE LOWER(?) OR LOWER(display_name) LIKE LOWER(?) OR username LIKE ? OR display_name LIKE ?) AND id != ?",
-    args: [searchPattern1, searchPattern2, searchPattern1, searchPattern1, searchPattern1, currentUserId]
-  });
+  // Достаем всех пользователей и фильтруем в JS (идеально для кириллицы)
+  const usersResult = await db.execute("SELECT id, username, display_name as displayName, avatar_url as avatarUrl, bio, last_seen as lastSeen, personal_channel as personalChannel, birth_date as birthDate FROM users");
+  
+  const filteredUsers = usersResult.rows.filter((u: any) => 
+    Number(u.id) !== currentUserId && 
+    (String(u.username).toLowerCase().includes(query) || 
+     String(u.displayName).toLowerCase().includes(query))
+  );
 
-  const chatsResult = await db.execute({
-    sql: "SELECT id, name, is_group, is_channel, avatar_url, description FROM chats WHERE LOWER(name) LIKE LOWER(?) OR name LIKE ?",
-    args: [searchPattern1, searchPattern1]
-  });
-
-  const foundChats = chatsResult.rows.map((r: any) => ({
-    id: Number(r.id) + 100000000, displayName: r.name,
-    isGroup: Number(r.is_group) === 1, isChannel: Number(r.is_channel) === 1,
-    avatarUrl: r.avatar_url || "", description: r.description || ""
+  // Достаем все чаты и группы и фильтруем в JS
+  const chatsResult = await db.execute("SELECT id, name, is_group, is_channel, avatar_url, description FROM chats");
+  
+  const filteredChats = chatsResult.rows.filter((c: any) => 
+    String(c.name).toLowerCase().includes(query)
+  ).map((r: any) => ({
+    id: Number(r.id) + 100000000, 
+    displayName: r.name,
+    isGroup: Number(r.is_group) === 1, 
+    isChannel: Number(r.is_channel) === 1,
+    avatarUrl: r.avatar_url || "", 
+    description: r.description || ""
   }));
 
-  return res.json([...usersResult.rows, ...foundChats]);
+  return res.json([...filteredUsers, ...filteredChats]);
 });
 
 router.get("/users/:id", async (req, res): Promise<void> => {
@@ -417,4 +422,3 @@ router.post("/login", async (req, res) => {
 });
 
 export default router;
-
