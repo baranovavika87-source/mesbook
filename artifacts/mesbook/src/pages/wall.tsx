@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2 } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -9,23 +9,30 @@ const getUserId = () => {
   } catch (e) { return 1; }
 };
 
-// ==========================================
-// СЛОВАРЬ ПЕРЕВОДОВ (МУЛЬТИЯЗЫЧНОСТЬ)
-// ==========================================
 const translations = {
   ru: {
     wall: "Стена",
     refresh: "Обновить",
     emptyDesc: "Здесь будут новые записи из каналов, на которые вы подписаны.",
     findChannels: "Найти каналы",
-    chats: "Чаты"
+    chats: "Чаты",
+    edited: "изменено",
+    deleteConfirm: "Удалить запись?",
+    editPost: "Редактировать запись",
+    save: "Сохранить",
+    cancel: "Отмена"
   },
   en: {
     wall: "Wall",
     refresh: "Refresh",
     emptyDesc: "New posts from the channels you are subscribed to will appear here.",
     findChannels: "Find Channels",
-    chats: "Chats"
+    chats: "Chats",
+    edited: "edited",
+    deleteConfirm: "Delete post?",
+    editPost: "Edit post",
+    save: "Save",
+    cancel: "Cancel"
   }
 };
 
@@ -34,9 +41,12 @@ export default function WallPage() {
   const [isLoading, setIsLoading] = useState(true);
   const currentUserId = getUserId();
   
-  // Установка языка из памяти
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
+
+  // СОСТОЯНИЯ ДЛЯ РЕДАКТИРОВАНИЯ
+  const [editingPost, setEditingPost] = useState<any>(null);
+  const [editContent, setEditContent] = useState("");
 
   const loadFeed = async () => {
     setIsLoading(true);
@@ -59,8 +69,36 @@ export default function WallPage() {
     return { text, mediaUrls };
   };
 
+  const startEditingPost = (post: any) => {
+    setEditingPost(post);
+    setEditContent(post.content);
+  };
+
+  const saveEditedPost = async () => {
+    if (!editContent.trim()) return;
+    try {
+      await fetch(`/api/chats/${editingPost.chatId}/messages/${editingPost.id}`, {
+         method: 'PATCH',
+         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
+         body: JSON.stringify({ content: editContent })
+      });
+      loadFeed();
+    } catch(e) {}
+    setEditingPost(null);
+  };
+
+  const deletePost = async (post: any) => {
+    if (!window.confirm(t.deleteConfirm)) return;
+    try {
+      await fetch(`/api/chats/${post.chatId}/messages/${post.id}`, {
+        method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId }
+      });
+      loadFeed();
+    } catch (e) {}
+  };
+
   return (
-    <div className="flex h-screen flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 font-sans">
+    <div className="flex h-screen flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 font-sans relative">
       
       <header className="flex justify-between items-center px-4 pt-12 pb-4 bg-[#f2f2f7]/90 dark:bg-black/90 sticky top-0 z-10 border-b border-gray-200/50 dark:border-zinc-900/50 shadow-sm backdrop-blur-md">
         <button onClick={loadFeed} className="text-black dark:text-white text-[16px] font-medium active:scale-95 transition-all ml-1">{t.refresh}</button>
@@ -94,7 +132,16 @@ export default function WallPage() {
                   
                   <div className="px-5 py-3.5 border-b border-gray-100/50 dark:border-zinc-800/50 flex items-center justify-between bg-white dark:bg-[#1c1c1e]">
                     <span className="text-black dark:text-white font-semibold text-[16px] truncate">{post.channelName}</span>
-                    <span className="text-gray-400 text-[12px] shrink-0 font-medium">{new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <div className="flex items-center gap-2">
+                      {post.isEdited && <span className="text-[10px] text-gray-400 italic font-medium">{t.edited}</span>}
+                      <span className="text-gray-400 text-[12px] shrink-0 font-medium">{new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      {post.isMine && (
+                        <div className="flex items-center gap-2 ml-2 border-l border-gray-200 dark:border-zinc-700 pl-3">
+                          <button onClick={() => startEditingPost(post)} className="text-gray-400 hover:text-blue-500 transition-colors"><Edit2 size={16} /></button>
+                          <button onClick={() => deletePost(post)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   
                   {mediaUrls.length > 0 && (
@@ -122,6 +169,30 @@ export default function WallPage() {
           </div>
         )}
       </main>
+
+      {/* МОДАЛКА РЕДАКТИРОВАНИЯ ЗАПИСИ НА СТЕНЕ */}
+      {editingPost && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#1c1c1e] w-full max-w-md rounded-[24px] overflow-hidden shadow-xl border border-gray-100/50 dark:border-zinc-800/50">
+            <div className="px-5 py-4 border-b border-gray-100/50 dark:border-zinc-800/50 flex justify-between items-center">
+              <h3 className="font-bold text-lg text-black dark:text-white">{t.editPost}</h3>
+              <button onClick={() => setEditingPost(null)} className="text-gray-400 hover:text-black dark:hover:text-white transition-colors"><X size={20}/></button>
+            </div>
+            <div className="p-5">
+              <textarea
+                className="w-full bg-[#f2f2f7] dark:bg-black rounded-[16px] p-4 text-[16px] text-black dark:text-white outline-none resize-none border border-gray-200/50 dark:border-zinc-800/50 focus:border-black dark:focus:border-white transition-colors"
+                rows={5}
+                value={editContent}
+                onChange={e => setEditContent(e.target.value)}
+              />
+            </div>
+            <div className="px-5 py-4 bg-gray-50 dark:bg-[#1c1c1e] flex gap-3">
+              <button onClick={() => setEditingPost(null)} className="flex-1 py-3.5 font-semibold text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-zinc-800 rounded-[16px] active:scale-95 transition-transform">{t.cancel}</button>
+              <button onClick={saveEditedPost} className="flex-1 py-3.5 font-semibold text-white bg-black dark:bg-white dark:text-black rounded-[16px] active:scale-95 transition-transform shadow-sm">{t.save}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav className="border-t border-gray-200/50 dark:border-zinc-800/50 flex justify-around p-3 bg-[#f2f2f7]/80 dark:bg-black/80 backdrop-blur-md z-10 pb-6">
         <Link href="/">
