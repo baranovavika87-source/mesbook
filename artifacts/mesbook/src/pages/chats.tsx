@@ -201,7 +201,6 @@ export default function ChatsPage() {
     return () => clearInterval(interval);
   }, [currentUserId]);
 
-  // ИСПРАВЛЕНИЕ: Чтение ответа в переменную data, чтобы не блокировать поток
   useEffect(() => {
     if (search.length < 2) { setSearchResults([]); return; }
     const timer = setTimeout(async () => {
@@ -394,18 +393,24 @@ export default function ChatsPage() {
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
         <a className="flex items-center px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 bg-white dark:bg-[#1c1c1e]">
-          <div className={`w-[52px] h-[52px] shrink-0 rounded-full flex items-center justify-center relative shadow-sm overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSaved ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
-            {isSaved ? (
-              <Bookmark size={24} fill="currentColor" />
-            ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
-              <img 
-                src={participant.avatarUrl} 
-                alt="Avatar" 
-                className="w-full h-full object-cover" 
-                onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
-              />
-            ) : (
-              <span className="text-[20px] font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
+          {/* ИСПРАВЛЕНИЕ: Вынесли точку онлайна за пределы overflow-hidden */}
+          <div className="relative w-[52px] h-[52px] shrink-0">
+            <div className={`w-full h-full rounded-full flex items-center justify-center shadow-sm overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSaved ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
+              {isSaved ? (
+                <Bookmark size={24} fill="currentColor" />
+              ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
+                <img 
+                  src={participant.avatarUrl} 
+                  alt="Avatar" 
+                  className="w-full h-full object-cover" 
+                  onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+                />
+              ) : (
+                <span className="text-[20px] font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
+              )}
+            </div>
+            {isOnline && !participant.isGroup && !participant.isChannel && !isSaved && (
+              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-black dark:bg-white border-2 border-white dark:border-[#1c1c1e] rounded-full z-10"></div>
             )}
           </div>
           <div className="ml-4 flex-1 overflow-hidden">
@@ -446,30 +451,40 @@ export default function ChatsPage() {
     );
   };
 
-  const renderGlobalUserCard = (user: any) => (
-    <Link key={user.id} href={'/chat/' + user.id}>
-      <a 
-        onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
-        className="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 bg-white dark:bg-[#1c1c1e]"
-      >
-        <div className="flex items-center gap-4">
-          <div className="w-[52px] h-[52px] rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden shadow-sm border border-gray-200/50 dark:border-zinc-700/50">
-            {user.avatarUrl && user.avatarUrl.length > 5 ? (
-              <img 
-                src={user.avatarUrl} 
-                alt="Avatar" 
-                className="w-full h-full object-cover" 
-                onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=random&color=fff&size=120`; }} 
-              />
-            ) : (
-              <span className="text-black dark:text-white font-medium text-[20px]">{user.displayName?.charAt(0) || "U"}</span>
-            )}
+  const renderGlobalUserCard = (user: any) => {
+    const isOnline = user.lastSeen ? (Date.now() - user.lastSeen < 3 * 60 * 1000) : false;
+    
+    return (
+      <Link key={user.id} href={'/chat/' + user.id}>
+        <a 
+          onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
+          className="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 bg-white dark:bg-[#1c1c1e]"
+        >
+          <div className="flex items-center gap-4">
+            {/* ИСПРАВЛЕНИЕ: Индикатор онлайна и здесь вынесен из-под overflow-hidden */}
+            <div className="relative w-[52px] h-[52px] shrink-0">
+              <div className="w-full h-full rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden shadow-sm border border-gray-200/50 dark:border-zinc-700/50">
+                {user.avatarUrl && user.avatarUrl.length > 5 ? (
+                  <img 
+                    src={user.avatarUrl} 
+                    alt="Avatar" 
+                    className="w-full h-full object-cover" 
+                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+                  />
+                ) : (
+                  <span className="text-black dark:text-white font-medium text-[20px]">{user.displayName?.charAt(0) || "U"}</span>
+                )}
+              </div>
+              {isOnline && (
+                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-black dark:bg-white border-2 border-white dark:border-[#1c1c1e] rounded-full z-10"></div>
+              )}
+            </div>
+            <span className="font-semibold text-black dark:text-white text-[16px]">{user.displayName}</span>
           </div>
-          <span className="font-semibold text-black dark:text-white text-[16px]">{user.displayName}</span>
-        </div>
-      </a>
-    </Link>
-  );
+        </a>
+      </Link>
+    );
+  };
 
   return (
     <div 
