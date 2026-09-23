@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Trash2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight } from 'lucide-react';
 
 const getUserId = () => {
   try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
@@ -31,6 +31,8 @@ const translations = {
     mute: "Убрать звук",
     unmute: "Включить звук",
     reply: "Ответ",
+    editing: "Редактирование",
+    edited: "изменено",
     messagePlaceholder: "Сообщение",
     deleteConfirm: "Удалить сообщение?",
     errCloudinary: "Ошибка облака Cloudinary: ",
@@ -64,6 +66,8 @@ const translations = {
     mute: "Mute",
     unmute: "Unmute",
     reply: "Reply",
+    editing: "Edit Message",
+    edited: "edited",
     messagePlaceholder: "Message",
     deleteConfirm: "Delete message?",
     errCloudinary: "Cloudinary error: ",
@@ -108,6 +112,7 @@ export default function ChatPage() {
   const [readFailed, setReadFailed] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
+  const [editingMsg, setEditingMsg] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
   
   const [isMember, setIsMember] = useState(true);
@@ -117,7 +122,6 @@ export default function ChatPage() {
   const [membersCount, setMembersCount] = useState<number | null>(null);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
 
-  // ИНДИКАЦИЯ ПЕЧАТИ
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const lastTypingTime = useRef(0);
 
@@ -153,7 +157,6 @@ export default function ChatPage() {
     }
   }, [messages, chatId, currentUserId, isSavedChat]);
 
-  // ПИНГ ДЛЯ ОНЛАЙНА
   useEffect(() => {
     const sendPing = async () => {
       try { await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
@@ -201,7 +204,7 @@ export default function ChatPage() {
       if (msgRes.ok) {
         const data = await msgRes.json();
         const serverMsgs = Array.isArray(data.messages) ? data.messages : (Array.isArray(data) ? data : []);
-        setTypingUsers(data.typing || []); // Записываем тех, кто печатает
+        setTypingUsers(data.typing || []);
         setMessages((prev: any) => {
           const sendingMsgs = prev.filter((m: any) => m.isSending);
           const filteredSending = sendingMsgs.filter((sm: any) => !serverMsgs.find((dm: any) => dm.content === sm.content));
@@ -252,11 +255,47 @@ export default function ChatPage() {
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
+
+    if (editingMsg) {
+      const newContent = content.trim();
+      const tempId = editingMsg.id;
+      
+      if (isSavedChat) {
+        setMessages((prev: any) => {
+          const updated = prev.map((m: any) => m.id === tempId ? { ...m, content: newContent, isEdited: true } : m);
+          localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
+          return updated;
+        });
+        setContent('');
+        setEditingMsg(null);
+        return;
+      }
+
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, content: newContent, isEdited: true } : m));
+      setContent('');
+      setEditingMsg(null);
+      try {
+        await fetch(`/api/chats/${chatId}/messages/${tempId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
+          body: JSON.stringify({ content: newContent })
+        });
+        loadData();
+      } catch(e) {}
+      return;
+    }
+
     const tempContent = content.trim();
     const finalContent = replyingTo ? `> ${replyingTo.content}\n\n${tempContent}` : tempContent;
     setContent('');
     setReplyingTo(null);
     await sendMessageToServer(finalContent);
+  };
+
+  const startEditing = (msg: any) => {
+    setEditingMsg(msg);
+    setContent(msg.content);
+    setReplyingTo(null);
   };
 
   const joinChat = async () => {
@@ -566,7 +605,6 @@ export default function ChatPage() {
               const isMe = String(msg.senderId) === String(currentUserId);
               const isMedia = msg.content.startsWith('[MEDIA] ');
               
-              // ГРУППИРОВКА ДАТ
               const dateObj = new Date(msg.createdAt);
               const dateLocale = lang === 'ru' ? 'ru-RU' : 'en-US';
               const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString(dateLocale, { day: 'numeric', month: 'long' });
@@ -576,7 +614,6 @@ export default function ChatPage() {
               return (
                 <div key={msg.id} className="flex flex-col w-full mb-1.5">
                   
-                  {/* Плашка с датой */}
                   {showDate && (
                     <div className="flex justify-center my-3 w-full">
                       <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm capitalize">
@@ -590,14 +627,15 @@ export default function ChatPage() {
                     <div className={
                       isMedia 
                         ? `relative shadow-sm p-1 bg-white dark:bg-[#1c1c1e] border border-gray-100/50 dark:border-zinc-800 rounded-[20px] ${isMe ? 'rounded-tr-[4px]' : 'rounded-tl-[4px]'}`
-                        : `shadow-sm relative min-w-[75px] px-3.5 pt-2 pb-5 pr-12 rounded-[20px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-tr-[4px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-tl-[4px] border border-gray-100/50 dark:border-zinc-800'}`
+                        : `shadow-sm relative min-w-[75px] px-3.5 pt-2 pb-5 ${isMe ? 'pr-[68px] bg-black dark:bg-white text-white dark:text-black rounded-tr-[4px]' : 'pr-12 bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-tl-[4px] border border-gray-100/50 dark:border-zinc-800'} rounded-[20px]`
                     }>
                       
                       {renderMessageContent(msg.content, isMe)}
                       
-                      {/* БЛОК С ГАЛОЧКАМИ, ВРЕМЕНЕМ И КОРЗИНОЙ */}
+                      {/* БЛОК С ГАЛОЧКАМИ, ВРЕМЕНЕМ, РЕДАКТИРОВАНИЕМ И КОРЗИНОЙ */}
                       <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium ${isMedia ? 'bottom-2.5 right-2.5 bg-black/50 text-white px-2.5 py-1 rounded-full backdrop-blur-md z-10' : 'bottom-1 right-2.5 text-gray-400 dark:text-zinc-500'}`}>
                         <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                        {msg.isEdited && <span className="opacity-70 ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
                         
                         {isMe && (
                           <div className="flex items-center ml-0.5">
@@ -612,14 +650,22 @@ export default function ChatPage() {
                               </div>
                             )}
                             
-                            {/* ИКОНКА УДАЛЕНИЯ */}
+                            {/* ИКОНКИ РЕДАКТИРОВАНИЯ И УДАЛЕНИЯ */}
                             {!msg.isSending && (
-                              <button 
-                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(msg.id); }} 
-                                className="hover:text-red-500 ml-1.5 transition-colors cursor-pointer z-20"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              <>
+                                <button 
+                                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEditing(msg); }} 
+                                  className="hover:text-blue-500 ml-1.5 transition-colors cursor-pointer z-20"
+                                >
+                                  <Edit2 size={12} />
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(msg.id); }} 
+                                  className="hover:text-red-500 ml-1.5 transition-colors cursor-pointer z-20"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </>
                             )}
                           </div>
                         )}
@@ -635,13 +681,20 @@ export default function ChatPage() {
       </main>
 
       <div className="p-3 bg-[#f2f2f7] dark:bg-black border-t border-gray-200/50 dark:border-zinc-900/50 pb-6 relative z-10 flex flex-col">
-        {replyingTo && (
+        {/* ИСПРАВЛЕНИЕ: Плашка "Ответ" или "Редактирование" */}
+        {(replyingTo || editingMsg) && (
           <div className="flex items-center justify-between mb-2 mx-1 px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-[16px] border-l-[3px] border-black dark:border-white shadow-sm">
             <div className="flex flex-col overflow-hidden mr-4">
-              <span className="text-[11px] font-bold text-black dark:text-white uppercase tracking-wider mb-0.5">{t.reply}</span>
-              <span className="text-[13px] text-gray-500 dark:text-zinc-400 truncate">{replyingTo.content.startsWith('[MEDIA]') ? t.photo : replyingTo.content.replace(/^> .*\n\n/, '')}</span>
+              <span className="text-[11px] font-bold text-black dark:text-white uppercase tracking-wider mb-0.5">
+                {editingMsg ? t.editing : t.reply}
+              </span>
+              <span className="text-[13px] text-gray-500 dark:text-zinc-400 truncate">
+                {editingMsg 
+                  ? (editingMsg.content.startsWith('[MEDIA]') ? t.photo : editingMsg.content) 
+                  : (replyingTo.content.startsWith('[MEDIA]') ? t.photo : replyingTo.content.replace(/^> .*\n\n/, ''))}
+              </span>
             </div>
-            <button type="button" onClick={() => setReplyingTo(null)} className="p-1.5 flex-shrink-0 text-gray-400 hover:text-black dark:hover:text-white rounded-full transition-colors"><X size={18} /></button>
+            <button type="button" onClick={() => { setReplyingTo(null); setEditingMsg(null); setContent(''); }} className="p-1.5 flex-shrink-0 text-gray-400 hover:text-black dark:hover:text-white rounded-full transition-colors"><X size={18} /></button>
           </div>
         )}
 
@@ -691,4 +744,4 @@ export default function ChatPage() {
       </div>
     </div>
   );
-        }
+}
