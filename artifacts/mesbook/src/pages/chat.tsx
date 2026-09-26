@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download } from 'lucide-react';
 
 const getUserId = () => {
   try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
@@ -114,6 +114,9 @@ export default function ChatPage() {
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [editingMsg, setEditingMsg] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
+  
+  // ИСПРАВЛЕНИЕ: Состояние для просмотра картинки на весь экран
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   
   const [isMember, setIsMember] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -257,12 +260,19 @@ export default function ChatPage() {
     if (!content.trim()) return;
 
     if (editingMsg) {
-      const newContent = content.trim();
+      const newTextContent = content.trim();
       const tempId = editingMsg.id;
+      
+      // ИСПРАВЛЕНИЕ: Если сообщение было ответом, приклеиваем старую цитату обратно к новому тексту
+      let finalEditedContent = newTextContent;
+      if (editingMsg.content.startsWith('> ')) {
+        const parts = editingMsg.content.split('\n\n');
+        finalEditedContent = `${parts[0]}\n\n${newTextContent}`;
+      }
       
       if (isSavedChat) {
         setMessages((prev: any) => {
-          const updated = prev.map((m: any) => m.id === tempId ? { ...m, content: newContent, isEdited: true } : m);
+          const updated = prev.map((m: any) => m.id === tempId ? { ...m, content: finalEditedContent, isEdited: true } : m);
           localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
           return updated;
         });
@@ -271,14 +281,14 @@ export default function ChatPage() {
         return;
       }
 
-      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, content: newContent, isEdited: true } : m));
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, content: finalEditedContent, isEdited: true } : m));
       setContent('');
       setEditingMsg(null);
       try {
         await fetch(`/api/chats/${chatId}/messages/${tempId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
-          body: JSON.stringify({ content: newContent })
+          body: JSON.stringify({ content: finalEditedContent })
         });
         loadData();
       } catch(e) {}
@@ -294,7 +304,13 @@ export default function ChatPage() {
 
   const startEditing = (msg: any) => {
     setEditingMsg(msg);
-    setContent(msg.content);
+    // ИСПРАВЛЕНИЕ: Если это ответ, вырезаем цитату и кладем в поле ввода только сам текст пользователя
+    if (msg.content.startsWith('> ')) {
+      const parts = msg.content.split('\n\n');
+      setContent(parts.slice(1).join('\n\n'));
+    } else {
+      setContent(msg.content);
+    }
     setReplyingTo(null);
   };
 
@@ -379,13 +395,30 @@ export default function ChatPage() {
     setIsSavingChat(false);
   };
 
+  // ИСПРАВЛЕНИЕ: Функция для скачивания открытой картинки
+  const downloadImage = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `mesogram_photo_${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(objectUrl);
+    } catch (e) {
+      window.open(url, '_blank');
+    }
+  };
+
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 3 * 60 * 1000) : false;
   
   let subtitleText = "";
   let subtitleColor = "text-gray-400 dark:text-zinc-500"; 
 
-  // ИСПРАВЛЕНИЕ: Вычищен зеленый и синий цвета, оставлен монохромный стиль
   if (typingUsers.length > 0) {
     if (typingUsers.length === 1) {
       subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping;
@@ -413,17 +446,19 @@ export default function ChatPage() {
     if (msgContent.startsWith('[MEDIA] ')) {
       let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
-      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic|heif)$/i, '.jpg');
+      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic\vert{}heif)$/i, '.jpg');
       
       return (
         <div className="relative flex items-center justify-center overflow-hidden rounded-[16px]">
           {isVideo ? (
             <video src={url} controls className="w-full h-auto max-w-[280px] max-h-[400px] object-contain" />
           ) : (
+            // ИСПРАВЛЕНИЕ: Клик по картинке открывает её на весь экран
             <img 
+              onClick={() => setFullScreenImage(url)}
               src={url} 
               alt="Media" 
-              className="w-full h-auto max-w-[280px] max-h-[400px] object-contain min-h-[120px] min-w-[120px] bg-gray-100/5 dark:bg-white/5" 
+              className="w-full h-auto max-w-[280px] max-h-[400px] object-contain min-h-[120px] min-w-[120px] bg-gray-100/5 dark:bg-white/5 cursor-pointer" 
               onError={(e) => { e.currentTarget.src = 'https://placehold.co/280x200/1c1c1e/ffffff?text=Image+Not+Found'; }}
             />
           )}
@@ -454,6 +489,19 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-screen bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative font-sans">
       
+      {/* ИСПРАВЛЕНИЕ: ПОЛНОЭКРАННЫЙ ПРОСМОТР КАРТИНКИ (Lightbox) */}
+      {fullScreenImage && (
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in duration-200">
+          <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-10">
+            <button onClick={() => setFullScreenImage(null)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><X size={24} /></button>
+            <button onClick={() => downloadImage(fullScreenImage)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><Download size={24} /></button>
+          </div>
+          <div className="flex-1 flex items-center justify-center p-2 overflow-hidden touch-pinch-zoom">
+            <img src={fullScreenImage} alt="Fullscreen Media" className="max-w-full max-h-full object-contain select-none" />
+          </div>
+        </div>
+      )}
+
       {/* ---------------------------------------------------------
           ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА
       --------------------------------------------------------- */}
@@ -580,7 +628,6 @@ export default function ChatPage() {
       <header className="px-3 pt-10 pb-3 border-b border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-3 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-md relative z-10 shadow-sm">
         <Link href="/"><a className="p-2 text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
-          {/* ИСПРАВЛЕНИЕ: Точка онлайна в шапке тоже вынесена из-под обрезки и стала монохромной */}
           <div className="relative w-[44px] h-[44px] shrink-0">
             <div className={`w-full h-full rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSavedChat ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
               {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chatInfo?.participant?.displayName || 'U')}&background=random&color=fff&size=120`; }} /> : displayName.charAt(0).toUpperCase()}
@@ -617,7 +664,6 @@ export default function ChatPage() {
               return (
                 <div key={msg.id} className="flex flex-col w-full mb-1.5">
                   
-                  {/* Плашка с датой */}
                   {showDate && (
                     <div className="flex justify-center my-3 w-full">
                       <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm capitalize">
@@ -631,15 +677,14 @@ export default function ChatPage() {
                     <div className={
                       isMedia 
                         ? `relative shadow-sm p-1 bg-white dark:bg-[#1c1c1e] border border-gray-100/50 dark:border-zinc-800 rounded-[20px] ${isMe ? 'rounded-tr-[4px]' : 'rounded-tl-[4px]'}`
-                        : `shadow-sm relative min-w-[75px] px-3.5 pt-2 pb-5 ${isMe ? 'pr-[68px] bg-black dark:bg-white text-white dark:text-black rounded-tr-[4px]' : 'pr-12 bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-tl-[4px] border border-gray-100/50 dark:border-zinc-800'} rounded-[20px]`
+                        : `shadow-sm relative min-w-[75px] px-3.5 pt-2 pb-5 ${isMe ? (isMedia ? 'pr-12' : 'pr-[68px]') + ' bg-black dark:bg-white text-white dark:text-black rounded-tr-[4px]' : 'pr-12 bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-tl-[4px] border border-gray-100/50 dark:border-zinc-800'} rounded-[20px]`
                     }>
                       
                       {renderMessageContent(msg.content, isMe)}
                       
-                      {/* БЛОК С ГАЛОЧКАМИ, ВРЕМЕНЕМ, РЕДАКТИРОВАНИЕМ И КОРЗИНОЙ */}
                       <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium ${isMedia ? 'bottom-2.5 right-2.5 bg-black/50 text-white px-2.5 py-1 rounded-full backdrop-blur-md z-10' : 'bottom-1 right-2.5 text-gray-400 dark:text-zinc-500'}`}>
                         <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
-                        {msg.isEdited && <span className="opacity-70 ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
+                        {msg.isEdited && !isMedia && <span className="opacity-70 ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
                         
                         {isMe && (
                           <div className="flex items-center ml-0.5">
@@ -654,18 +699,20 @@ export default function ChatPage() {
                               </div>
                             )}
                             
-                            {/* ИКОНКИ РЕДАКТИРОВАНИЯ И УДАЛЕНИЯ */}
                             {!msg.isSending && (
                               <>
-                                <button 
-                                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEditing(msg); }} 
-                                  className="hover:text-black dark:hover:text-white ml-1.5 transition-colors cursor-pointer z-20"
-                                >
-                                  <Edit2 size={12} />
-                                </button>
+                                {/* ИСПРАВЛЕНИЕ: Прячем карандаш для картинок/видео */}
+                                {!isMedia && (
+                                  <button 
+                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEditing(msg); }} 
+                                    className="hover:text-gray-300 ml-1.5 transition-colors cursor-pointer z-20"
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+                                )}
                                 <button 
                                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(msg.id); }} 
-                                  className="hover:text-black dark:hover:text-white ml-1.5 transition-colors cursor-pointer z-20"
+                                  className="hover:text-gray-300 ml-1.5 transition-colors cursor-pointer z-20"
                                 >
                                   <Trash2 size={13} />
                                 </button>
@@ -693,7 +740,7 @@ export default function ChatPage() {
               </span>
               <span className="text-[13px] text-gray-500 dark:text-zinc-400 truncate">
                 {editingMsg 
-                  ? (editingMsg.content.startsWith('[MEDIA]') ? t.photo : editingMsg.content) 
+                  ? (editingMsg.content.startsWith('[MEDIA]') ? t.photo : (editingMsg.content.startsWith('> ') ? editingMsg.content.split('\n\n').slice(1).join('\n\n') : editingMsg.content)) 
                   : (replyingTo.content.startsWith('[MEDIA]') ? t.photo : replyingTo.content.replace(/^> .*\n\n/, ''))}
               </span>
             </div>
@@ -735,7 +782,6 @@ export default function ChatPage() {
               placeholder={t.messagePlaceholder} 
             />
             
-            {/* ИСПРАВЛЕНИЕ: Кнопка стала монохромной (черно-белой) */}
             <button 
               type="submit" 
               disabled={!content.trim()} 
