@@ -205,8 +205,10 @@ router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
     try {
       const countRes = await database.execute({ sql: "SELECT COUNT(*) as c FROM chat_members WHERE chat_id = ?", args: [chatId] });
       membersCount = Number(countRes.rows[0]?.c) || 1;
-      const fiveMinsAgo = Date.now() - 3 * 60 * 1000;
-      const onlineRes = await database.execute({ sql: "SELECT COUNT(*) as c FROM chat_members cm JOIN users u ON cm.user_id = u.id WHERE cm.chat_id = ? AND u.last_seen > ?", args: [chatId, fiveMinsAgo] });
+      
+      // ИСПРАВЛЕНИЕ: ЖЕСТКИЙ ЛИМИТ ОНЛАЙНА - 15 СЕКУНД
+      const fifteenSecsAgo = Date.now() - 15000;
+      const onlineRes = await database.execute({ sql: "SELECT COUNT(*) as c FROM chat_members cm JOIN users u ON cm.user_id = u.id WHERE cm.chat_id = ? AND u.last_seen > ?", args: [chatId, fifteenSecsAgo] });
       onlineCount = Number(onlineRes.rows[0]?.c) || 1;
     } catch (e) {}
   }
@@ -234,7 +236,7 @@ router.post("/chats/:chatId/typing", async (req, res): Promise<void> => {
   const user = await getUser(db, currentUserId);
   if (user) { 
     typingStates.set(`${chatId}_${currentUserId}`, { time: Date.now(), name: user.displayName }); 
-    broadcastTyping(chatId, user.displayName); // Мгновенный сигнал печати
+    broadcastTyping(chatId, user.displayName); 
   }
   res.json({ success: true });
 });
@@ -383,7 +385,7 @@ router.post("/chats/:chatId/messages/:messageId/reaction", async (req, res): Pro
     await database.execute({ sql: "INSERT INTO message_reactions (message_id, user_id, reaction) VALUES (?, ?, ?)", args: [messageId, currentUserId, reaction] });
   }
   
-  broadcastUpdate(chatId); // Мгновенный сигнал по сокетам
+  broadcastUpdate(chatId);
   res.json({ success: true });
 });
 
@@ -433,7 +435,7 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const message: any = result.rows[0];
   const response = { id: Number(message.id), chatId: Number(message.chat_id), senderId: Number(message.sender_id), senderName: message.sender_name, content: message.content, createdAt: message.created_at, isMine: true, isRead: Number(message.read_by_me) === 1, isEdited: false, commentsCount: 0, reactions: {} };
   
-  broadcastToChat(chatId, response); // Мгновенный сигнал
+  broadcastToChat(chatId, response);
   res.status(201).json(response);
 });
 
@@ -455,7 +457,7 @@ router.patch("/chats/:chatId/messages/:messageId", async (req, res): Promise<voi
 
   await database.execute({ sql: "UPDATE messages SET content = ?, is_edited = 1 WHERE id = ?", args: [content, messageId] });
   
-  broadcastUpdate(chatId); // Мгновенный сигнал
+  broadcastUpdate(chatId);
   res.json({ success: true });
 });
 
@@ -469,7 +471,7 @@ router.delete("/chats/:chatId/messages/:messageId", async (req, res): Promise<vo
   await database.execute({ sql: "DELETE FROM messages WHERE parent_id = ?", args: [messageId] });
   await database.execute({ sql: "DELETE FROM message_reactions WHERE message_id = ?", args: [messageId] });
   
-  broadcastUpdate(chatId); // Мгновенный сигнал
+  broadcastUpdate(chatId);
   res.json({ success: true });
 });
 
