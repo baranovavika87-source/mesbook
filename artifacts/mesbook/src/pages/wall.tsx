@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send, ArrowLeft } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -169,7 +169,7 @@ export default function WallPage() {
               {t.emptyDesc}
             </p>
             <Link href="/">
-              <a className="mt-8 px-8 py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-2xl active:scale-95 transition-transform text-[15px] shadow-md">
+              <a className="mt-8 px-8 py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-2xl active:scale-scale-95 transition-transform text-[15px] shadow-md">
                 {t.findChannels}
               </a>
             </Link>
