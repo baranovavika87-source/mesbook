@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send, ArrowLeft } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send, ArrowLeft, Download } from 'lucide-react';
+import { io } from 'socket.io-client';
+
+let socket: any = null;
 
 const getUserId = () => {
   try {
@@ -59,14 +62,21 @@ export default function WallPage() {
   const [activeThread, setActiveThread] = useState<any>(null);
   const [threadComments, setThreadComments] = useState<any[]>([]);
   const [commentContent, setCommentContent] = useState('');
+  
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
-  const loadFeed = async () => {
-    setIsLoading(true);
+  const activeThreadRef = useRef<any>(null);
+  useEffect(() => {
+    activeThreadRef.current = activeThread;
+  }, [activeThread]);
+
+  const loadFeed = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const res = await fetch('/api/wall/feed', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
       if (res.ok) setPosts(await res.json());
     } catch (e) {}
-    setIsLoading(false);
+    if (!silent) setIsLoading(false);
   };
 
   const loadComments = async (chatId: number, messageId: number) => {
@@ -76,7 +86,27 @@ export default function WallPage() {
      } catch(e) {}
   };
 
-  useEffect(() => { loadFeed(); }, []);
+  useEffect(() => {
+    loadFeed();
+    if (!socket) socket = io(window.location.origin, { path: '/socket.io' });
+    
+    const handleUpdate = () => {
+      loadFeed(true); // Тихое обновление, без спиннера загрузки
+      if (activeThreadRef.current) {
+        loadComments(activeThreadRef.current.chatId, activeThreadRef.current.id);
+      }
+    };
+
+    socket.on('global_update', handleUpdate);
+    socket.on('wall:post', handleUpdate);
+
+    const interval = setInterval(handleUpdate, 15000);
+    return () => {
+      clearInterval(interval);
+      socket.off('global_update', handleUpdate);
+      socket.off('wall:post', handleUpdate);
+    };
+  }, [currentUserId]);
 
   useEffect(() => {
     if (activeThread) loadComments(activeThread.chatId, activeThread.id);
@@ -105,7 +135,7 @@ export default function WallPage() {
          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
          body: JSON.stringify({ content: editContent })
       });
-      loadFeed();
+      loadFeed(true);
     } catch(e) {}
     setEditingPost(null);
   };
@@ -116,7 +146,7 @@ export default function WallPage() {
       await fetch(`/api/chats/${post.chatId}/messages/${post.id}`, {
         method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId }
       });
-      loadFeed();
+      loadFeed(true);
     } catch (e) {}
   };
 
@@ -127,7 +157,6 @@ export default function WallPage() {
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
         body: JSON.stringify({ reaction }) 
       });
-      loadFeed();
     } catch (e) {}
     setActiveReactionMsg(null);
   };
@@ -143,16 +172,42 @@ export default function WallPage() {
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
         body: JSON.stringify({ content: txt, parentId: activeThread.id }) 
       });
-      loadComments(activeThread.chatId, activeThread.id);
-      loadFeed();
     } catch (error) {}
+  };
+
+  const downloadImage = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `mesogram_photo_${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(objectUrl);
+    } catch (e) { window.open(url, '_blank'); }
   };
 
   return (
     <div className="flex h-screen flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 font-sans relative overflow-hidden" onClick={() => setActiveReactionMsg(null)}>
       
+      {/* ЛАЙТБОКС */}
+      {fullScreenImage && (
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in duration-200">
+          <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-10">
+            <button onClick={() => setFullScreenImage(null)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><X size={24} /></button>
+            <button onClick={() => downloadImage(fullScreenImage)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><Download size={24} /></button>
+          </div>
+          <div className="flex-1 flex items-center justify-center p-2 overflow-hidden touch-pinch-zoom">
+            <img src={fullScreenImage} alt="Fullscreen Media" className="max-w-full max-h-full object-contain select-none" />
+          </div>
+        </div>
+      )}
+
       <header className="flex justify-between items-center px-4 pt-12 pb-4 bg-[#f2f2f7]/90 dark:bg-black/90 sticky top-0 z-10 border-b border-gray-200/50 dark:border-zinc-900/50 shadow-sm backdrop-blur-md">
-        <button onClick={loadFeed} className="text-black dark:text-white text-[16px] font-medium active:scale-95 transition-all ml-1">{t.refresh}</button>
+        <button onClick={() => loadFeed(false)} className="text-black dark:text-white text-[16px] font-medium active:scale-95 transition-all ml-1">{t.refresh}</button>
         <h1 className="text-black dark:text-white text-[20px] font-semibold absolute left-1/2 -translate-x-1/2 tracking-wide">{t.wall}</h1>
         <div className="w-[80px]"></div>
       </header>
@@ -169,7 +224,7 @@ export default function WallPage() {
               {t.emptyDesc}
             </p>
             <Link href="/">
-              <a className="mt-8 px-8 py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-2xl active:scale-scale-95 transition-transform text-[15px] shadow-md">
+              <a className="mt-8 px-8 py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-2xl active:scale-95 transition-transform text-[15px] shadow-md">
                 {t.findChannels}
               </a>
             </Link>
@@ -204,7 +259,7 @@ export default function WallPage() {
                           {url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/') ? (
                             <video src={url} controls className="w-full h-full object-cover absolute inset-0" />
                           ) : (
-                            <img src={url} alt="Media" className="w-full h-full object-cover absolute inset-0" />
+                            <img onClick={() => setFullScreenImage(url)} src={url} alt="Media" className="w-full h-full object-cover absolute inset-0 cursor-pointer" />
                           )}
                         </div>
                       ))}
@@ -217,10 +272,9 @@ export default function WallPage() {
                     </div>
                   )}
 
-                  {/* ПОДВАЛ ПОСТА: Реакции и кнопка комментариев */}
+                  {/* ПОДВАЛ ПОСТА */}
                   <div className="px-5 pb-4 pt-2 flex flex-col gap-3 relative">
                     
-                    {/* Список поставленных реакций */}
                     {reactionsKeys.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {reactionsKeys.map(key => (
@@ -253,7 +307,6 @@ export default function WallPage() {
                           <Smile size={20} />
                         </button>
                         
-                        {/* Панель выбора реакций */}
                         {activeReactionMsg === post.id && (
                           <div className="absolute z-50 flex gap-2 p-2 bg-white dark:bg-[#1c1c1e] rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800 right-0 bottom-8">
                              {FAST_REACTIONS.map(emoji => (
