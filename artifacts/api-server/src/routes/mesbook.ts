@@ -44,7 +44,6 @@ async function ensureSchema(database: any) {
   if (schemaEnsured) return;
   try { await database.execute("CREATE TABLE IF NOT EXISTS chat_members (chat_id INTEGER, user_id INTEGER, role TEXT DEFAULT 'member', PRIMARY KEY (chat_id, user_id))"); } catch (e) {}
   try { await database.execute("ALTER TABLE messages ADD COLUMN is_edited INTEGER DEFAULT 0"); } catch (e) {}
-  // НОВОЕ: Поддержка комментариев и реакций
   try { await database.execute("ALTER TABLE messages ADD COLUMN parent_id INTEGER DEFAULT NULL"); } catch (e) {}
   try { await database.execute("CREATE TABLE IF NOT EXISTS message_reactions (message_id INTEGER, user_id INTEGER, reaction TEXT, PRIMARY KEY (message_id, user_id))"); } catch (e) {}
   schemaEnsured = true;
@@ -292,7 +291,6 @@ router.post("/chats/:chatId/read", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
-// ИСПРАВЛЕНИЕ: Получение сообщений вместе с комментариями и реакциями
 router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const chatId = parseChatId(currentUserId, req.params.chatId);
@@ -301,7 +299,6 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const database = await getDatabase();
   await ensureSchema(database);
 
-  // Получаем главные сообщения (не комментарии) и количество комментариев для каждого
   const result = await database.execute({
     sql: `SELECT m.id, m.chat_id, m.sender_id, u.display_name AS sender_name, m.content, m.created_at, m.read_by_me, m.is_edited,
           (SELECT COUNT(*) FROM messages c WHERE c.parent_id = m.id) as comments_count
@@ -309,14 +306,12 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
     args: [chatId]
   });
 
-  // Получаем все реакции для этого чата
   const reactionsRes = await database.execute({
     sql: "SELECT message_id, user_id, reaction FROM message_reactions WHERE message_id IN (SELECT id FROM messages WHERE chat_id = ?)",
     args: [chatId]
   });
 
   const messages = result.rows.map((row: any) => {
-    // Группируем реакции для конкретного сообщения
     const msgReactions = reactionsRes.rows.filter((r: any) => Number(r.message_id) === Number(row.id));
     const reactionsCount: Record<string, number> = {};
     let myReaction = null;
@@ -329,10 +324,8 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
       id: Number(row.id), chatId: Number(row.chat_id), senderId: Number(row.sender_id),
       senderName: row.sender_name || "Пользователь", content: row.content, createdAt: row.created_at,
       isMine: Number(row.sender_id) === currentUserId, isRead: Number(row.read_by_me) === 1,
-      isEdited: Number(row.is_edited) === 1,
-      commentsCount: Number(row.comments_count) || 0,
-      reactions: reactionsCount,
-      myReaction
+      isEdited: Number(row.is_edited) === 1, commentsCount: Number(row.comments_count) || 0,
+      reactions: reactionsCount, myReaction
     };
   });
 
@@ -351,7 +344,6 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   res.json({ messages, typing });
 });
 
-// НОВОЕ: Получение комментариев для конкретного сообщения
 router.get("/chats/:chatId/messages/:messageId/comments", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const messageId = Number(req.params.messageId);
@@ -370,7 +362,6 @@ router.get("/chats/:chatId/messages/:messageId/comments", async (req, res): Prom
   res.json(comments);
 });
 
-// НОВОЕ: Добавление/Удаление реакции
 router.post("/chats/:chatId/messages/:messageId/reaction", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const messageId = Number(req.params.messageId);
@@ -400,7 +391,7 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const database = await getDatabase();
   await ensureSchema(database);
 
-  if (chatId >= 100000000 && !parentId) { // Проверяем права только если это не комментарий
+  if (chatId >= 100000000 && !parentId) { 
     const chatInfo = await database.execute({ sql: "SELECT is_channel FROM chats WHERE id = ?", args: [chatId - 100000000] });
     if (Number(chatInfo.rows[0]?.is_channel) === 1) {
        const memberRes = await database.execute({ sql: "SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] });
@@ -456,11 +447,7 @@ router.patch("/chats/:chatId/messages/:messageId", async (req, res): Promise<voi
     res.status(403).json({ error: "Access denied" }); return;
   }
 
-  await database.execute({
-    sql: "UPDATE messages SET content = ?, is_edited = 1 WHERE id = ?",
-    args: [content, messageId]
-  });
-
+  await database.execute({ sql: "UPDATE messages SET content = ?, is_edited = 1 WHERE id = ?", args: [content, messageId] });
   res.json({ success: true });
 });
 
@@ -470,27 +457,54 @@ router.delete("/chats/:chatId/messages/:messageId", async (req, res): Promise<vo
   const messageId = Number(req.params.messageId);
   if (!chatId || !messageId) { res.status(400).json({ error: "Invalid parameters" }); return; }
   const database = await getDatabase();
-  // Удаляем сообщение и каскадно все его комментарии и реакции (упрощенно)
   await database.execute({ sql: "DELETE FROM messages WHERE id = ? AND chat_id = ? AND sender_id = ?", args: [messageId, chatId, currentUserId] });
   await database.execute({ sql: "DELETE FROM messages WHERE parent_id = ?", args: [messageId] });
   await database.execute({ sql: "DELETE FROM message_reactions WHERE message_id = ?", args: [messageId] });
   res.json({ success: true });
 });
 
+// ИСПРАВЛЕНИЕ: Получение постов на стену вместе с комментариями и реакциями
 router.get("/wall/feed", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
   await ensureSchema(database);
   try {
     const feedResult = await database.execute({
-      sql: `SELECT m.id, m.chat_id, m.sender_id, m.is_edited, c.name as channel_name, m.content, m.created_at FROM messages m JOIN chat_members cm ON m.chat_id = cm.chat_id JOIN chats c ON (m.chat_id - 100000000) = c.id WHERE cm.user_id = ? AND c.is_channel = 1 AND m.parent_id IS NULL ORDER BY m.created_at DESC LIMIT 50`,
+      sql: `SELECT m.id, m.chat_id, m.sender_id, m.is_edited, c.name as channel_name, m.content, m.created_at,
+            (SELECT COUNT(*) FROM messages comm WHERE comm.parent_id = m.id) as comments_count
+            FROM messages m JOIN chat_members cm ON m.chat_id = cm.chat_id JOIN chats c ON (m.chat_id - 100000000) = c.id 
+            WHERE cm.user_id = ? AND c.is_channel = 1 AND m.parent_id IS NULL ORDER BY m.created_at DESC LIMIT 50`,
       args: [currentUserId]
     });
-    const posts = feedResult.rows.map((row: any) => ({ 
-      id: Number(row.id), chatId: Number(row.chat_id), senderId: Number(row.sender_id),
-      isEdited: Number(row.is_edited) === 1, channelName: row.channel_name, 
-      content: row.content, createdAt: row.created_at, isMine: Number(row.sender_id) === currentUserId
-    }));
+    
+    const msgIds = feedResult.rows.map((r:any) => Number(r.id));
+    let reactionsRes = { rows: [] as any[] };
+    if (msgIds.length > 0) {
+       reactionsRes = await database.execute({
+         sql: `SELECT message_id, user_id, reaction FROM message_reactions WHERE message_id IN (${msgIds.join(',')})`,
+         args: []
+       });
+    }
+
+    const posts = feedResult.rows.map((row: any) => {
+      const msgId = Number(row.id);
+      const msgReactions = reactionsRes.rows.filter((r: any) => Number(r.message_id) === msgId);
+      const reactionsCount: Record<string, number> = {};
+      let myReaction = null;
+      msgReactions.forEach((r: any) => {
+        reactionsCount[r.reaction] = (reactionsCount[r.reaction] || 0) + 1;
+        if (Number(r.user_id) === currentUserId) myReaction = r.reaction;
+      });
+
+      return { 
+        id: msgId, chatId: Number(row.chat_id), senderId: Number(row.sender_id),
+        isEdited: Number(row.is_edited) === 1, channelName: row.channel_name, 
+        content: row.content, createdAt: row.created_at, isMine: Number(row.sender_id) === currentUserId,
+        commentsCount: Number(row.comments_count) || 0,
+        reactions: reactionsCount,
+        myReaction
+      };
+    });
     res.json(posts);
   } catch (e) { res.json([]); }
 });
