@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
 import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send } from 'lucide-react';
+import { io } from 'socket.io-client'; // НОВОЕ: Импорт WebSockets
+
+// Инициализация глобального сокета
+let socket: any = null;
 
 const getUserId = () => {
   try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
@@ -117,7 +121,6 @@ export default function ChatPage() {
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   const [activeReactionMsg, setActiveReactionMsg] = useState<number | null>(null);
   
-  // Ветка комментариев
   const [activeThread, setActiveThread] = useState<any>(null);
   const [threadComments, setThreadComments] = useState<any[]>([]);
   const [commentContent, setCommentContent] = useState('');
@@ -157,38 +160,40 @@ export default function ChatPage() {
   const isGroup = chatInfo?.participant?.isGroup;
   const isChannel = chatInfo?.participant?.isChannel;
 
+  // НОВОЕ: Подключение к WebSockets для мгновенного обновления
+  useEffect(() => {
+    if (!socket) socket = io(window.location.origin, { path: '/socket.io' });
+    
+    if (!isSavedChat) {
+      socket.emit('join', String(chatId));
+
+      const handleUpdate = (updatedChatId: number) => {
+        if (Number(updatedChatId) === Number(chatId)) loadData();
+      };
+      
+      const handleTyping = (data: any) => {
+        if (Number(data.chatId) === Number(chatId) && data.name !== currentUser?.displayName) {
+          setTypingUsers(prev => prev.includes(data.name) ? prev : [...prev, data.name]);
+          setTimeout(() => setTypingUsers(prev => prev.filter(n => n !== data.name)), 3000);
+        }
+      };
+
+      socket.on('chat_update', handleUpdate);
+      socket.on('typing', handleTyping);
+
+      return () => {
+        socket.off('chat_update', handleUpdate);
+        socket.off('typing', handleTyping);
+      };
+    }
+  }, [chatId]);
+
   useEffect(() => {
     if (!isSavedChat && messages.length > 0) {
       const confirmedMsgs = messages.filter(m => !m.isSending);
       localStorage.setItem('mesbook_messages_cache_' + currentUserId + '_' + chatId, JSON.stringify(confirmedMsgs));
     }
   }, [messages, chatId, currentUserId, isSavedChat]);
-
-  useEffect(() => {
-    const sendPing = async () => {
-      try { await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
-    };
-    sendPing();
-    const interval = setInterval(sendPing, 10000);
-    return () => clearInterval(interval);
-  }, [currentUserId]);
-
-  useEffect(() => {
-    if (!isGroupOrChannel) return;
-    const checkMembership = async () => {
-      try {
-        const res = await fetch(`/api/chats/${chatId}/is_member`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
-        if (res.ok) { 
-          const data = await res.json(); 
-          setIsMember(data.isMember); 
-          setIsAdmin(data.role === 'admin' || data.role === 'creator');
-          setMembersCount(data.membersCount || 1);
-          setOnlineCount(data.onlineCount || 1);
-        }
-      } catch(e) {}
-    };
-    checkMembership();
-  }, [chatId, isGroupOrChannel, currentUserId]);
 
   const loadData = async () => {
     if (isSavedChat) return;
@@ -206,7 +211,6 @@ export default function ChatPage() {
       if (msgRes.ok) {
         const data = await msgRes.json();
         const serverMsgs = Array.isArray(data.messages) ? data.messages : [];
-        setTypingUsers(data.typing || []);
         setMessages((prev: any) => {
           const sendingMsgs = prev.filter((m: any) => m.isSending);
           const filteredSending = sendingMsgs.filter((sm: any) => !serverMsgs.find((dm: any) => dm.content === sm.content));
@@ -215,7 +219,6 @@ export default function ChatPage() {
       }
     } catch (e) {}
     
-    // Обновляем комментарии если открыт тред
     if (activeThread) {
        try {
          const commRes = await fetch(`/api/chats/${chatId}/messages/${activeThread.id}/comments`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
@@ -227,7 +230,8 @@ export default function ChatPage() {
   useEffect(() => {
     loadData();
     if (!isSavedChat) {
-      const interval = setInterval(loadData, 2000);
+      // ИСПРАВЛЕНИЕ: Мы убрали агрессивный пуллинг, оставив легкий чек раз в 15 секунд на случай разрыва сокета
+      const interval = setInterval(loadData, 15000);
       return () => clearInterval(interval);
     }
   }, [chatId, activeThread]);
@@ -347,7 +351,6 @@ export default function ChatPage() {
   const toggleReaction = async (msgId: number, reaction: string) => {
     try {
       await fetch(`/api/chats/${chatId}/messages/${msgId}/reaction`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ reaction }) });
-      loadData();
     } catch (e) {}
     setActiveReactionMsg(null);
   };
@@ -488,12 +491,10 @@ export default function ChatPage() {
           </header>
           
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            {/* Исходный пост */}
             <div className="bg-white dark:bg-[#1c1c1e] p-4 rounded-[20px] shadow-sm mb-2 border border-gray-100/50 dark:border-zinc-800">
               {renderMessageContent(activeThread.content, false)}
             </div>
             
-            {/* Комментарии */}
             {threadComments.length === 0 ? (
                <div className="text-center text-gray-400 dark:text-zinc-600 mt-10 font-medium">{t.noComments}</div>
             ) : (
@@ -620,7 +621,6 @@ export default function ChatPage() {
               const showDate = currentDateStr !== '' && currentDateStr !== lastDateStr;
               if (showDate) lastDateStr = currentDateStr;
 
-              // Рендер лайков
               const reactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
 
               return (
@@ -643,17 +643,16 @@ export default function ChatPage() {
                       
                       {renderMessageContent(msg.content, isMe)}
                       
-                      {/* ОТОБРАЖЕНИЕ РЕАКЦИЙ ПОД СООБЩЕНИЕМ */}
                       {reactionsKeys.length > 0 && (
                         <div className={`flex flex-wrap gap-1 mt-1.5 ${isMedia ? 'absolute -bottom-3 left-2' : ''}`}>
                           {reactionsKeys.map(key => (
                              <button 
                                key={key} 
                                onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
-                               className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-bold border transition-colors ${msg.myReaction === key ? 'bg-blue-500 text-white border-blue-500' : 'bg-white/80 dark:bg-black/80 text-black dark:text-white border-gray-200 dark:border-zinc-700'}`}
+                               className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-bold border transition-colors ${msg.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white' : 'bg-white/80 dark:bg-black/80 text-black dark:text-white border-gray-200 dark:border-zinc-700'}`}
                              >
                                <span>{key}</span>
-                               <span className={msg.myReaction === key ? 'text-white' : 'text-gray-500'}>{msg.reactions[key]}</span>
+                               <span className={msg.myReaction === key ? 'text-black dark:text-white' : 'text-gray-500'}>{msg.reactions[key]}</span>
                              </button>
                           ))}
                         </div>
@@ -663,12 +662,8 @@ export default function ChatPage() {
                         <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                         {msg.isEdited && !isMedia && <span className="opacity-70 ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
                         
-                        {/* КНОПКА ОТКРЫТИЯ ПАНЕЛИ РЕАКЦИЙ */}
                         {!msg.isSending && (
-                          <button 
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id); }} 
-                            className="hover:text-blue-500 ml-1 transition-colors cursor-pointer z-20"
-                          >
+                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id); }} className="hover:text-gray-300 ml-1 transition-colors cursor-pointer z-20">
                             <Smile size={12} />
                           </button>
                         )}
@@ -698,15 +693,10 @@ export default function ChatPage() {
                         )}
                       </div>
 
-                      {/* ВСПЛЫВАЮЩЕЕ ОКНО БЫСТРЫХ РЕАКЦИЙ */}
                       {activeReactionMsg === msg.id && (
                         <div className={`absolute z-50 flex gap-2 p-2 bg-white dark:bg-[#1c1c1e] rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800 ${isMe ? 'right-0 -top-12' : 'left-0 -top-12'}`}>
                            {FAST_REACTIONS.map(emoji => (
-                             <button 
-                               key={emoji} 
-                               onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); }}
-                               className="w-8 h-8 flex items-center justify-center text-[20px] hover:scale-125 transition-transform active:scale-95"
-                             >
+                             <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); }} className="w-8 h-8 flex items-center justify-center text-[20px] hover:scale-125 transition-transform active:scale-95">
                                {emoji}
                              </button>
                            ))}
@@ -714,7 +704,6 @@ export default function ChatPage() {
                       )}
                     </div>
                     
-                    {/* КНОПКА КОММЕНТАРИЕВ (Только для групп/каналов) */}
                     {isGroupOrChannel && (
                       <button 
                         onClick={() => { setActiveThread(msg); setThreadComments([]); }}
@@ -778,17 +767,12 @@ export default function ChatPage() {
                 setContent(e.target.value);
                 if (Date.now() - lastTypingTime.current > 2000) {
                   lastTypingTime.current = Date.now();
-                  fetch(`/api/chats/${chatId}/typing`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } });
+                  socket?.emit('typing', { chatId, name: currentUser?.displayName });
                 }
               }} 
               placeholder={t.messagePlaceholder} 
             />
-            
-            <button 
-              type="submit" 
-              disabled={!content.trim()} 
-              className="w-[36px] h-[36px] flex-shrink-0 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600 transition-colors active:scale-95 shadow-sm ml-1"
-            >
+            <button type="submit" disabled={!content.trim()} className="w-[36px] h-[36px] flex-shrink-0 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600 transition-colors active:scale-95 shadow-sm ml-1">
               <ChevronRight size={22} strokeWidth={2.5} className="ml-0.5" />
             </button>
           </form>
