@@ -91,7 +91,7 @@ export default function WallPage() {
     if (!socket) socket = io(window.location.origin, { path: '/socket.io' });
     
     const handleUpdate = () => {
-      loadFeed(true); // Тихое обновление, без спиннера загрузки
+      loadFeed(true);
       if (activeThreadRef.current) {
         loadComments(activeThreadRef.current.chatId, activeThreadRef.current.id);
       }
@@ -272,7 +272,7 @@ export default function WallPage() {
                     </div>
                   )}
 
-                  {/* ПОДВАЛ ПОСТА */}
+                  {/* ПОДВАЛ ПОСТА С РЕАКЦИЯМИ И СЧЕТЧИКАМИ */}
                   <div className="px-5 pb-4 pt-2 flex flex-col gap-3 relative">
                     
                     {reactionsKeys.length > 0 && (
@@ -281,7 +281,7 @@ export default function WallPage() {
                            <button 
                              key={key} 
                              onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }}
-                             className={`flex items-center gap-1 px-2 py-1 rounded-full text-[12px] font-bold border transition-colors ${post.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white' : 'bg-gray-50 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700'}`}
+                             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[13px] font-bold border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-md' : 'bg-gray-50 dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
                            >
                              <span>{key}</span>
                              <span>{post.reactions[key]}</span>
