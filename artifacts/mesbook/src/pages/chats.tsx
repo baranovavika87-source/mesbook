@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
 import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2, ArrowLeft, Camera } from 'lucide-react';
+import { io } from 'socket.io-client';
+
+let socket: any = null;
 
 const getUserId = () => {
   try {
@@ -180,25 +183,37 @@ export default function ChatsPage() {
     fetchMe();
   }, [currentUserId]);
 
-  useEffect(() => {
-    const loadChats = async () => {
-      try {
-        const res = await fetch('/api/chats', { headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' } });
-        if (res.ok) {
-          const data = await res.json();
-          setChats(data);
-          localStorage.setItem('mesbook_chats_' + currentUserId, JSON.stringify(data));
-        }
-      } catch (e) {}
+  const loadChats = async () => {
+    try {
+      const res = await fetch('/api/chats', { headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' } });
+      if (res.ok) {
+        const data = await res.json();
+        setChats(data);
+        localStorage.setItem('mesbook_chats_' + currentUserId, JSON.stringify(data));
+      }
+    } catch (e) {}
 
-      try {
-        const saved = localStorage.getItem('mesbook_saved_messages_' + currentUserId);
-        if (saved) setSavedMessages(JSON.parse(saved).map((m: any) => ({...m, isSending: false})));
-      } catch(e) {}
-    };
+    try {
+      const saved = localStorage.getItem('mesbook_saved_messages_' + currentUserId);
+      if (saved) setSavedMessages(JSON.parse(saved).map((m: any) => ({...m, isSending: false})));
+    } catch(e) {}
+  };
+
+  useEffect(() => {
     loadChats();
-    const interval = setInterval(loadChats, 3000);
-    return () => clearInterval(interval);
+    if (!socket) socket = io(window.location.origin, { path: '/socket.io' });
+
+    socket.on('global_update', loadChats);
+    socket.on('chat_update', loadChats);
+    socket.on('typing_global', loadChats);
+
+    const interval = setInterval(loadChats, 15000); // 15-секундный фоллбэк для подстраховки
+    return () => {
+      clearInterval(interval);
+      socket.off('global_update', loadChats);
+      socket.off('chat_update', loadChats);
+      socket.off('typing_global', loadChats);
+    };
   }, [currentUserId]);
 
   useEffect(() => {
@@ -393,7 +408,6 @@ export default function ChatsPage() {
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
         <a className="flex items-center px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 bg-white dark:bg-[#1c1c1e]">
-          {/* ИСПРАВЛЕНИЕ: Вынесли точку онлайна за пределы overflow-hidden */}
           <div className="relative w-[52px] h-[52px] shrink-0">
             <div className={`w-full h-full rounded-full flex items-center justify-center shadow-sm overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSaved ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
               {isSaved ? (
@@ -461,7 +475,6 @@ export default function ChatsPage() {
           className="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 bg-white dark:bg-[#1c1c1e]"
         >
           <div className="flex items-center gap-4">
-            {/* ИСПРАВЛЕНИЕ: Индикатор онлайна и здесь вынесен из-под overflow-hidden */}
             <div className="relative w-[52px] h-[52px] shrink-0">
               <div className="w-full h-full rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden shadow-sm border border-gray-200/50 dark:border-zinc-700/50">
                 {user.avatarUrl && user.avatarUrl.length > 5 ? (
