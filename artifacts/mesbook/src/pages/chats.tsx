@@ -207,7 +207,7 @@ export default function ChatsPage() {
     socket.on('chat_update', loadChats);
     socket.on('typing_global', loadChats);
 
-    const interval = setInterval(loadChats, 15000); // 15-секундный фоллбэк для подстраховки
+    const interval = setInterval(loadChats, 15000);
     return () => {
       clearInterval(interval);
       socket.off('global_update', loadChats);
@@ -386,7 +386,8 @@ export default function ChatsPage() {
   const renderChatCard = (chat: any) => {
     const participant = chat.participant || {};
     const isSaved = participant.isSaved || String(chat.id) === 'saved';
-    const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 3 * 60 * 1000) : false;
+    // ИСПРАВЛЕНИЕ: Статус онлайн теперь реагирует за 15 секунд
+    const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 15000) : false;
     const timeRaw = chat.lastMessageAt || chat.lastMessageTime;
     
     const isLastMessageMine = chat.lastMessageSenderId === currentUserId;
@@ -466,7 +467,8 @@ export default function ChatsPage() {
   };
 
   const renderGlobalUserCard = (user: any) => {
-    const isOnline = user.lastSeen ? (Date.now() - user.lastSeen < 3 * 60 * 1000) : false;
+    // ИСПРАВЛЕНИЕ: Статус онлайн теперь реагирует за 15 секунд
+    const isOnline = user.lastSeen ? (Date.now() - user.lastSeen < 15000) : false;
     
     return (
       <Link key={user.id} href={'/chat/' + user.id}>
