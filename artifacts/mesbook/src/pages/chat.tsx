@@ -166,7 +166,7 @@ export default function ChatPage() {
       socket.emit('join', String(chatId));
       const handleUpdate = (updatedChatId: number) => { if (Number(updatedChatId) === Number(chatId)) loadData(); };
       const handleTyping = (data: any) => {
-        if (Number(data.chatId) === Number(chatId) && data.name !== chatInfo?.participant?.displayName) { // Ignore self
+        if (Number(data.chatId) === Number(chatId) && data.name !== chatInfo?.participant?.displayName) {
           setTypingUsers(prev => prev.includes(data.name) ? prev : [...prev, data.name]);
           setTimeout(() => setTypingUsers(prev => prev.filter(n => n !== data.name)), 3000);
         }
@@ -224,7 +224,7 @@ export default function ChatPage() {
   useEffect(() => {
     loadData();
     if (!isSavedChat) {
-      const interval = setInterval(loadData, 10000); // 10 секунд для поддержания онлайна
+      const interval = setInterval(loadData, 10000); 
       return () => clearInterval(interval);
     }
   }, [chatId, activeThread]);
@@ -395,7 +395,6 @@ export default function ChatPage() {
   };
 
   const lastSeen = chatInfo?.participant?.lastSeen;
-  // ИСПРАВЛЕНИЕ: ЖЕСТКИЙ ЛИМИТ ОНЛАЙНА - 15 СЕКУНД
   const isOnline = lastSeen ? (Date.now() - lastSeen < 15000) : false;
   
   let subtitleText = "";
@@ -421,9 +420,8 @@ export default function ChatPage() {
     if (msgContent.startsWith('[MEDIA] ')) {
       let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
-      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic|heif)$/i, '.jpg');
+      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic\vert{}heif)$/i, '.jpg');
       
-      // ИСПРАВЛЕНИЕ: Полностью убрали контейнер с отступами. Теперь сама картинка - это сообщение.
       return (
         <div className="relative flex items-center justify-center">
           {isVideo ? (
@@ -452,11 +450,11 @@ export default function ChatPage() {
           <div className={'pl-2 border-l-[3px] text-[12px] font-medium opacity-80 mb-1.5 truncate max-w-full ' + (isMe ? 'border-white/40 dark:border-black/40' : 'border-black/30 dark:border-white/30')}>
             {quotedText}
           </div>
-          <p className="text-[15px] leading-snug break-words whitespace-pre-wrap">{replyText}</p>
+          <p className="text-[15px] leading-snug break-words whitespace-pre-wrap w-full">{replyText}</p>
         </div>
       );
     }
-    return <p className="text-[15px] leading-snug break-words whitespace-pre-wrap">{msgContent}</p>;
+    return <p className="text-[15px] leading-snug break-words whitespace-pre-wrap w-full">{msgContent}</p>;
   };
 
   return (
@@ -617,38 +615,24 @@ export default function ChatPage() {
                     </div>
                   )}
                   
-                  <div className={'flex flex-col max-w-[85%] ' + (isMe ? 'ml-auto items-end' : 'mr-auto items-start')} onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }} onTouchEnd={(e) => { if (touchStartRef.current !== null) { const touchEndX = e.changedTouches[0].clientX; const diff = touchStartRef.current - touchEndX; if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } touchStartRef.current = null; } }}>
+                  <div className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`} onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }} onTouchEnd={(e) => { if (touchStartRef.current !== null) { const touchEndX = e.changedTouches[0].clientX; const diff = touchStartRef.current - touchEndX; if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } touchStartRef.current = null; } }}>
                     
-                    {/* ИСПРАВЛЕНИЕ: Гармоничные отступы для текста и отсутствие рамок у фото */}
+                    {/* ИСПРАВЛЕНИЕ: Идеальный пузырь текста */}
                     <div className={
                       isMedia 
                         ? `relative bg-transparent`
-                        : `shadow-sm relative min-w-[60px] px-3 pt-1.5 pb-4 ${isMe ? 'pr-[45px] bg-black dark:bg-white text-white dark:text-black rounded-[18px] rounded-tr-[4px]' : 'pr-[35px] bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[18px] rounded-tl-[4px] border border-gray-100/50 dark:border-zinc-800'}`
+                        : `shadow-sm relative flex flex-col min-w-[70px] px-3 pt-1.5 pb-1.5 ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[18px] rounded-tl-[4px] border border-gray-100/50 dark:border-zinc-800'}`
                     }>
                       
                       {renderMessageContent(msg.content, isMe)}
                       
-                      {/* ИСПРАВЛЕНИЕ: Реакции без цифр - маленькие эстетичные кружочки */}
-                      {reactionsKeys.length > 0 && (
-                        <div className={`flex flex-wrap gap-1 mt-1 ${isMedia ? 'absolute -bottom-2.5 left-2' : ''}`}>
-                          {reactionsKeys.map(key => (
-                             <button 
-                               key={key} 
-                               onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
-                               className={`w-6 h-6 flex items-center justify-center rounded-full text-[13px] border transition-transform hover:scale-110 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white border-black dark:border-white shadow-md z-10' : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
-                             >
-                               {key}
-                             </button>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium ${isMedia ? 'bottom-1.5 right-1.5 bg-black/40 text-white px-1.5 py-0.5 rounded-full backdrop-blur-md z-10' : 'bottom-1 right-2.5 text-gray-400 dark:text-zinc-500'}`}>
+                      {/* ИСПРАВЛЕНИЕ: Время, галочки и иконки аккуратно вписаны в текст */}
+                      <div className={`flex items-center justify-end gap-1 text-[10px] font-medium mt-0.5 opacity-60 ${isMedia ? 'absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10' : ''}`}>
                         <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
-                        {msg.isEdited && !isMedia && <span className="opacity-70 ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
+                        {msg.isEdited && !isMedia && <span className="ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
                         
                         {!msg.isSending && (
-                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id); }} className="hover:text-blue-500 ml-1 transition-colors cursor-pointer z-20">
+                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id); }} className="hover:opacity-100 ml-0.5 transition-opacity cursor-pointer z-20">
                             <Smile size={12} />
                           </button>
                         )}
@@ -669,9 +653,9 @@ export default function ChatPage() {
                             {!msg.isSending && (
                               <>
                                 {!isMedia && (
-                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEditing(msg); }} className="hover:text-gray-300 ml-1.5 transition-colors cursor-pointer z-20"><Edit2 size={12} /></button>
+                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEditing(msg); }} className="hover:opacity-100 ml-1.5 transition-opacity cursor-pointer z-20"><Edit2 size={12} /></button>
                                 )}
-                                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(msg.id); }} className="hover:text-gray-300 ml-1.5 transition-colors cursor-pointer z-20"><Trash2 size={13} /></button>
+                                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(msg.id); }} className="hover:opacity-100 ml-1 transition-opacity cursor-pointer z-20"><Trash2 size={13} /></button>
                               </>
                             )}
                           </div>
@@ -679,7 +663,7 @@ export default function ChatPage() {
                       </div>
 
                       {activeReactionMsg === msg.id && (
-                        <div className={`absolute z-50 flex gap-2 p-2 bg-white dark:bg-[#1c1c1e] rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800 ${isMe ? 'right-0 -top-10' : 'left-0 -top-10'}`}>
+                        <div className={`absolute z-50 flex gap-2 p-2 bg-white dark:bg-[#1c1c1e] rounded-full shadow-xl border border-gray-200/50 dark:border-zinc-800 ${isMe ? 'right-0 -bottom-10' : 'left-0 -bottom-10'}`}>
                            {FAST_REACTIONS.map(emoji => (
                              <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); }} className="w-8 h-8 flex items-center justify-center text-[20px] hover:scale-125 transition-transform active:scale-95">
                                {emoji}
@@ -689,10 +673,25 @@ export default function ChatPage() {
                       )}
                     </div>
                     
+                    {/* ИСПРАВЛЕНИЕ: Реакции вынесены наружу под пузырь сообщения */}
+                    {reactionsKeys.length > 0 && (
+                      <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                        {reactionsKeys.map(key => (
+                           <button 
+                             key={key} 
+                             onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
+                             className={`w-6 h-6 flex items-center justify-center rounded-full text-[13px] border transition-transform hover:scale-110 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white border-black dark:border-white shadow-md z-10' : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
+                           >
+                             {key}
+                           </button>
+                        ))}
+                      </div>
+                    )}
+
                     {isGroupOrChannel && (
                       <button 
                         onClick={() => { setActiveThread(msg); setThreadComments([]); }}
-                        className={`mt-1.5 flex items-center gap-1.5 px-3 py-1 bg-white/60 dark:bg-zinc-800/60 backdrop-blur-sm rounded-full text-[11px] font-bold text-gray-500 dark:text-gray-400 border border-gray-200/50 dark:border-zinc-700/50 shadow-sm active:scale-95 transition-all ${isMe ? 'mr-1' : 'ml-1'}`}
+                        className={`mt-1 flex items-center gap-1.5 px-3 py-1 bg-white/60 dark:bg-zinc-800/60 backdrop-blur-sm rounded-full text-[11px] font-bold text-gray-500 dark:text-gray-400 border border-gray-200/50 dark:border-zinc-700/50 shadow-sm active:scale-95 transition-all`}
                       >
                         <MessageCircle size={12} />
                         {msg.commentsCount > 0 ? `${msg.commentsCount} ${t.comments}` : t.comments}
