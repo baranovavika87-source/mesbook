@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -8,6 +8,8 @@ const getUserId = () => {
     return u.id || u.userId || u._id || 1;
   } catch (e) { return 1; }
 };
+
+const FAST_REACTIONS = ['❤️', '👍', '🔥', '😂', '😢'];
 
 const translations = {
   ru: {
@@ -20,7 +22,10 @@ const translations = {
     deleteConfirm: "Удалить запись?",
     editPost: "Редактировать запись",
     save: "Сохранить",
-    cancel: "Отмена"
+    cancel: "Отмена",
+    comments: "Комментарии",
+    noComments: "Пока нет комментариев",
+    commentPlaceholder: "Комментарий..."
   },
   en: {
     wall: "Wall",
@@ -32,7 +37,10 @@ const translations = {
     deleteConfirm: "Delete post?",
     editPost: "Edit post",
     save: "Save",
-    cancel: "Cancel"
+    cancel: "Cancel",
+    comments: "Comments",
+    noComments: "No comments yet",
+    commentPlaceholder: "Comment..."
   }
 };
 
@@ -44,9 +52,13 @@ export default function WallPage() {
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
 
-  // СОСТОЯНИЯ ДЛЯ РЕДАКТИРОВАНИЯ
   const [editingPost, setEditingPost] = useState<any>(null);
   const [editContent, setEditContent] = useState("");
+
+  const [activeReactionMsg, setActiveReactionMsg] = useState<number | null>(null);
+  const [activeThread, setActiveThread] = useState<any>(null);
+  const [threadComments, setThreadComments] = useState<any[]>([]);
+  const [commentContent, setCommentContent] = useState('');
 
   const loadFeed = async () => {
     setIsLoading(true);
@@ -57,7 +69,18 @@ export default function WallPage() {
     setIsLoading(false);
   };
 
+  const loadComments = async (chatId: number, messageId: number) => {
+     try {
+       const commRes = await fetch(`/api/chats/${chatId}/messages/${messageId}/comments`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
+       if (commRes.ok) setThreadComments(await commRes.json());
+     } catch(e) {}
+  };
+
   useEffect(() => { loadFeed(); }, []);
+
+  useEffect(() => {
+    if (activeThread) loadComments(activeThread.chatId, activeThread.id);
+  }, [activeThread]);
 
   const parsePostContent = (content: string) => {
     const mediaUrls: string[] = [];
@@ -97,8 +120,36 @@ export default function WallPage() {
     } catch (e) {}
   };
 
+  const toggleReaction = async (post: any, reaction: string) => {
+    try {
+      await fetch(`/api/chats/${post.chatId}/messages/${post.id}/reaction`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
+        body: JSON.stringify({ reaction }) 
+      });
+      loadFeed();
+    } catch (e) {}
+    setActiveReactionMsg(null);
+  };
+
+  const handleSendComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentContent.trim() || !activeThread) return;
+    const txt = commentContent.trim();
+    setCommentContent('');
+    try {
+      await fetch(`/api/chats/${activeThread.chatId}/messages`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
+        body: JSON.stringify({ content: txt, parentId: activeThread.id }) 
+      });
+      loadComments(activeThread.chatId, activeThread.id);
+      loadFeed();
+    } catch (error) {}
+  };
+
   return (
-    <div className="flex h-screen flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 font-sans relative">
+    <div className="flex h-screen flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 font-sans relative overflow-hidden" onClick={() => setActiveReactionMsg(null)}>
       
       <header className="flex justify-between items-center px-4 pt-12 pb-4 bg-[#f2f2f7]/90 dark:bg-black/90 sticky top-0 z-10 border-b border-gray-200/50 dark:border-zinc-900/50 shadow-sm backdrop-blur-md">
         <button onClick={loadFeed} className="text-black dark:text-white text-[16px] font-medium active:scale-95 transition-all ml-1">{t.refresh}</button>
@@ -127,6 +178,8 @@ export default function WallPage() {
           <div className="flex flex-col space-y-5">
             {posts.map((post) => {
               const { text, mediaUrls } = parsePostContent(post.content);
+              const reactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
+
               return (
                 <div key={post.id} className="bg-white dark:bg-[#1c1c1e] rounded-[24px] overflow-hidden shadow-sm border border-gray-100 dark:border-zinc-800/50">
                   
@@ -137,8 +190,8 @@ export default function WallPage() {
                       <span className="text-gray-400 text-[12px] shrink-0 font-medium">{new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       {post.isMine && (
                         <div className="flex items-center gap-2 ml-2 border-l border-gray-200 dark:border-zinc-700 pl-3">
-                          <button onClick={() => startEditingPost(post)} className="text-gray-400 hover:text-blue-500 transition-colors"><Edit2 size={16} /></button>
-                          <button onClick={() => deletePost(post)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                          <button onClick={() => startEditingPost(post)} className="text-gray-400 hover:text-black dark:hover:text-white transition-colors"><Edit2 size={16} /></button>
+                          <button onClick={() => deletePost(post)} className="text-gray-400 hover:text-black dark:hover:text-white transition-colors"><Trash2 size={16} /></button>
                         </div>
                       )}
                     </div>
@@ -159,10 +212,65 @@ export default function WallPage() {
                   )}
 
                   {text && (
-                    <div className="p-5">
+                    <div className="px-5 pt-4 pb-2">
                       <p className="text-black dark:text-white text-[15px] leading-relaxed whitespace-pre-wrap">{text}</p>
                     </div>
                   )}
+
+                  {/* ПОДВАЛ ПОСТА: Реакции и кнопка комментариев */}
+                  <div className="px-5 pb-4 pt-2 flex flex-col gap-3 relative">
+                    
+                    {/* Список поставленных реакций */}
+                    {reactionsKeys.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {reactionsKeys.map(key => (
+                           <button 
+                             key={key} 
+                             onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }}
+                             className={`flex items-center gap-1 px-2 py-1 rounded-full text-[12px] font-bold border transition-colors ${post.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white' : 'bg-gray-50 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700'}`}
+                           >
+                             <span>{key}</span>
+                             <span>{post.reactions[key]}</span>
+                           </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between border-t border-gray-100/50 dark:border-zinc-800/50 pt-3">
+                      <button 
+                        onClick={() => { setActiveThread(post); setThreadComments([]); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full text-[12px] font-bold text-gray-600 dark:text-gray-300 active:scale-95 transition-transform"
+                      >
+                        <MessageCircle size={14} />
+                        {post.commentsCount > 0 ? `${post.commentsCount} ${t.comments}` : t.comments}
+                      </button>
+
+                      <div className="relative">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === post.id ? null : post.id); }} 
+                          className="text-gray-400 hover:text-black dark:hover:text-white transition-colors p-1"
+                        >
+                          <Smile size={20} />
+                        </button>
+                        
+                        {/* Панель выбора реакций */}
+                        {activeReactionMsg === post.id && (
+                          <div className="absolute z-50 flex gap-2 p-2 bg-white dark:bg-[#1c1c1e] rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800 right-0 bottom-8">
+                             {FAST_REACTIONS.map(emoji => (
+                               <button 
+                                 key={emoji} 
+                                 onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); }}
+                                 className="w-8 h-8 flex items-center justify-center text-[20px] hover:scale-125 transition-transform active:scale-95"
+                               >
+                                 {emoji}
+                               </button>
+                             ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               );
             })}
@@ -170,9 +278,57 @@ export default function WallPage() {
         )}
       </main>
 
-      {/* МОДАЛКА РЕДАКТИРОВАНИЯ ЗАПИСИ НА СТЕНЕ */}
+      {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ СТЕНЫ */}
+      {activeThread && (
+        <div className="fixed inset-0 z-[80] bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-bottom duration-300">
+          <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
+            <div className="flex items-center gap-4">
+              <button onClick={() => setActiveThread(null)} className="text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
+              <h1 className="text-[18px] font-semibold text-black dark:text-white">{t.comments}</h1>
+            </div>
+          </header>
+          
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+            <div className="bg-white dark:bg-[#1c1c1e] p-4 rounded-[20px] shadow-sm mb-2 border border-gray-100/50 dark:border-zinc-800">
+              <span className="font-semibold text-[14px] text-gray-500 mb-1 block">{activeThread.channelName}</span>
+              <p className="text-[15px] text-black dark:text-white whitespace-pre-wrap">{parsePostContent(activeThread.content).text}</p>
+            </div>
+            
+            {threadComments.length === 0 ? (
+               <div className="text-center text-gray-400 dark:text-zinc-600 mt-10 font-medium">{t.noComments}</div>
+            ) : (
+               threadComments.map(c => (
+                 <div key={c.id} className="flex gap-3 items-start">
+                   <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center shrink-0 overflow-hidden text-[12px] font-medium border border-gray-300/30 dark:border-zinc-700 text-black dark:text-white">
+                     {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
+                   </div>
+                   <div className="flex flex-col flex-1 bg-white dark:bg-[#1c1c1e] p-3 rounded-[16px] rounded-tl-none shadow-sm border border-gray-100/50 dark:border-zinc-800">
+                     <span className="text-[12px] font-bold mb-1 text-black dark:text-white">{c.senderName}</span>
+                     <span className="text-[14px] text-black dark:text-white whitespace-pre-wrap leading-snug">{c.content}</span>
+                     <span className="text-[10px] text-gray-400 mt-1 text-right">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                   </div>
+                 </div>
+               ))
+            )}
+          </div>
+          
+          <form onSubmit={handleSendComment} className="p-3 bg-[#f2f2f7] dark:bg-black border-t border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-2 pb-6">
+            <input 
+              className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[15px] shadow-sm focus:border-black dark:focus:border-white" 
+              value={commentContent} 
+              onChange={e => setCommentContent(e.target.value)} 
+              placeholder={t.commentPlaceholder} 
+            />
+            <button type="submit" disabled={!commentContent.trim()} className="w-10 h-10 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-sm">
+              <Send size={18} className="ml-1" />
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* МОДАЛКА РЕДАКТИРОВАНИЯ */}
       {editingPost && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-[#1c1c1e] w-full max-w-md rounded-[24px] overflow-hidden shadow-xl border border-gray-100/50 dark:border-zinc-800/50">
             <div className="px-5 py-4 border-b border-gray-100/50 dark:border-zinc-800/50 flex justify-between items-center">
               <h3 className="font-bold text-lg text-black dark:text-white">{t.editPost}</h3>
