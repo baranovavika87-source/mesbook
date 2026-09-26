@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send } from 'lucide-react';
 
 const getUserId = () => {
   try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
 };
+
+const FAST_REACTIONS = ['❤️', '👍', '🔥', '😂', '😢'];
 
 const translations = {
   ru: {
@@ -34,11 +36,10 @@ const translations = {
     editing: "Редактирование",
     edited: "изменено",
     messagePlaceholder: "Сообщение",
+    commentPlaceholder: "Комментарий...",
     deleteConfirm: "Удалить сообщение?",
-    errCloudinary: "Ошибка облака Cloudinary: ",
-    errUnknown: "неизвестная ошибка",
-    errNetMedia: "Ошибка сети при загрузке медиа",
-    errNoRights: "У вас нет прав на редактирование",
+    comments: "Комментарии",
+    noComments: "Пока нет комментариев",
     isTyping: "печатает...",
     areTyping: "печатают..."
   },
@@ -69,11 +70,10 @@ const translations = {
     editing: "Edit Message",
     edited: "edited",
     messagePlaceholder: "Message",
+    commentPlaceholder: "Comment...",
     deleteConfirm: "Delete message?",
-    errCloudinary: "Cloudinary error: ",
-    errUnknown: "unknown error",
-    errNetMedia: "Network error during media upload",
-    errNoRights: "You don't have permission to edit",
+    comments: "Comments",
+    noComments: "No comments yet",
     isTyping: "is typing...",
     areTyping: "are typing..."
   }
@@ -114,9 +114,13 @@ export default function ChatPage() {
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [editingMsg, setEditingMsg] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
-  
-  // ИСПРАВЛЕНИЕ: Состояние для просмотра картинки на весь экран
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  const [activeReactionMsg, setActiveReactionMsg] = useState<number | null>(null);
+  
+  // Ветка комментариев
+  const [activeThread, setActiveThread] = useState<any>(null);
+  const [threadComments, setThreadComments] = useState<any[]>([]);
+  const [commentContent, setCommentContent] = useState('');
   
   const [isMember, setIsMember] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -188,12 +192,7 @@ export default function ChatPage() {
 
   const loadData = async () => {
     if (isSavedChat) return;
-    if (!readFailed) {
-      try {
-        const res = await fetch('/api/chats/' + chatId + '/read', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } });
-        if (res.status === 404) setReadFailed(true);
-      } catch (e) {}
-    }
+    try { await fetch('/api/chats/' + chatId + '/read', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
     try {
       const infoRes = await fetch('/api/chats', { headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' } });
       if (infoRes.ok) {
@@ -206,7 +205,7 @@ export default function ChatPage() {
       const msgRes = await fetch('/api/chats/' + chatId + '/messages', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
       if (msgRes.ok) {
         const data = await msgRes.json();
-        const serverMsgs = Array.isArray(data.messages) ? data.messages : (Array.isArray(data) ? data : []);
+        const serverMsgs = Array.isArray(data.messages) ? data.messages : [];
         setTypingUsers(data.typing || []);
         setMessages((prev: any) => {
           const sendingMsgs = prev.filter((m: any) => m.isSending);
@@ -215,6 +214,14 @@ export default function ChatPage() {
         });
       }
     } catch (e) {}
+    
+    // Обновляем комментарии если открыт тред
+    if (activeThread) {
+       try {
+         const commRes = await fetch(`/api/chats/${chatId}/messages/${activeThread.id}/comments`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
+         if (commRes.ok) setThreadComments(await commRes.json());
+       } catch(e) {}
+    }
   };
 
   useEffect(() => {
@@ -223,7 +230,7 @@ export default function ChatPage() {
       const interval = setInterval(loadData, 2000);
       return () => clearInterval(interval);
     }
-  }, [chatId]);
+  }, [chatId, activeThread]);
 
   useEffect(() => {
     if (scrollRef.current && !hasScrolledToBottom.current && messages.length > 0) {
@@ -234,27 +241,6 @@ export default function ChatPage() {
 
   const forceScrollToBottom = () => { setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 10); };
 
-  const sendMessageToServer = async (text: string) => {
-    const tempMsg = { id: Date.now(), content: text, isSending: !isSavedChat, senderId: currentUserId, createdAt: new Date().toISOString() };
-    if (isSavedChat) {
-      setMessages((prev: any) => {
-        const updated = [...prev, { ...tempMsg, isSending: false }];
-        localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
-        return updated;
-      });
-      forceScrollToBottom();
-      return;
-    }
-    setMessages((prev: any) => [...prev, tempMsg]);
-    forceScrollToBottom();
-    try {
-      const res = await fetch('/api/chats/' + chatId + '/messages', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: text })
-      });
-      if (res.ok) loadData(); else setMessages((prev: any) => prev.filter((m: any) => m.id !== tempMsg.id));
-    } catch (error) { setMessages((prev: any) => prev.filter((m: any) => m.id !== tempMsg.id)); }
-  };
-
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
@@ -262,8 +248,6 @@ export default function ChatPage() {
     if (editingMsg) {
       const newTextContent = content.trim();
       const tempId = editingMsg.id;
-      
-      // ИСПРАВЛЕНИЕ: Если сообщение было ответом, приклеиваем старую цитату обратно к новому тексту
       let finalEditedContent = newTextContent;
       if (editingMsg.content.startsWith('> ')) {
         const parts = editingMsg.content.split('\n\n');
@@ -285,11 +269,7 @@ export default function ChatPage() {
       setContent('');
       setEditingMsg(null);
       try {
-        await fetch(`/api/chats/${chatId}/messages/${tempId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
-          body: JSON.stringify({ content: finalEditedContent })
-        });
+        await fetch(`/api/chats/${chatId}/messages/${tempId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalEditedContent }) });
         loadData();
       } catch(e) {}
       return;
@@ -299,26 +279,40 @@ export default function ChatPage() {
     const finalContent = replyingTo ? `> ${replyingTo.content}\n\n${tempContent}` : tempContent;
     setContent('');
     setReplyingTo(null);
-    await sendMessageToServer(finalContent);
+    
+    const tempMsg = { id: Date.now(), content: finalContent, isSending: !isSavedChat, senderId: currentUserId, createdAt: new Date().toISOString() };
+    if (isSavedChat) {
+      setMessages((prev: any) => { const u = [...prev, { ...tempMsg, isSending: false }]; localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(u)); return u; });
+      forceScrollToBottom(); return;
+    }
+    setMessages((prev: any) => [...prev, tempMsg]);
+    forceScrollToBottom();
+    try {
+      const res = await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalContent }) });
+      if (res.ok) loadData(); else setMessages((prev: any) => prev.filter((m: any) => m.id !== tempMsg.id));
+    } catch (error) { setMessages((prev: any) => prev.filter((m: any) => m.id !== tempMsg.id)); }
+  };
+
+  const handleSendComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentContent.trim() || !activeThread) return;
+    const txt = commentContent.trim();
+    setCommentContent('');
+    try {
+      await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: txt, parentId: activeThread.id }) });
+      loadData();
+    } catch (error) {}
   };
 
   const startEditing = (msg: any) => {
     setEditingMsg(msg);
-    // ИСПРАВЛЕНИЕ: Если это ответ, вырезаем цитату и кладем в поле ввода только сам текст пользователя
-    if (msg.content.startsWith('> ')) {
-      const parts = msg.content.split('\n\n');
-      setContent(parts.slice(1).join('\n\n'));
-    } else {
-      setContent(msg.content);
-    }
+    if (msg.content.startsWith('> ')) { setContent(msg.content.split('\n\n').slice(1).join('\n\n')); } 
+    else { setContent(msg.content); }
     setReplyingTo(null);
   };
 
   const joinChat = async () => {
-    try {
-      await fetch(`/api/chats/${chatId}/join`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } });
-      setIsMember(true); loadData();
-    } catch (e) {}
+    try { await fetch(`/api/chats/${chatId}/join`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); setIsMember(true); loadData(); } catch (e) {}
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -332,16 +326,11 @@ export default function ChatPage() {
       const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (data.secure_url) { 
-        await sendMessageToServer(`[MEDIA] ${data.secure_url}`); 
-      } else { 
-        alert(t.errCloudinary + (data.error?.message || t.errUnknown)); 
+        await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: `[MEDIA] ${data.secure_url}` }) });
+        loadData();
       }
-    } catch (err: any) { 
-      alert(t.errNetMedia); 
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
+    } catch (err: any) {} 
+    finally { setIsUploading(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
   const handleDelete = async (msgId: number) => {
@@ -353,6 +342,29 @@ export default function ChatPage() {
       return;
     }
     try { await fetch('/api/chats/' + chatId + '/messages/' + msgId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId } }); loadData(); } catch (e) {}
+  };
+
+  const toggleReaction = async (msgId: number, reaction: string) => {
+    try {
+      await fetch(`/api/chats/${chatId}/messages/${msgId}/reaction`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ reaction }) });
+      loadData();
+    } catch (e) {}
+    setActiveReactionMsg(null);
+  };
+
+  const downloadImage = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `mesogram_photo_${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(objectUrl);
+    } catch (e) { window.open(url, '_blank'); }
   };
 
   const handleEditChatClick = () => {
@@ -380,37 +392,10 @@ export default function ChatPage() {
   const handleSaveChatSettings = async () => {
     setIsSavingChat(true);
     try {
-      const res = await fetch(`/api/chats/${chatId}`, {
-        method: 'PATCH',
-        headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editChatName, description: editChatDesc, avatarUrl: editChatAvatar })
-      });
-      if (res.ok) {
-        setIsEditingChat(false);
-        loadData();
-      } else {
-        alert(t.errNoRights);
-      }
+      const res = await fetch(`/api/chats/${chatId}`, { method: 'PATCH', headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: editChatName, description: editChatDesc, avatarUrl: editChatAvatar }) });
+      if (res.ok) { setIsEditingChat(false); loadData(); }
     } catch(e) {}
     setIsSavingChat(false);
-  };
-
-  // ИСПРАВЛЕНИЕ: Функция для скачивания открытой картинки
-  const downloadImage = async (url: string) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const objectUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = `mesogram_photo_${Date.now()}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(objectUrl);
-    } catch (e) {
-      window.open(url, '_blank');
-    }
   };
 
   const lastSeen = chatInfo?.participant?.lastSeen;
@@ -420,21 +405,14 @@ export default function ChatPage() {
   let subtitleColor = "text-gray-400 dark:text-zinc-500"; 
 
   if (typingUsers.length > 0) {
-    if (typingUsers.length === 1) {
-      subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping;
-    } else {
-      subtitleText = `${typingUsers.join(', ')} ${t.areTyping}`;
-    }
+    if (typingUsers.length === 1) { subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping; } 
+    else { subtitleText = `${typingUsers.join(', ')} ${t.areTyping}`; }
   } else if (!isSavedChat) {
     if (isGroupOrChannel) {
-      if (membersCount === null) {
-        subtitleText = isChannel ? t.channel : t.group;
-      } else {
-        if (isChannel) {
-          subtitleText = `${membersCount} ${declOfNum(membersCount, t.subs, lang)}`;
-        } else {
-          subtitleText = `${membersCount} ${declOfNum(membersCount, t.members, lang)}, ${onlineCount || 1} ${t.onlineCount}`;
-        }
+      if (membersCount === null) { subtitleText = isChannel ? t.channel : t.group; } 
+      else {
+        if (isChannel) { subtitleText = `${membersCount} ${declOfNum(membersCount, t.subs, lang)}`; } 
+        else { subtitleText = `${membersCount} ${declOfNum(membersCount, t.members, lang)}, ${onlineCount || 1} ${t.onlineCount}`; }
       }
     } else {
       subtitleColor = isOnline ? 'text-black dark:text-white font-medium' : 'text-gray-400 dark:text-zinc-500';
@@ -446,14 +424,13 @@ export default function ChatPage() {
     if (msgContent.startsWith('[MEDIA] ')) {
       let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
-      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic\vert{}heif)$/i, '.jpg');
+      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic|heif)$/i, '.jpg');
       
       return (
         <div className="relative flex items-center justify-center overflow-hidden rounded-[16px]">
           {isVideo ? (
             <video src={url} controls className="w-full h-auto max-w-[280px] max-h-[400px] object-contain" />
           ) : (
-            // ИСПРАВЛЕНИЕ: Клик по картинке открывает её на весь экран
             <img 
               onClick={() => setFullScreenImage(url)}
               src={url} 
@@ -469,9 +446,7 @@ export default function ChatPage() {
     if (msgContent.startsWith('> ')) {
       const parts = msgContent.split('\n\n');
       let quotedText = parts[0].replace('> ', '');
-      if (quotedText.startsWith('[MEDIA]')) {
-        quotedText = t.photo;
-      }
+      if (quotedText.startsWith('[MEDIA]')) { quotedText = t.photo; }
       const replyText = parts.slice(1).join('\n\n');
 
       return (
@@ -487,9 +462,9 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative font-sans">
+    <div className="flex flex-col h-screen bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative font-sans overflow-hidden">
       
-      {/* ИСПРАВЛЕНИЕ: ПОЛНОЭКРАННЫЙ ПРОСМОТР КАРТИНКИ (Lightbox) */}
+      {/* ЛАЙТБОКС */}
       {fullScreenImage && (
         <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in duration-200">
           <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-10">
@@ -502,8 +477,57 @@ export default function ChatPage() {
         </div>
       )}
 
+      {/* МОДАЛКА КОММЕНТАРИЕВ */}
+      {activeThread && (
+        <div className="fixed inset-0 z-[80] bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-bottom duration-300">
+          <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
+            <div className="flex items-center gap-4">
+              <button onClick={() => setActiveThread(null)} className="text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
+              <h1 className="text-[18px] font-semibold text-black dark:text-white">{t.comments}</h1>
+            </div>
+          </header>
+          
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+            {/* Исходный пост */}
+            <div className="bg-white dark:bg-[#1c1c1e] p-4 rounded-[20px] shadow-sm mb-2 border border-gray-100/50 dark:border-zinc-800">
+              {renderMessageContent(activeThread.content, false)}
+            </div>
+            
+            {/* Комментарии */}
+            {threadComments.length === 0 ? (
+               <div className="text-center text-gray-400 dark:text-zinc-600 mt-10 font-medium">{t.noComments}</div>
+            ) : (
+               threadComments.map(c => (
+                 <div key={c.id} className="flex gap-3 items-start">
+                   <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center shrink-0 overflow-hidden text-[12px] font-medium border border-gray-300/30 dark:border-zinc-700">
+                     {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
+                   </div>
+                   <div className="flex flex-col flex-1 bg-white dark:bg-[#1c1c1e] p-3 rounded-[16px] rounded-tl-none shadow-sm border border-gray-100/50 dark:border-zinc-800">
+                     <span className="text-[12px] font-bold mb-1 text-black dark:text-white">{c.senderName}</span>
+                     <span className="text-[14px] text-black dark:text-white whitespace-pre-wrap leading-snug">{c.content}</span>
+                     <span className="text-[10px] text-gray-400 mt-1 text-right">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                   </div>
+                 </div>
+               ))
+            )}
+          </div>
+          
+          <form onSubmit={handleSendComment} className="p-3 bg-[#f2f2f7] dark:bg-black border-t border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-2 pb-6">
+            <input 
+              className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[15px] shadow-sm focus:border-black dark:focus:border-white" 
+              value={commentContent} 
+              onChange={e => setCommentContent(e.target.value)} 
+              placeholder={t.commentPlaceholder} 
+            />
+            <button type="submit" disabled={!commentContent.trim()} className="w-10 h-10 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-sm">
+              <Send size={18} className="ml-1" />
+            </button>
+          </form>
+        </div>
+      )}
+
       {/* ---------------------------------------------------------
-          ПОЛНОЭКРАННЫЙ ПРОФИЛЬ ДРУГА / КАНАЛА
+          ПРОФИЛЬ
       --------------------------------------------------------- */}
       {showProfile && chatInfo?.participant && (
         <div className="fixed inset-0 z-50 bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-bottom duration-200 overflow-y-auto">
@@ -527,20 +551,8 @@ export default function ChatPage() {
           {isEditingChat ? (
             <div className="px-4 pt-8 w-full max-w-lg mx-auto flex flex-col gap-5">
               <div className="flex justify-center mb-4">
-                <div 
-                  className="w-[120px] h-[120px] rounded-full shadow-md bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-800 relative cursor-pointer"
-                  onClick={() => editAvatarRef.current?.click()}
-                >
-                  {editChatAvatar && editChatAvatar.length > 5 ? (
-                    <img 
-                      src={editChatAvatar} 
-                      alt="Avatar" 
-                      className="w-full h-full object-cover" 
-                      onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(editChatName || 'U')}&background=random&color=fff&size=120`; }} 
-                    />
-                  ) : (
-                    <Camera size={36} className="text-gray-400" />
-                  )}
+                <div className="w-[120px] h-[120px] rounded-full shadow-md bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-800 relative cursor-pointer" onClick={() => editAvatarRef.current?.click()}>
+                  {editChatAvatar && editChatAvatar.length > 5 ? <img src={editChatAvatar} className="w-full h-full object-cover" /> : <Camera size={36} className="text-gray-400" />}
                   {isSavingChat && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
                 </div>
                 <input type="file" accept="image/*" className="hidden" ref={editAvatarRef} onChange={handleEditAvatarUpload} />
@@ -549,21 +561,11 @@ export default function ChatPage() {
               <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100/50 dark:border-zinc-800/50">
                 <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-900/60">
                   <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mt-1">{t.name}</label>
-                  <input 
-                    type="text" 
-                    value={editChatName} 
-                    onChange={e => setEditChatName(e.target.value)} 
-                    className="w-full bg-transparent py-1.5 text-[17px] font-medium text-black dark:text-white outline-none" 
-                  />
+                  <input type="text" value={editChatName} onChange={e => setEditChatName(e.target.value)} className="w-full bg-transparent py-1.5 text-[17px] font-medium text-black dark:text-white outline-none" />
                 </div>
                 <div className="px-5 py-4">
                   <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t.desc}</label>
-                  <textarea 
-                    rows={4} 
-                    value={editChatDesc} 
-                    onChange={e => setEditChatDesc(e.target.value)} 
-                    className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" 
-                  />
+                  <textarea rows={4} value={editChatDesc} onChange={e => setEditChatDesc(e.target.value)} className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" />
                 </div>
               </div>
             </div>
@@ -571,51 +573,11 @@ export default function ChatPage() {
             <>
               <div className="flex flex-col items-center pt-8 pb-4">
                 <div className="w-[120px] h-[120px] rounded-full shadow-md bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-800 mb-4">
-                  {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? (
-                    <img 
-                      src={chatInfo.participant.avatarUrl} 
-                      alt="Avatar" 
-                      className="w-full h-full object-cover" 
-                      onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chatInfo.participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
-                    />
-                  ) : (
-                    <span className="text-[40px] font-medium text-black dark:text-white">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>
-                  )}
+                  {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? <img src={chatInfo.participant.avatarUrl} className="w-full h-full object-cover" /> : <span className="text-[40px] font-medium text-black dark:text-white">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>}
                 </div>
                 <h2 className="text-[22px] font-bold text-black dark:text-white mb-1 text-center px-4">{chatInfo.participant.displayName}</h2>
                 {chatInfo.participant.username && <p className="text-[15px] text-gray-500">{chatInfo.participant.username}</p>}
                 <p className={`mt-1.5 text-[13px] font-medium ${subtitleColor}`}>{subtitleText}</p>
-              </div>
-              
-              <div className="px-4 pb-12 w-full max-w-lg mx-auto flex flex-col gap-4">
-                {(chatInfo.participant.bio || chatInfo.participant.description) && (
-                  <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm p-5 border border-gray-100/50 dark:border-zinc-800/50">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t.bio}</p>
-                    <p className="text-[16px] text-black dark:text-white leading-relaxed whitespace-pre-wrap">{chatInfo.participant.bio || chatInfo.participant.description}</p>
-                  </div>
-                )}
-                {(chatInfo.participant.personalChannel || chatInfo.participant.birthDate) && (
-                  <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100/50 dark:border-zinc-800/50">
-                    {chatInfo.participant.personalChannel && (
-                      <div className="px-5 py-4 border-b border-gray-100/50 dark:border-zinc-900/60 flex items-center gap-4">
-                        <Volume2 size={22} className="text-gray-400" />
-                        <div>
-                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{t.personalChannel}</p>
-                          <p className="text-[16px] text-black dark:text-white">{chatInfo.participant.personalChannel}</p>
-                        </div>
-                      </div>
-                    )}
-                    {chatInfo.participant.birthDate && (
-                      <div className="px-5 py-4 flex items-center gap-4">
-                        <Calendar size={22} className="text-gray-400" />
-                        <div>
-                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{t.birthday}</p>
-                          <p className="text-[16px] text-black dark:text-white">{new Date(chatInfo.participant.birthDate).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </>
           )}
@@ -630,11 +592,9 @@ export default function ChatPage() {
         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
           <div className="relative w-[44px] h-[44px] shrink-0">
             <div className={`w-full h-full rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSavedChat ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
-              {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chatInfo?.participant?.displayName || 'U')}&background=random&color=fff&size=120`; }} /> : displayName.charAt(0).toUpperCase()}
+              {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} className="w-full h-full object-cover" /> : displayName.charAt(0).toUpperCase()}
             </div>
-            {!isSavedChat && !isGroupOrChannel && isOnline && (
-              <div className="absolute bottom-0 right-0 w-3 h-3 bg-black dark:bg-white border-2 border-white dark:border-[#1c1c1e] rounded-full z-10"></div>
-            )}
+            {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-black dark:bg-white border-2 border-white dark:border-[#1c1c1e] rounded-full z-10"></div>}
           </div>
           <div className="flex flex-col">
             <h2 className="font-semibold text-black dark:text-white text-[16px] leading-tight truncate pr-2">{displayName}</h2>
@@ -646,7 +606,7 @@ export default function ChatPage() {
       {/* ---------------------------------------------------------
           ОСНОВНОЕ ОКНО СООБЩЕНИЙ
       --------------------------------------------------------- */}
-      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4">
+      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative" onClick={() => setActiveReactionMsg(null)}>
         <div className="flex flex-col">
           {(() => {
             let lastDateStr = '';
@@ -654,16 +614,17 @@ export default function ChatPage() {
             return messages.map((msg: any) => {
               const isMe = String(msg.senderId) === String(currentUserId);
               const isMedia = msg.content.startsWith('[MEDIA] ');
-              
               const dateObj = new Date(msg.createdAt);
               const dateLocale = lang === 'ru' ? 'ru-RU' : 'en-US';
               const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString(dateLocale, { day: 'numeric', month: 'long' });
               const showDate = currentDateStr !== '' && currentDateStr !== lastDateStr;
               if (showDate) lastDateStr = currentDateStr;
 
+              // Рендер лайков
+              const reactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
+
               return (
-                <div key={msg.id} className="flex flex-col w-full mb-1.5">
-                  
+                <div key={msg.id} className="flex flex-col w-full mb-1.5 relative">
                   {showDate && (
                     <div className="flex justify-center my-3 w-full">
                       <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm capitalize">
@@ -682,10 +643,36 @@ export default function ChatPage() {
                       
                       {renderMessageContent(msg.content, isMe)}
                       
+                      {/* ОТОБРАЖЕНИЕ РЕАКЦИЙ ПОД СООБЩЕНИЕМ */}
+                      {reactionsKeys.length > 0 && (
+                        <div className={`flex flex-wrap gap-1 mt-1.5 ${isMedia ? 'absolute -bottom-3 left-2' : ''}`}>
+                          {reactionsKeys.map(key => (
+                             <button 
+                               key={key} 
+                               onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
+                               className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-bold border transition-colors ${msg.myReaction === key ? 'bg-blue-500 text-white border-blue-500' : 'bg-white/80 dark:bg-black/80 text-black dark:text-white border-gray-200 dark:border-zinc-700'}`}
+                             >
+                               <span>{key}</span>
+                               <span className={msg.myReaction === key ? 'text-white' : 'text-gray-500'}>{msg.reactions[key]}</span>
+                             </button>
+                          ))}
+                        </div>
+                      )}
+
                       <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium ${isMedia ? 'bottom-2.5 right-2.5 bg-black/50 text-white px-2.5 py-1 rounded-full backdrop-blur-md z-10' : 'bottom-1 right-2.5 text-gray-400 dark:text-zinc-500'}`}>
                         <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                         {msg.isEdited && !isMedia && <span className="opacity-70 ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
                         
+                        {/* КНОПКА ОТКРЫТИЯ ПАНЕЛИ РЕАКЦИЙ */}
+                        {!msg.isSending && (
+                          <button 
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id); }} 
+                            className="hover:text-blue-500 ml-1 transition-colors cursor-pointer z-20"
+                          >
+                            <Smile size={12} />
+                          </button>
+                        )}
+
                         {isMe && (
                           <div className="flex items-center ml-0.5">
                             {isSavedChat || isGroupOrChannel ? (
@@ -701,27 +688,42 @@ export default function ChatPage() {
                             
                             {!msg.isSending && (
                               <>
-                                {/* ИСПРАВЛЕНИЕ: Прячем карандаш для картинок/видео */}
                                 {!isMedia && (
-                                  <button 
-                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEditing(msg); }} 
-                                    className="hover:text-gray-300 ml-1.5 transition-colors cursor-pointer z-20"
-                                  >
-                                    <Edit2 size={12} />
-                                  </button>
+                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEditing(msg); }} className="hover:text-gray-300 ml-1.5 transition-colors cursor-pointer z-20"><Edit2 size={12} /></button>
                                 )}
-                                <button 
-                                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(msg.id); }} 
-                                  className="hover:text-gray-300 ml-1.5 transition-colors cursor-pointer z-20"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
+                                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(msg.id); }} className="hover:text-gray-300 ml-1.5 transition-colors cursor-pointer z-20"><Trash2 size={13} /></button>
                               </>
                             )}
                           </div>
                         )}
                       </div>
+
+                      {/* ВСПЛЫВАЮЩЕЕ ОКНО БЫСТРЫХ РЕАКЦИЙ */}
+                      {activeReactionMsg === msg.id && (
+                        <div className={`absolute z-50 flex gap-2 p-2 bg-white dark:bg-[#1c1c1e] rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800 ${isMe ? 'right-0 -top-12' : 'left-0 -top-12'}`}>
+                           {FAST_REACTIONS.map(emoji => (
+                             <button 
+                               key={emoji} 
+                               onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); }}
+                               className="w-8 h-8 flex items-center justify-center text-[20px] hover:scale-125 transition-transform active:scale-95"
+                             >
+                               {emoji}
+                             </button>
+                           ))}
+                        </div>
+                      )}
                     </div>
+                    
+                    {/* КНОПКА КОММЕНТАРИЕВ (Только для групп/каналов) */}
+                    {isGroupOrChannel && (
+                      <button 
+                        onClick={() => { setActiveThread(msg); setThreadComments([]); }}
+                        className={`mt-1.5 flex items-center gap-1.5 px-3 py-1 bg-white/60 dark:bg-zinc-800/60 backdrop-blur-sm rounded-full text-[11px] font-bold text-gray-500 dark:text-gray-400 border border-gray-200/50 dark:border-zinc-700/50 shadow-sm active:scale-95 transition-all ${isMe ? 'mr-1' : 'ml-1'}`}
+                      >
+                        <MessageCircle size={12} />
+                        {msg.commentsCount > 0 ? `${msg.commentsCount} ${t.comments}` : t.comments}
+                      </button>
+                    )}
 
                   </div>
                 </div>
