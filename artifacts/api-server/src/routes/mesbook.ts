@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { getDatabase, createUser, getUserByUsername } from "../lib/database";
-import { broadcastToChat, broadcastToWall } from "../lib/realtime";
+import { broadcastToChat, broadcastToWall, broadcastUpdate, broadcastTyping } from "../lib/realtime";
 
 const router: IRouter = Router();
 
@@ -232,7 +232,10 @@ router.post("/chats/:chatId/typing", async (req, res): Promise<void> => {
   
   const db = await getDatabase();
   const user = await getUser(db, currentUserId);
-  if (user) { typingStates.set(`${chatId}_${currentUserId}`, { time: Date.now(), name: user.displayName }); }
+  if (user) { 
+    typingStates.set(`${chatId}_${currentUserId}`, { time: Date.now(), name: user.displayName }); 
+    broadcastTyping(chatId, user.displayName); // Мгновенный сигнал печати
+  }
   res.json({ success: true });
 });
 
@@ -366,6 +369,7 @@ router.post("/chats/:chatId/messages/:messageId/reaction", async (req, res): Pro
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const messageId = Number(req.params.messageId);
   const { reaction } = req.body;
+  const chatId = Number(req.params.chatId);
   const database = await getDatabase();
   
   const existing = await database.execute({ sql: "SELECT reaction FROM message_reactions WHERE message_id = ? AND user_id = ?", args: [messageId, currentUserId] });
@@ -378,6 +382,8 @@ router.post("/chats/:chatId/messages/:messageId/reaction", async (req, res): Pro
   } else {
     await database.execute({ sql: "INSERT INTO message_reactions (message_id, user_id, reaction) VALUES (?, ?, ?)", args: [messageId, currentUserId, reaction] });
   }
+  
+  broadcastUpdate(chatId); // Мгновенный сигнал по сокетам
   res.json({ success: true });
 });
 
@@ -427,7 +433,7 @@ router.post("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const message: any = result.rows[0];
   const response = { id: Number(message.id), chatId: Number(message.chat_id), senderId: Number(message.sender_id), senderName: message.sender_name, content: message.content, createdAt: message.created_at, isMine: true, isRead: Number(message.read_by_me) === 1, isEdited: false, commentsCount: 0, reactions: {} };
   
-  broadcastToChat(chatId, response);
+  broadcastToChat(chatId, response); // Мгновенный сигнал
   res.status(201).json(response);
 });
 
@@ -448,6 +454,8 @@ router.patch("/chats/:chatId/messages/:messageId", async (req, res): Promise<voi
   }
 
   await database.execute({ sql: "UPDATE messages SET content = ?, is_edited = 1 WHERE id = ?", args: [content, messageId] });
+  
+  broadcastUpdate(chatId); // Мгновенный сигнал
   res.json({ success: true });
 });
 
@@ -460,10 +468,11 @@ router.delete("/chats/:chatId/messages/:messageId", async (req, res): Promise<vo
   await database.execute({ sql: "DELETE FROM messages WHERE id = ? AND chat_id = ? AND sender_id = ?", args: [messageId, chatId, currentUserId] });
   await database.execute({ sql: "DELETE FROM messages WHERE parent_id = ?", args: [messageId] });
   await database.execute({ sql: "DELETE FROM message_reactions WHERE message_id = ?", args: [messageId] });
+  
+  broadcastUpdate(chatId); // Мгновенный сигнал
   res.json({ success: true });
 });
 
-// ИСПРАВЛЕНИЕ: Получение постов на стену вместе с комментариями и реакциями
 router.get("/wall/feed", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
