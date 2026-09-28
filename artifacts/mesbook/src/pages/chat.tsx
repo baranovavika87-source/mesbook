@@ -457,18 +457,19 @@ export default function ChatPage() {
           <div className={'pl-2 border-l-[3px] text-[12px] font-medium opacity-80 mb-1.5 truncate max-w-full ' + (isMe ? 'border-white/40 dark:border-black/40' : 'border-black/30 dark:border-white/30')}>
             {quotedText}
           </div>
-          {/* ИСПРАВЛЕНИЕ: spacer в конце текста резервирует место под время и галочки */}
-          <p className="text-[15px] leading-snug break-words whitespace-pre-wrap">
+          <p className="text-[15px] leading-snug break-words whitespace-pre-wrap m-0">
             {replyText}
-            <span className="inline-block w-[38px] h-2"></span>
+            {/* Динамическая распорка, чтобы время не налезало на текст */}
+            <span className="inline-block align-bottom shrink-0" style={{ width: '55px', height: '15px' }}></span>
           </p>
         </div>
       );
     }
     return (
-      <p className="text-[15px] leading-snug break-words whitespace-pre-wrap">
+      <p className="text-[15px] leading-snug break-words whitespace-pre-wrap m-0">
         {msgContent}
-        <span className="inline-block w-[38px] h-2"></span>
+        {/* Динамическая распорка. Если сообщение отредактировано, оставляем больше места */}
+        <span className="inline-block align-bottom shrink-0" style={{ width: '55px', height: '15px' }}></span>
       </p>
     );
   };
@@ -509,7 +510,7 @@ export default function ChatPage() {
             ) : (
                threadComments.map(c => (
                  <div key={c.id} className="flex gap-3 items-start">
-                   <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center shrink-0 overflow-hidden text-[12px] font-medium border border-gray-300/30 dark:border-zinc-700">
+                   <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center shrink-0 overflow-hidden text-[12px] font-medium border border-gray-300/30 dark:border-zinc-700 text-black dark:text-white">
                      {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
                    </div>
                    <div className="flex flex-col flex-1 bg-white dark:bg-[#1c1c1e] p-3 rounded-[16px] rounded-tl-none shadow-sm border border-gray-100/50 dark:border-zinc-800">
@@ -649,17 +650,15 @@ export default function ChatPage() {
                     }}
                   >
                     
-                    {/* ИСПРАВЛЕНИЕ: Меньше радиус скругления, нет правых отступов для текста */}
                     <div className={
                       isMedia 
                         ? `relative bg-transparent`
-                        : `shadow-sm relative flex flex-col px-2.5 pt-1.5 pb-1.5 min-w-[60px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[12px] rounded-tr-[2px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[12px] rounded-tl-[2px] border border-gray-100/50 dark:border-zinc-800'}`
+                        : `shadow-sm relative flex flex-col px-3 pt-1.5 pb-1.5 min-w-[70px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[14px] rounded-tr-[3px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[14px] rounded-tl-[3px] border border-gray-100/50 dark:border-zinc-800'}`
                     }>
                       
                       {renderMessageContent(msg.content, isMe)}
                       
-                      {/* ИСПРАВЛЕНИЕ: Время и галочки внизу пузыря */}
-                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium bottom-1 right-1.5 opacity-60 ${isMedia ? 'bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10 bottom-1.5' : ''}`}>
+                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium bottom-1 right-2 opacity-60 ${isMedia ? 'bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10 bottom-1.5 right-1.5' : ''}`}>
                         <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                         {msg.isEdited && !isMedia && <span className="ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
                         
@@ -680,25 +679,38 @@ export default function ChatPage() {
                       </div>
                     </div>
                     
-                    {/* ИСПРАВЛЕНИЕ: Идеальные капсулы с аватарками */}
                     {reactionsKeys.length > 0 && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
                         {reactionsKeys.map(key => {
                            const rData = msg.reactions[key] || { count: 1, users: [] };
                            const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
                            
-                           return (
-                             <button 
-                               key={key} 
-                               onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
-                               className={`flex items-center gap-1.5 h-[26px] pl-0.5 pr-2 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white border-black dark:border-white shadow-md z-10' : 'bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-zinc-700 shadow-sm'}`}
-                             >
-                               <div className="w-[20px] h-[20px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-gray-200 dark:bg-zinc-700 text-[10px] font-bold text-gray-500 dark:text-gray-300">
-                                 {firstUser?.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
-                               </div>
-                               <span className="text-[13px] leading-none mb-[1px]">{key}</span>
-                             </button>
-                           )
+                           // ИСПРАВЛЕНИЕ: Разделение логики реакций для групп и личных чатов
+                           if (isGroupOrChannel) {
+                             return (
+                               <button 
+                                 key={key} 
+                                 onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
+                                 className={`flex items-center gap-1.5 h-[26px] px-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-md z-10' : 'bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
+                               >
+                                 <span className="text-[14px] leading-none mt-[1px]">{key}</span>
+                                 <span className="text-[12px] font-bold">{rData.count}</span>
+                               </button>
+                             );
+                           } else {
+                             return (
+                               <button 
+                                 key={key} 
+                                 onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
+                                 className={`flex items-center gap-1 h-[26px] pl-0.5 pr-1.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white border-black dark:border-white shadow-md z-10' : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
+                               >
+                                 <div className="w-[22px] h-[22px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-gray-200 dark:bg-zinc-700 text-[10px] font-bold text-gray-500 dark:text-gray-300 border border-black/10 dark:border-white/10">
+                                   {firstUser?.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
+                                 </div>
+                                 <span className="text-[14px] leading-none mt-[1px]">{key}</span>
+                               </button>
+                             );
+                           }
                         })}
                       </div>
                     )}
@@ -735,7 +747,6 @@ export default function ChatPage() {
                              ))}
                           </div>
 
-                          {/* ИСПРАВЛЕНИЕ: Разделительные линии border-b */}
                           <div className="flex flex-col bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 dark:border-zinc-800 overflow-hidden w-full">
                              <button 
                                onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }}
@@ -847,4 +858,4 @@ export default function ChatPage() {
       </div>
     </div>
   );
-}
+    }
