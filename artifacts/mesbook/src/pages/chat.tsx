@@ -122,7 +122,6 @@ export default function ChatPage() {
   });
 
   const [content, setContent] = useState('');
-  const [readFailed, setReadFailed] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [editingMsg, setEditingMsg] = useState<any>(null);
@@ -167,7 +166,6 @@ export default function ChatPage() {
 
   const savedName = typeof window !== 'undefined' ? sessionStorage.getItem('chat_name_' + chatId) : null;
   const displayName = isSavedChat ? t.saved : (chatInfo?.participant?.displayName || chatInfo?.name || savedName || t.companion);
-  const isGroup = chatInfo?.participant?.isGroup;
   const isChannel = chatInfo?.participant?.isChannel;
 
   useEffect(() => {
@@ -211,6 +209,21 @@ export default function ChatPage() {
         if (currentChat) setChatInfo(currentChat);
       }
     } catch (e) {}
+
+    // ИСПРАВЛЕНИЕ: Обязательно запрашиваем права, чтобы админ мог писать в канал!
+    if (isGroupOrChannel) {
+      try {
+        const memRes = await fetch(`/api/chats/${chatId}/is_member`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
+        if (memRes.ok) {
+          const mData = await memRes.json();
+          setIsMember(mData.isMember);
+          setIsAdmin(mData.role === 'admin');
+          setMembersCount(mData.membersCount);
+          setOnlineCount(mData.onlineCount);
+        }
+      } catch(e) {}
+    }
+
     try {
       const msgRes = await fetch('/api/chats/' + chatId + '/messages', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
       if (msgRes.ok) {
@@ -425,14 +438,42 @@ export default function ChatPage() {
     }
   }
 
-  const renderMessageContent = (msgContent: string, isMe: boolean, isEdited: boolean) => {
+  // ИСПРАВЛЕНИЕ: Идеальный рендер времени внутри текста с обтеканием
+  const renderTimeAndStatus = (msg: any, isMe: boolean, isMedia: boolean) => (
+    <div className={isMedia 
+      ? "absolute bottom-1.5 right-1.5 flex items-center justify-end gap-1 text-[10px] font-medium bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10" 
+      : "float-right flex items-center justify-end gap-1 text-[10px] font-medium opacity-60 ml-3 mt-1.5 relative z-10 translate-y-[1px]"}>
+      
+      <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+      {msg.isEdited && !isMedia && <span className="ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
+      
+      {isMe && (
+        <div className="flex items-center ml-0.5">
+          {isSavedChat || isGroupOrChannel ? (
+            <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5} /><Check size={11} strokeWidth={2.5} /></div>
+          ) : msg.isSending ? (
+            <Loader2 size={10} className="animate-spin" />
+          ) : (
+            <div className="flex -space-x-1">
+              <Check size={11} strokeWidth={2.5} />
+              {(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && <Check size={11} strokeWidth={2.5} />}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderMessageContent = (msg: any, isMe: boolean) => {
+    const msgContent = msg.content;
+
     if (msgContent.startsWith('[MEDIA] ')) {
       let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
       if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic|heif)$/i, '.jpg');
       
       return (
-        <div className="relative flex items-center justify-center -mx-3 -mt-2 -mb-2 overflow-hidden rounded-[10px]">
+        <div className="relative flex items-center justify-center -mx-3 -mt-1.5 -mb-1.5 overflow-hidden rounded-[10px]">
           {isVideo ? (
             <video src={url} controls className="w-full h-auto max-w-[260px] max-h-[350px] object-cover" />
           ) : (
@@ -444,6 +485,7 @@ export default function ChatPage() {
               onError={(e) => { e.currentTarget.src = 'https://placehold.co/260x350/1c1c1e/ffffff?text=Image+Not+Found'; }}
             />
           )}
+          {renderTimeAndStatus(msg, isMe, true)}
         </div>
       );
     }
@@ -459,21 +501,19 @@ export default function ChatPage() {
           <div className={'pl-2 border-l-[3px] text-[12px] font-medium opacity-80 mb-1.5 truncate ' + (isMe ? 'border-white/40 dark:border-black/40' : 'border-black/30 dark:border-white/30')}>
             {quotedText}
           </div>
-          <p className="text-[15px] leading-[1.3] break-words whitespace-pre-wrap m-0">
+          <div className="text-[15px] leading-[1.35] break-words whitespace-pre-wrap m-0">
+            {renderTimeAndStatus(msg, isMe, false)}
             {replyText}
-            {/* Идеальная распорка для времени */}
-            <span className="inline-block" style={{ width: isEdited ? '75px' : '45px', height: '1px' }}></span>
-          </p>
+          </div>
         </div>
       );
     }
 
     return (
-      <p className="text-[15px] leading-[1.3] break-words whitespace-pre-wrap m-0">
+      <div className="text-[15px] leading-[1.35] break-words whitespace-pre-wrap m-0">
+        {renderTimeAndStatus(msg, isMe, false)}
         {msgContent}
-        {/* Идеальная распорка для времени */}
-        <span className="inline-block" style={{ width: isEdited ? '75px' : '45px', height: '1px' }}></span>
-      </p>
+      </div>
     );
   };
 
@@ -505,7 +545,7 @@ export default function ChatPage() {
           
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
             <div className="bg-white dark:bg-[#1c1c1e] p-4 rounded-[20px] shadow-sm mb-2 border border-gray-100/50 dark:border-zinc-800">
-              {renderMessageContent(activeThread.content, false, false)}
+              {renderMessageContent(activeThread, false)}
             </div>
             
             {threadComments.length === 0 ? (
@@ -653,38 +693,17 @@ export default function ChatPage() {
                     }}
                   >
                     
-                    {/* Меньше скругления (rounded-10px) и нет пустых отступов */}
+                    {/* Убран flex flex-col для текстовых пузырей, чтобы время красиво обтекало */}
                     <div className={
                       isMedia 
-                        ? `relative bg-transparent`
-                        : `shadow-sm relative px-3 py-1.5 min-w-[60px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[10px] rounded-tr-[3px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[10px] rounded-tl-[3px] border border-gray-100/50 dark:border-zinc-800'}`
+                        ? `relative bg-transparent flex flex-col`
+                        : `shadow-sm relative px-3 pt-1.5 pb-1.5 min-w-[60px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[12px] rounded-tr-[2px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[12px] rounded-tl-[2px] border border-gray-100/50 dark:border-zinc-800'}`
                     }>
                       
-                      {renderMessageContent(msg.content, isMe, msg.isEdited)}
+                      {renderMessageContent(msg, isMe)}
                       
-                      {/* Абсолютное позиционирование внизу справа поверх невидимой распорки */}
-                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium bottom-1 right-2 opacity-60 ${isMedia ? 'bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10 bottom-1.5 right-1.5' : ''}`}>
-                        <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
-                        {msg.isEdited && !isMedia && <span className="ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
-                        
-                        {isMe && (
-                          <div className="flex items-center ml-0.5">
-                            {isSavedChat || isGroupOrChannel ? (
-                              <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5} /><Check size={11} strokeWidth={2.5} /></div>
-                            ) : msg.isSending ? (
-                              <Loader2 size={10} className="animate-spin" />
-                            ) : (
-                              <div className="flex -space-x-1">
-                                <Check size={11} strokeWidth={2.5} />
-                                {(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && <Check size={11} strokeWidth={2.5} />}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
                     </div>
                     
-                    {/* Реакции: с аватаркой для лички, без аватарки для групп/каналов */}
                     {reactionsKeys.length > 0 && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
                         {reactionsKeys.map(key => {
@@ -730,7 +749,6 @@ export default function ChatPage() {
                       </button>
                     )}
 
-                    {/* Меню с разделительными линиями */}
                     {isMenuOpen && (
                       <>
                         <div 
@@ -864,4 +882,4 @@ export default function ChatPage() {
       </div>
     </div>
   );
-  }
+          }
