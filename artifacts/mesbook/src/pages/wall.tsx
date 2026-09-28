@@ -272,21 +272,24 @@ export default function WallPage() {
                     </div>
                   )}
 
-                  {/* ПОДВАЛ ПОСТА С РЕАКЦИЯМИ И СЧЕТЧИКАМИ */}
                   <div className="px-5 pb-4 pt-2 flex flex-col gap-3 relative">
                     
+                    {/* ИСПРАВЛЕНИЕ: Только эмодзи и цифры на стене */}
                     {reactionsKeys.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
-                        {reactionsKeys.map(key => (
-                           <button 
-                             key={key} 
-                             onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }}
-                             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[13px] font-bold border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-md' : 'bg-gray-50 dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
-                           >
-                             <span>{key}</span>
-                             <span>{post.reactions[key]}</span>
-                           </button>
-                        ))}
+                        {reactionsKeys.map(key => {
+                           const rData = post.reactions[key] || { count: 1, users: [] };
+                           return (
+                             <button 
+                               key={key} 
+                               onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }}
+                               className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[13px] font-bold border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-md' : 'bg-gray-50 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
+                             >
+                               <span className="text-[14px] leading-none mb-[1px]">{key}</span>
+                               <span>{rData.count}</span>
+                             </button>
+                           )
+                        })}
                       </div>
                     )}
 
