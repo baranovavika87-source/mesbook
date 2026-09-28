@@ -28,7 +28,8 @@ const translations = {
     cancel: "Отмена",
     comments: "Комментарии",
     noComments: "Пока нет комментариев",
-    commentPlaceholder: "Комментарий..."
+    commentPlaceholder: "Комментарий...",
+    commentsCount: ['комментарий', 'комментария', 'комментариев']
   },
   en: {
     wall: "Wall",
@@ -43,9 +44,20 @@ const translations = {
     cancel: "Cancel",
     comments: "Comments",
     noComments: "No comments yet",
-    commentPlaceholder: "Comment..."
+    commentPlaceholder: "Comment...",
+    commentsCount: ['comment', 'comments', 'comments']
   }
 };
+
+function declOfNum(n: number, text_forms: string[], lang: 'ru' | 'en') {
+  n = Math.abs(n) % 100;
+  if (lang === 'en') return n === 1 ? text_forms[0] : text_forms[1];
+  const n1 = n % 10;
+  if (n > 10 && n < 20) return text_forms[2];
+  if (n1 > 1 && n1 < 5) return text_forms[1];
+  if (n1 === 1) return text_forms[0];
+  return text_forms[2];
+}
 
 export default function WallPage() {
   const [posts, setPosts] = useState<any[]>([]);
@@ -274,19 +286,19 @@ export default function WallPage() {
 
                   <div className="px-5 pb-4 pt-2 flex flex-col gap-3 relative">
                     
-                    {/* ИСПРАВЛЕНИЕ: Только эмодзи и цифры на стене */}
                     {reactionsKeys.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {reactionsKeys.map(key => {
                            const rData = post.reactions[key] || { count: 1, users: [] };
+
                            return (
                              <button 
                                key={key} 
                                onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }}
-                               className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[13px] font-bold border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-md' : 'bg-gray-50 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
+                               className={`flex items-center justify-center gap-1.5 h-[26px] px-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-md z-10' : 'bg-gray-50 dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
                              >
-                               <span className="text-[14px] leading-none mb-[1px]">{key}</span>
-                               <span>{rData.count}</span>
+                               <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                               <span className="text-[12px] font-bold leading-none flex items-center justify-center mt-[1px]">{rData.count}</span>
                              </button>
                            )
                         })}
@@ -299,7 +311,7 @@ export default function WallPage() {
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full text-[12px] font-bold text-gray-600 dark:text-gray-300 active:scale-95 transition-transform"
                       >
                         <MessageCircle size={14} />
-                        {post.commentsCount > 0 ? `${post.commentsCount} ${t.comments}` : t.comments}
+                        {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
                       </button>
 
                       <div className="relative">
