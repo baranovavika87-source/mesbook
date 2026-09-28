@@ -127,7 +127,6 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   
-  // ИСПРАВЛЕНИЕ: Состояние для вызова контекстного меню
   const [activeContextMenu, setActiveContextMenu] = useState<number | null>(null);
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
   
@@ -153,7 +152,6 @@ export default function ChatPage() {
   const editAvatarRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const touchStartRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasScrolledToBottom = useRef(false);
 
@@ -429,18 +427,18 @@ export default function ChatPage() {
     if (msgContent.startsWith('[MEDIA] ')) {
       let url = msgContent.replace('[MEDIA] ', '').trim();
       const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
-      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic\vert{}heif)$/i, '.jpg');
+      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic|heif)$/i, '.jpg');
       
       return (
         <div className="relative flex items-center justify-center">
           {isVideo ? (
-            <video src={url} controls className={`w-full h-auto max-w-[260px] max-h-[350px] object-cover shadow-sm rounded-[18px] ${isMe ? 'rounded-tr-[4px]' : 'rounded-tl-[4px]'}`} />
+            <video src={url} controls className={`w-full h-auto max-w-[260px] max-h-[350px] object-cover shadow-sm rounded-[14px] ${isMe ? 'rounded-tr-[3px]' : 'rounded-tl-[3px]'}`} />
           ) : (
             <img 
               onClick={() => setFullScreenImage(url)}
               src={url} 
               alt="Media" 
-              className={`w-full h-auto max-w-[260px] max-h-[350px] object-cover shadow-sm cursor-pointer rounded-[18px] ${isMe ? 'rounded-tr-[4px]' : 'rounded-tl-[4px]'}`} 
+              className={`w-full h-auto max-w-[260px] max-h-[350px] object-cover shadow-sm cursor-pointer rounded-[14px] ${isMe ? 'rounded-tr-[3px]' : 'rounded-tl-[3px]'}`} 
               onError={(e) => { e.currentTarget.src = 'https://placehold.co/260x350/1c1c1e/ffffff?text=Image+Not+Found'; }}
             />
           )}
@@ -459,11 +457,20 @@ export default function ChatPage() {
           <div className={'pl-2 border-l-[3px] text-[12px] font-medium opacity-80 mb-1.5 truncate max-w-full ' + (isMe ? 'border-white/40 dark:border-black/40' : 'border-black/30 dark:border-white/30')}>
             {quotedText}
           </div>
-          <p className="text-[15px] leading-snug break-words whitespace-pre-wrap w-full">{replyText}</p>
+          {/* ИСПРАВЛЕНИЕ: spacer в конце текста резервирует место под время и галочки */}
+          <p className="text-[15px] leading-snug break-words whitespace-pre-wrap">
+            {replyText}
+            <span className="inline-block w-[38px] h-2"></span>
+          </p>
         </div>
       );
     }
-    return <p className="text-[15px] leading-snug break-words whitespace-pre-wrap w-full">{msgContent}</p>;
+    return (
+      <p className="text-[15px] leading-snug break-words whitespace-pre-wrap">
+        {msgContent}
+        <span className="inline-block w-[38px] h-2"></span>
+      </p>
+    );
   };
 
   return (
@@ -625,41 +632,34 @@ export default function ChatPage() {
                     </div>
                   )}
                   
-                  {/* ИСПРАВЛЕНИЕ: Вызов контекстного меню */}
                   <div 
                     className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} relative`}
                     onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(msg.id); }}
                     onTouchStart={(e) => { 
-                      touchStartRef.current = e.touches[0].clientX; 
                       pressTimer.current = setTimeout(() => {
                         if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
                         setActiveContextMenu(msg.id);
-                        touchStartRef.current = null;
-                      }, 400); // Долгий тап 0.4 сек
+                      }, 400); 
                     }}
                     onTouchMove={() => {
                       if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
                     }}
-                    onTouchEnd={(e) => { 
+                    onTouchEnd={() => { 
                       if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
-                      if (touchStartRef.current !== null) { 
-                        const touchEndX = e.changedTouches[0].clientX; 
-                        const diff = touchStartRef.current - touchEndX; 
-                        if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } 
-                        touchStartRef.current = null; 
-                      } 
                     }}
                   >
                     
+                    {/* ИСПРАВЛЕНИЕ: Меньше радиус скругления, нет правых отступов для текста */}
                     <div className={
                       isMedia 
                         ? `relative bg-transparent`
-                        : `shadow-sm relative flex flex-col min-w-[70px] px-3 pt-1.5 pb-1.5 ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[18px] rounded-tl-[4px] border border-gray-100/50 dark:border-zinc-800'}`
+                        : `shadow-sm relative flex flex-col px-2.5 pt-1.5 pb-1.5 min-w-[60px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[12px] rounded-tr-[2px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[12px] rounded-tl-[2px] border border-gray-100/50 dark:border-zinc-800'}`
                     }>
                       
                       {renderMessageContent(msg.content, isMe)}
                       
-                      <div className={`flex items-center justify-end gap-1 text-[10px] font-medium mt-0.5 opacity-60 ${isMedia ? 'absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10' : ''}`}>
+                      {/* ИСПРАВЛЕНИЕ: Время и галочки внизу пузыря */}
+                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium bottom-1 right-1.5 opacity-60 ${isMedia ? 'bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10 bottom-1.5' : ''}`}>
                         <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                         {msg.isEdited && !isMedia && <span className="ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
                         
@@ -680,18 +680,26 @@ export default function ChatPage() {
                       </div>
                     </div>
                     
-                    {/* Реакции, которые уже поставили, остаются под сообщением */}
+                    {/* ИСПРАВЛЕНИЕ: Идеальные капсулы с аватарками */}
                     {reactionsKeys.length > 0 && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                        {reactionsKeys.map(key => (
-                           <button 
-                             key={key} 
-                             onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
-                             className={`w-6 h-6 flex items-center justify-center rounded-full text-[13px] border transition-transform hover:scale-110 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white border-black dark:border-white shadow-md z-10' : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
-                           >
-                             {key}
-                           </button>
-                        ))}
+                        {reactionsKeys.map(key => {
+                           const rData = msg.reactions[key] || { count: 1, users: [] };
+                           const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
+                           
+                           return (
+                             <button 
+                               key={key} 
+                               onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
+                               className={`flex items-center gap-1.5 h-[26px] pl-0.5 pr-2 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white border-black dark:border-white shadow-md z-10' : 'bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-zinc-700 shadow-sm'}`}
+                             >
+                               <div className="w-[20px] h-[20px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-gray-200 dark:bg-zinc-700 text-[10px] font-bold text-gray-500 dark:text-gray-300">
+                                 {firstUser?.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
+                               </div>
+                               <span className="text-[13px] leading-none mb-[1px]">{key}</span>
+                             </button>
+                           )
+                        })}
                       </div>
                     )}
 
@@ -705,7 +713,6 @@ export default function ChatPage() {
                       </button>
                     )}
 
-                    {/* ИСПРАВЛЕНИЕ: НОВОЕ КОНТЕКСТНОЕ МЕНЮ */}
                     {isMenuOpen && (
                       <>
                         <div 
@@ -728,10 +735,11 @@ export default function ChatPage() {
                              ))}
                           </div>
 
+                          {/* ИСПРАВЛЕНИЕ: Разделительные линии border-b */}
                           <div className="flex flex-col bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 dark:border-zinc-800 overflow-hidden w-full">
                              <button 
                                onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }}
-                               className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left"
+                               className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-100/50 dark:border-zinc-800/50"
                              >
                                <Reply size={18} className="text-gray-500 dark:text-gray-400" />
                                {t.replyAction}
@@ -745,7 +753,7 @@ export default function ChatPage() {
                                    navigator.clipboard.writeText(textToCopy); 
                                    setActiveContextMenu(null); 
                                  }}
-                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left"
+                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-100/50 dark:border-zinc-800/50"
                                >
                                  <Copy size={18} className="text-gray-500 dark:text-gray-400" />
                                  {t.copy}
@@ -755,7 +763,7 @@ export default function ChatPage() {
                              {isMe && !isMedia && (
                                <button 
                                  onClick={(e) => { e.stopPropagation(); startEditing(msg); setActiveContextMenu(null); }}
-                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left"
+                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-100/50 dark:border-zinc-800/50"
                                >
                                  <Edit2 size={18} className="text-gray-500 dark:text-gray-400" />
                                  {t.editAction}
@@ -765,7 +773,7 @@ export default function ChatPage() {
                              {(isMe || isAdmin) && (
                                <button 
                                  onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }}
-                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left border-t border-gray-100/50 dark:border-zinc-800/50"
+                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left"
                                >
                                  <Trash2 size={18} className="text-red-500" />
                                  {t.deleteAction}
