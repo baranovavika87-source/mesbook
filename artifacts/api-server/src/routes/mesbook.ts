@@ -205,8 +205,6 @@ router.get("/chats/:chatId/is_member", async (req, res): Promise<void> => {
     try {
       const countRes = await database.execute({ sql: "SELECT COUNT(*) as c FROM chat_members WHERE chat_id = ?", args: [chatId] });
       membersCount = Number(countRes.rows[0]?.c) || 1;
-      
-      // ИСПРАВЛЕНИЕ: ЖЕСТКИЙ ЛИМИТ ОНЛАЙНА - 15 СЕКУНД
       const fifteenSecsAgo = Date.now() - 15000;
       const onlineRes = await database.execute({ sql: "SELECT COUNT(*) as c FROM chat_members cm JOIN users u ON cm.user_id = u.id WHERE cm.chat_id = ? AND u.last_seen > ?", args: [chatId, fifteenSecsAgo] });
       onlineCount = Number(onlineRes.rows[0]?.c) || 1;
@@ -296,6 +294,7 @@ router.post("/chats/:chatId/read", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
+// ИСПРАВЛЕНИЕ: Достаем аватарки и имена для реакций
 router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const chatId = parseChatId(currentUserId, req.params.chatId);
@@ -312,16 +311,21 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   });
 
   const reactionsRes = await database.execute({
-    sql: "SELECT message_id, user_id, reaction FROM message_reactions WHERE message_id IN (SELECT id FROM messages WHERE chat_id = ?)",
+    sql: `SELECT mr.message_id, mr.user_id, mr.reaction, u.avatar_url, u.display_name as name 
+          FROM message_reactions mr JOIN users u ON mr.user_id = u.id 
+          WHERE mr.message_id IN (SELECT id FROM messages WHERE chat_id = ?)`,
     args: [chatId]
   });
 
   const messages = result.rows.map((row: any) => {
     const msgReactions = reactionsRes.rows.filter((r: any) => Number(r.message_id) === Number(row.id));
-    const reactionsCount: Record<string, number> = {};
+    const reactionsData: Record<string, { count: number, users: any[] }> = {};
     let myReaction = null;
+    
     msgReactions.forEach((r: any) => {
-      reactionsCount[r.reaction] = (reactionsCount[r.reaction] || 0) + 1;
+      if (!reactionsData[r.reaction]) reactionsData[r.reaction] = { count: 0, users: [] };
+      reactionsData[r.reaction].count += 1;
+      reactionsData[r.reaction].users.push({ id: r.user_id, avatar: r.avatar_url, name: r.name });
       if (Number(r.user_id) === currentUserId) myReaction = r.reaction;
     });
 
@@ -330,7 +334,7 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
       senderName: row.sender_name || "Пользователь", content: row.content, createdAt: row.created_at,
       isMine: Number(row.sender_id) === currentUserId, isRead: Number(row.read_by_me) === 1,
       isEdited: Number(row.is_edited) === 1, commentsCount: Number(row.comments_count) || 0,
-      reactions: reactionsCount, myReaction
+      reactions: reactionsData, myReaction
     };
   });
 
@@ -475,6 +479,7 @@ router.delete("/chats/:chatId/messages/:messageId", async (req, res): Promise<vo
   res.json({ success: true });
 });
 
+// ИСПРАВЛЕНИЕ: Достаем аватарки и имена для реакций на стену
 router.get("/wall/feed", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
@@ -492,7 +497,9 @@ router.get("/wall/feed", async (req, res): Promise<void> => {
     let reactionsRes = { rows: [] as any[] };
     if (msgIds.length > 0) {
        reactionsRes = await database.execute({
-         sql: `SELECT message_id, user_id, reaction FROM message_reactions WHERE message_id IN (${msgIds.join(',')})`,
+         sql: `SELECT mr.message_id, mr.user_id, mr.reaction, u.avatar_url, u.display_name as name 
+               FROM message_reactions mr JOIN users u ON mr.user_id = u.id 
+               WHERE mr.message_id IN (${msgIds.join(',')})`,
          args: []
        });
     }
@@ -500,10 +507,13 @@ router.get("/wall/feed", async (req, res): Promise<void> => {
     const posts = feedResult.rows.map((row: any) => {
       const msgId = Number(row.id);
       const msgReactions = reactionsRes.rows.filter((r: any) => Number(r.message_id) === msgId);
-      const reactionsCount: Record<string, number> = {};
+      const reactionsData: Record<string, { count: number, users: any[] }> = {};
       let myReaction = null;
+      
       msgReactions.forEach((r: any) => {
-        reactionsCount[r.reaction] = (reactionsCount[r.reaction] || 0) + 1;
+        if (!reactionsData[r.reaction]) reactionsData[r.reaction] = { count: 0, users: [] };
+        reactionsData[r.reaction].count += 1;
+        reactionsData[r.reaction].users.push({ id: r.user_id, avatar: r.avatar_url, name: r.name });
         if (Number(r.user_id) === currentUserId) myReaction = r.reaction;
       });
 
@@ -512,8 +522,7 @@ router.get("/wall/feed", async (req, res): Promise<void> => {
         isEdited: Number(row.is_edited) === 1, channelName: row.channel_name, 
         content: row.content, createdAt: row.created_at, isMine: Number(row.sender_id) === currentUserId,
         commentsCount: Number(row.comments_count) || 0,
-        reactions: reactionsCount,
-        myReaction
+        reactions: reactionsData, myReaction
       };
     });
     res.json(posts);
