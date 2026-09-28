@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send, Copy, Reply } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -44,7 +44,11 @@ const translations = {
     comments: "Комментарии",
     noComments: "Пока нет комментариев",
     isTyping: "печатает...",
-    areTyping: "печатают..."
+    areTyping: "печатают...",
+    replyAction: "Ответить",
+    copy: "Копировать",
+    editAction: "Изменить",
+    deleteAction: "Удалить"
   },
   en: {
     saved: "Saved Messages",
@@ -78,7 +82,11 @@ const translations = {
     comments: "Comments",
     noComments: "No comments yet",
     isTyping: "is typing...",
-    areTyping: "are typing..."
+    areTyping: "are typing...",
+    replyAction: "Reply",
+    copy: "Copy",
+    editAction: "Edit",
+    deleteAction: "Delete"
   }
 };
 
@@ -118,7 +126,10 @@ export default function ChatPage() {
   const [editingMsg, setEditingMsg] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
-  const [activeReactionMsg, setActiveReactionMsg] = useState<number | null>(null);
+  
+  // ИСПРАВЛЕНИЕ: Состояние для вызова контекстного меню
+  const [activeContextMenu, setActiveContextMenu] = useState<number | null>(null);
+  const pressTimer = useRef<NodeJS.Timeout | null>(null);
   
   const [activeThread, setActiveThread] = useState<any>(null);
   const [threadComments, setThreadComments] = useState<any[]>([]);
@@ -331,7 +342,6 @@ export default function ChatPage() {
   };
 
   const handleDelete = async (msgId: number) => {
-    if (!window.confirm(t.deleteConfirm)) return;
     if (isSavedChat) {
       const updated = messages.filter((m: any) => m.id !== msgId);
       setMessages(updated);
@@ -345,7 +355,6 @@ export default function ChatPage() {
     try {
       await fetch(`/api/chats/${chatId}/messages/${msgId}/reaction`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ reaction }) });
     } catch (e) {}
-    setActiveReactionMsg(null);
   };
 
   const downloadImage = async (url: string) => {
@@ -589,7 +598,7 @@ export default function ChatPage() {
       </header>
 
       {/* ОСНОВНОЕ ОКНО СООБЩЕНИЙ */}
-      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative" onClick={() => setActiveReactionMsg(null)}>
+      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 pb-12 relative" onClick={() => setActiveContextMenu(null)}>
         <div className="flex flex-col">
           {(() => {
             let lastDateStr = '';
@@ -604,9 +613,10 @@ export default function ChatPage() {
               if (showDate) lastDateStr = currentDateStr;
 
               const reactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
+              const isMenuOpen = activeContextMenu === msg.id;
 
               return (
-                <div key={msg.id} className="flex flex-col w-full mb-1.5 relative">
+                <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative ${isMenuOpen ? 'z-50' : 'z-10'}`}>
                   {showDate && (
                     <div className="flex justify-center my-3 w-full">
                       <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm capitalize">
@@ -615,9 +625,32 @@ export default function ChatPage() {
                     </div>
                   )}
                   
-                  <div className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`} onTouchStart={(e) => { touchStartRef.current = e.touches[0].clientX; }} onTouchEnd={(e) => { if (touchStartRef.current !== null) { const touchEndX = e.changedTouches[0].clientX; const diff = touchStartRef.current - touchEndX; if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } touchStartRef.current = null; } }}>
+                  {/* ИСПРАВЛЕНИЕ: Вызов контекстного меню */}
+                  <div 
+                    className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} relative`}
+                    onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(msg.id); }}
+                    onTouchStart={(e) => { 
+                      touchStartRef.current = e.touches[0].clientX; 
+                      pressTimer.current = setTimeout(() => {
+                        if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
+                        setActiveContextMenu(msg.id);
+                        touchStartRef.current = null;
+                      }, 400); // Долгий тап 0.4 сек
+                    }}
+                    onTouchMove={() => {
+                      if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
+                    }}
+                    onTouchEnd={(e) => { 
+                      if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
+                      if (touchStartRef.current !== null) { 
+                        const touchEndX = e.changedTouches[0].clientX; 
+                        const diff = touchStartRef.current - touchEndX; 
+                        if (diff > 50) { setReplyingTo(msg); if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); } 
+                        touchStartRef.current = null; 
+                      } 
+                    }}
+                  >
                     
-                    {/* ИСПРАВЛЕНИЕ: Идеальный пузырь текста */}
                     <div className={
                       isMedia 
                         ? `relative bg-transparent`
@@ -626,17 +659,10 @@ export default function ChatPage() {
                       
                       {renderMessageContent(msg.content, isMe)}
                       
-                      {/* ИСПРАВЛЕНИЕ: Время, галочки и иконки аккуратно вписаны в текст */}
                       <div className={`flex items-center justify-end gap-1 text-[10px] font-medium mt-0.5 opacity-60 ${isMedia ? 'absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10' : ''}`}>
                         <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                         {msg.isEdited && !isMedia && <span className="ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
                         
-                        {!msg.isSending && (
-                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id); }} className="hover:opacity-100 ml-0.5 transition-opacity cursor-pointer z-20">
-                            <Smile size={12} />
-                          </button>
-                        )}
-
                         {isMe && (
                           <div className="flex items-center ml-0.5">
                             {isSavedChat || isGroupOrChannel ? (
@@ -649,31 +675,12 @@ export default function ChatPage() {
                                 {(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && <Check size={11} strokeWidth={2.5} />}
                               </div>
                             )}
-                            
-                            {!msg.isSending && (
-                              <>
-                                {!isMedia && (
-                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEditing(msg); }} className="hover:opacity-100 ml-1.5 transition-opacity cursor-pointer z-20"><Edit2 size={12} /></button>
-                                )}
-                                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(msg.id); }} className="hover:opacity-100 ml-1 transition-opacity cursor-pointer z-20"><Trash2 size={13} /></button>
-                              </>
-                            )}
                           </div>
                         )}
                       </div>
-
-                      {activeReactionMsg === msg.id && (
-                        <div className={`absolute z-50 flex gap-2 p-2 bg-white dark:bg-[#1c1c1e] rounded-full shadow-xl border border-gray-200/50 dark:border-zinc-800 ${isMe ? 'right-0 -bottom-10' : 'left-0 -bottom-10'}`}>
-                           {FAST_REACTIONS.map(emoji => (
-                             <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); }} className="w-8 h-8 flex items-center justify-center text-[20px] hover:scale-125 transition-transform active:scale-95">
-                               {emoji}
-                             </button>
-                           ))}
-                        </div>
-                      )}
                     </div>
                     
-                    {/* ИСПРАВЛЕНИЕ: Реакции вынесены наружу под пузырь сообщения */}
+                    {/* Реакции, которые уже поставили, остаются под сообщением */}
                     {reactionsKeys.length > 0 && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
                         {reactionsKeys.map(key => (
@@ -696,6 +703,77 @@ export default function ChatPage() {
                         <MessageCircle size={12} />
                         {msg.commentsCount > 0 ? `${msg.commentsCount} ${t.comments}` : t.comments}
                       </button>
+                    )}
+
+                    {/* ИСПРАВЛЕНИЕ: НОВОЕ КОНТЕКСТНОЕ МЕНЮ */}
+                    {isMenuOpen && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-[60]" 
+                          onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} 
+                          onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(null); }}
+                        />
+                        
+                        <div className={`absolute z-[70] flex flex-col gap-2 ${isMe ? 'right-0 items-end' : 'left-0 items-start'} top-full mt-1 min-w-[200px]`}>
+                          
+                          <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800">
+                             {FAST_REACTIONS.map(emoji => (
+                               <button 
+                                 key={emoji} 
+                                 onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); setActiveContextMenu(null); }}
+                                 className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/10 dark:bg-white/10' : ''}`}
+                               >
+                                 {emoji}
+                               </button>
+                             ))}
+                          </div>
+
+                          <div className="flex flex-col bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 dark:border-zinc-800 overflow-hidden w-full">
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }}
+                               className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left"
+                             >
+                               <Reply size={18} className="text-gray-500 dark:text-gray-400" />
+                               {t.replyAction}
+                             </button>
+                             
+                             {!isMedia && (
+                               <button 
+                                 onClick={(e) => { 
+                                   e.stopPropagation(); 
+                                   const textToCopy = msg.content.startsWith('> ') ? msg.content.split('\n\n').slice(1).join('\n\n') : msg.content;
+                                   navigator.clipboard.writeText(textToCopy); 
+                                   setActiveContextMenu(null); 
+                                 }}
+                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left"
+                               >
+                                 <Copy size={18} className="text-gray-500 dark:text-gray-400" />
+                                 {t.copy}
+                               </button>
+                             )}
+
+                             {isMe && !isMedia && (
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); startEditing(msg); setActiveContextMenu(null); }}
+                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left"
+                               >
+                                 <Edit2 size={18} className="text-gray-500 dark:text-gray-400" />
+                                 {t.editAction}
+                               </button>
+                             )}
+
+                             {(isMe || isAdmin) && (
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }}
+                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left border-t border-gray-100/50 dark:border-zinc-800/50"
+                               >
+                                 <Trash2 size={18} className="text-red-500" />
+                                 {t.deleteAction}
+                               </button>
+                             )}
+                          </div>
+                        </div>
+                      </>
                     )}
 
                   </div>
