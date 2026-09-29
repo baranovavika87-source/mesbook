@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send, ArrowLeft, Download } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send, ArrowLeft, Download, Copy, Reply } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -29,7 +29,11 @@ const translations = {
     comments: "Комментарии",
     noComments: "Пока нет комментариев",
     commentPlaceholder: "Комментарий...",
-    commentsCount: ['комментарий', 'комментария', 'комментариев']
+    commentsCount: ['комментарий', 'комментария', 'комментариев'],
+    replyAction: "Ответить",
+    copy: "Копировать",
+    editAction: "Изменить",
+    deleteAction: "Удалить"
   },
   en: {
     wall: "Wall",
@@ -45,7 +49,11 @@ const translations = {
     comments: "Comments",
     noComments: "No comments yet",
     commentPlaceholder: "Comment...",
-    commentsCount: ['comment', 'comments', 'comments']
+    commentsCount: ['comment', 'comments', 'comments'],
+    replyAction: "Reply",
+    copy: "Copy",
+    editAction: "Edit",
+    deleteAction: "Delete"
   }
 };
 
@@ -76,6 +84,7 @@ export default function WallPage() {
   const [commentContent, setCommentContent] = useState('');
   
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const activeThreadRef = useRef<any>(null);
   useEffect(() => {
@@ -203,7 +212,7 @@ export default function WallPage() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 font-sans relative overflow-hidden" onClick={() => setActiveReactionMsg(null)}>
+    <div className="flex h-[100dvh] flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 font-sans relative overflow-hidden" onClick={() => setActiveReactionMsg(null)}>
       
       {/* ЛАЙТБОКС */}
       {fullScreenImage && (
@@ -246,21 +255,33 @@ export default function WallPage() {
             {posts.map((post) => {
               const { text, mediaUrls } = parsePostContent(post.content);
               const reactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
+              const isMenuOpen = activeReactionMsg === post.id;
+              const isMe = String(post.senderId) === String(currentUserId);
 
               return (
-                <div key={post.id} className="bg-white dark:bg-[#1c1c1e] rounded-[24px] overflow-hidden shadow-sm border border-gray-100 dark:border-zinc-800/50">
+                <div 
+                  key={post.id} 
+                  className="bg-white dark:bg-[#1c1c1e] rounded-[24px] overflow-hidden shadow-sm border border-gray-100 dark:border-zinc-800/50 relative"
+                  onContextMenu={(e) => { e.preventDefault(); setActiveReactionMsg(post.id); }}
+                  onTouchStart={(e) => { 
+                    pressTimer.current = setTimeout(() => {
+                      if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
+                      setActiveReactionMsg(post.id);
+                    }, 400); 
+                  }}
+                  onTouchMove={() => {
+                    if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
+                  }}
+                  onTouchEnd={() => { 
+                    if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
+                  }}
+                >
                   
                   <div className="px-5 py-3.5 border-b border-gray-100/50 dark:border-zinc-800/50 flex items-center justify-between bg-white dark:bg-[#1c1c1e]">
                     <span className="text-black dark:text-white font-semibold text-[16px] truncate">{post.channelName}</span>
                     <div className="flex items-center gap-2">
                       {post.isEdited && <span className="text-[10px] text-gray-400 italic font-medium">{t.edited}</span>}
                       <span className="text-gray-400 text-[12px] shrink-0 font-medium">{new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      {post.isMine && (
-                        <div className="flex items-center gap-2 ml-2 border-l border-gray-200 dark:border-zinc-700 pl-3">
-                          <button onClick={() => startEditingPost(post)} className="text-gray-400 hover:text-black dark:hover:text-white transition-colors"><Edit2 size={16} /></button>
-                          <button onClick={() => deletePost(post)} className="text-gray-400 hover:text-black dark:hover:text-white transition-colors"><Trash2 size={16} /></button>
-                        </div>
-                      )}
                     </div>
                   </div>
                   
@@ -290,7 +311,6 @@ export default function WallPage() {
                       <div className="flex flex-wrap gap-1.5">
                         {reactionsKeys.map(key => {
                            const rData = post.reactions[key] || { count: 1, users: [] };
-
                            return (
                              <button 
                                key={key} 
@@ -313,30 +333,79 @@ export default function WallPage() {
                         <MessageCircle size={14} />
                         {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
                       </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === post.id ? null : post.id); }} 
+                        className="text-gray-400 hover:text-black dark:hover:text-white transition-colors p-1"
+                      >
+                        <Smile size={20} />
+                      </button>
+                    </div>
 
-                      <div className="relative">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === post.id ? null : post.id); }} 
-                          className="text-gray-400 hover:text-black dark:hover:text-white transition-colors p-1"
-                        >
-                          <Smile size={20} />
-                        </button>
-                        
-                        {activeReactionMsg === post.id && (
-                          <div className="absolute z-50 flex gap-2 p-2 bg-white dark:bg-[#1c1c1e] rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800 right-0 bottom-8">
+                    {isMenuOpen && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-[60]" 
+                          onClick={(e) => { e.stopPropagation(); setActiveReactionMsg(null); }} 
+                          onContextMenu={(e) => { e.preventDefault(); setActiveReactionMsg(null); }}
+                        />
+                        <div className="absolute z-[70] flex flex-col gap-2 right-4 bottom-14 min-w-[200px] items-end">
+                          <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800">
                              {FAST_REACTIONS.map(emoji => (
                                <button 
                                  key={emoji} 
-                                 onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); }}
-                                 className="w-8 h-8 flex items-center justify-center text-[20px] hover:scale-125 transition-transform active:scale-95"
+                                 onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); setActiveReactionMsg(null); }}
+                                 className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${post.myReaction === emoji ? 'bg-black/10 dark:bg-white/10' : ''}`}
                                >
                                  {emoji}
                                </button>
                              ))}
                           </div>
-                        )}
-                      </div>
-                    </div>
+
+                          <div className="flex flex-col bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 dark:border-zinc-800 overflow-hidden w-full">
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); setActiveReactionMsg(null); }}
+                               className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
+                             >
+                               <Reply size={18} className="text-gray-500 dark:text-gray-400" />
+                               {t.replyAction}
+                             </button>
+                             
+                             <button 
+                               onClick={(e) => { 
+                                 e.stopPropagation(); 
+                                 const textToCopy = parsePostContent(post.content).text;
+                                 navigator.clipboard.writeText(textToCopy); 
+                                 setActiveReactionMsg(null); 
+                               }}
+                               className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
+                             >
+                               <Copy size={18} className="text-gray-500 dark:text-gray-400" />
+                               {t.copy}
+                             </button>
+
+                             {isMe && (
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); startEditingPost(post); setActiveReactionMsg(null); }}
+                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
+                               >
+                                 <Edit2 size={18} className="text-gray-500 dark:text-gray-400" />
+                                 {t.editAction}
+                               </button>
+                             )}
+
+                             {isMe && (
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); setActiveReactionMsg(null); deletePost(post); }}
+                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left"
+                               >
+                                 <Trash2 size={18} className="text-red-500" />
+                                 {t.deleteAction}
+                               </button>
+                             )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                 </div>
