@@ -261,7 +261,7 @@ export default function WallPage() {
               return (
                 <div 
                   key={post.id} 
-                  className="bg-white dark:bg-[#1c1c1e] rounded-[24px] overflow-hidden shadow-sm border border-gray-100 dark:border-zinc-800/50 relative"
+                  className={`bg-white dark:bg-[#1c1c1e] rounded-[24px] overflow-hidden shadow-sm border border-gray-100 dark:border-zinc-800/50 relative ${isMenuOpen ? 'z-50' : 'z-10'}`}
                   onContextMenu={(e) => { e.preventDefault(); setActiveReactionMsg(post.id); }}
                   onTouchStart={(e) => { 
                     pressTimer.current = setTimeout(() => {
@@ -333,12 +333,15 @@ export default function WallPage() {
                         <MessageCircle size={14} />
                         {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
                       </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === post.id ? null : post.id); }} 
-                        className="text-gray-400 hover:text-black dark:hover:text-white transition-colors p-1"
-                      >
-                        <Smile size={20} />
-                      </button>
+
+                      <div className="relative">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === post.id ? null : post.id); }} 
+                          className="text-gray-400 hover:text-black dark:hover:text-white transition-colors p-1"
+                        >
+                          <Smile size={20} />
+                        </button>
+                      </div>
                     </div>
 
                     {isMenuOpen && (
@@ -462,45 +465,6 @@ export default function WallPage() {
           </form>
         </div>
       )}
-
-      {/* МОДАЛКА РЕДАКТИРОВАНИЯ */}
-      {editingPost && (
-        <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-[#1c1c1e] w-full max-w-md rounded-[24px] overflow-hidden shadow-xl border border-gray-100/50 dark:border-zinc-800/50">
-            <div className="px-5 py-4 border-b border-gray-100/50 dark:border-zinc-800/50 flex justify-between items-center">
-              <h3 className="font-bold text-lg text-black dark:text-white">{t.editPost}</h3>
-              <button onClick={() => setEditingPost(null)} className="text-gray-400 hover:text-black dark:hover:text-white transition-colors"><X size={20}/></button>
-            </div>
-            <div className="p-5">
-              <textarea
-                className="w-full bg-[#f2f2f7] dark:bg-black rounded-[16px] p-4 text-[16px] text-black dark:text-white outline-none resize-none border border-gray-200/50 dark:border-zinc-800/50 focus:border-black dark:focus:border-white transition-colors"
-                rows={5}
-                value={editContent}
-                onChange={e => setEditContent(e.target.value)}
-              />
-            </div>
-            <div className="px-5 py-4 bg-gray-50 dark:bg-[#1c1c1e] flex gap-3">
-              <button onClick={() => setEditingPost(null)} className="flex-1 py-3.5 font-semibold text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-zinc-800 rounded-[16px] active:scale-95 transition-transform">{t.cancel}</button>
-              <button onClick={saveEditedPost} className="flex-1 py-3.5 font-semibold text-white bg-black dark:bg-white dark:text-black rounded-[16px] active:scale-95 transition-transform shadow-sm">{t.save}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <nav className="border-t border-gray-200/50 dark:border-zinc-800/50 flex justify-around p-3 bg-[#f2f2f7]/80 dark:bg-black/80 backdrop-blur-md z-10 pb-6">
-        <Link href="/">
-          <a className="flex flex-col items-center text-gray-400 hover:text-black dark:hover:text-white transition-colors">
-            <MessageSquare size={26} className="mb-1" />
-            <span className="text-[10px] font-medium">{t.chats}</span>
-          </a>
-        </Link>
-        <Link href="/wall">
-          <a className="flex flex-col items-center text-black dark:text-white">
-            <Users size={26} className="mb-1" fill="currentColor" />
-            <span className="text-[10px] font-medium">{t.wall}</span>
-          </a>
-        </Link>
-      </nav>
     </div>
   );
 }
