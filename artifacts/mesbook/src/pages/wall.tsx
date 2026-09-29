@@ -79,6 +79,7 @@ export default function WallPage() {
   const [editContent, setEditContent] = useState("");
 
   const [activeReactionMsg, setActiveReactionMsg] = useState<number | null>(null);
+  const [activeContextMenu, setActiveContextMenu] = useState<number | null>(null);
   const [activeThread, setActiveThread] = useState<any>(null);
   const [threadComments, setThreadComments] = useState<any[]>([]);
   const [commentContent, setCommentContent] = useState('');
@@ -180,6 +181,7 @@ export default function WallPage() {
       });
     } catch (e) {}
     setActiveReactionMsg(null);
+    setActiveContextMenu(null);
   };
 
   const handleSendComment = async (e: React.FormEvent) => {
@@ -212,7 +214,7 @@ export default function WallPage() {
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 font-sans relative overflow-hidden" onClick={() => setActiveReactionMsg(null)}>
+    <div className="flex h-[100dvh] flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 font-sans relative overflow-hidden" onClick={() => { setActiveReactionMsg(null); setActiveContextMenu(null); }}>
       
       {/* ЛАЙТБОКС */}
       {fullScreenImage && (
@@ -255,18 +257,18 @@ export default function WallPage() {
             {posts.map((post) => {
               const { text, mediaUrls } = parsePostContent(post.content);
               const reactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
-              const isMenuOpen = activeReactionMsg === post.id;
+              const isMenuOpen = activeContextMenu === post.id;
               const isMe = String(post.senderId) === String(currentUserId);
 
               return (
                 <div 
                   key={post.id} 
                   className={`bg-white dark:bg-[#1c1c1e] rounded-[24px] overflow-hidden shadow-sm border border-gray-100 dark:border-zinc-800/50 relative ${isMenuOpen ? 'z-50' : 'z-10'}`}
-                  onContextMenu={(e) => { e.preventDefault(); setActiveReactionMsg(post.id); }}
+                  onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(post.id); }}
                   onTouchStart={(e) => { 
                     pressTimer.current = setTimeout(() => {
                       if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
-                      setActiveReactionMsg(post.id);
+                      setActiveContextMenu(post.id);
                     }, 400); 
                   }}
                   onTouchMove={() => {
@@ -341,6 +343,20 @@ export default function WallPage() {
                         >
                           <Smile size={20} />
                         </button>
+                        
+                        {activeReactionMsg === post.id && !isMenuOpen && (
+                          <div className="absolute z-50 flex gap-2 p-2 bg-white dark:bg-[#1c1c1e] rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800 right-0 bottom-8">
+                             {FAST_REACTIONS.map(emoji => (
+                               <button 
+                                 key={emoji} 
+                                 onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); setActiveReactionMsg(null); }}
+                                 className={`w-8 h-8 flex items-center justify-center text-[20px] hover:scale-125 transition-transform active:scale-95 ${post.myReaction === emoji ? 'bg-black/10 dark:bg-white/10' : ''}`}
+                               >
+                                 {emoji}
+                               </button>
+                             ))}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -348,15 +364,15 @@ export default function WallPage() {
                       <>
                         <div 
                           className="fixed inset-0 z-[60]" 
-                          onClick={(e) => { e.stopPropagation(); setActiveReactionMsg(null); }} 
-                          onContextMenu={(e) => { e.preventDefault(); setActiveReactionMsg(null); }}
+                          onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} 
+                          onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(null); }}
                         />
                         <div className="absolute z-[70] flex flex-col gap-2 right-4 bottom-14 min-w-[200px] items-end">
                           <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800">
                              {FAST_REACTIONS.map(emoji => (
                                <button 
                                  key={emoji} 
-                                 onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); setActiveReactionMsg(null); }}
+                                 onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); setActiveContextMenu(null); }}
                                  className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${post.myReaction === emoji ? 'bg-black/10 dark:bg-white/10' : ''}`}
                                >
                                  {emoji}
@@ -366,7 +382,7 @@ export default function WallPage() {
 
                           <div className="flex flex-col bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 dark:border-zinc-800 overflow-hidden w-full">
                              <button 
-                               onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); setActiveReactionMsg(null); }}
+                               onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); setActiveContextMenu(null); }}
                                className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
                              >
                                <Reply size={18} className="text-gray-500 dark:text-gray-400" />
@@ -378,7 +394,7 @@ export default function WallPage() {
                                  e.stopPropagation(); 
                                  const textToCopy = parsePostContent(post.content).text;
                                  navigator.clipboard.writeText(textToCopy); 
-                                 setActiveReactionMsg(null); 
+                                 setActiveContextMenu(null); 
                                }}
                                className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
                              >
@@ -388,7 +404,7 @@ export default function WallPage() {
 
                              {isMe && (
                                <button 
-                                 onClick={(e) => { e.stopPropagation(); startEditingPost(post); setActiveReactionMsg(null); }}
+                                 onClick={(e) => { e.stopPropagation(); startEditingPost(post); setActiveContextMenu(null); }}
                                  className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
                                >
                                  <Edit2 size={18} className="text-gray-500 dark:text-gray-400" />
@@ -398,7 +414,7 @@ export default function WallPage() {
 
                              {isMe && (
                                <button 
-                                 onClick={(e) => { e.stopPropagation(); setActiveReactionMsg(null); deletePost(post); }}
+                                 onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); deletePost(post); }}
                                  className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left"
                                >
                                  <Trash2 size={18} className="text-red-500" />
