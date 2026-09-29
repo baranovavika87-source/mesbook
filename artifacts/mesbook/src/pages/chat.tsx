@@ -109,6 +109,10 @@ export default function ChatPage() {
   const isGroupOrChannel = numericChatId >= 100000000;
   const isSavedChat = chatId === 'saved';
   const currentUserId = getUserId();
+  
+  const currentUser = (() => {
+    try { return JSON.parse(localStorage.getItem('mesbook_user') || '{}'); } catch(e) { return {}; }
+  })();
 
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
@@ -154,7 +158,7 @@ export default function ChatPage() {
   
   const editAvatarRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null); // РЕФ ДЛЯ ВОЗВРАТА ФОКУСА
+  const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasScrolledToBottom = useRef(false);
 
@@ -271,14 +275,14 @@ export default function ChatPage() {
         });
         setContent('');
         setEditingMsg(null);
-        setTimeout(() => inputRef.current?.focus(), 10); // Возвращаем фокус
+        setTimeout(() => inputRef.current?.focus(), 10);
         return;
       }
 
       setMessages(prev => prev.map(m => m.id === tempId ? { ...m, content: finalEditedContent, isEdited: true } : m));
       setContent('');
       setEditingMsg(null);
-      setTimeout(() => inputRef.current?.focus(), 10); // Возвращаем фокус
+      setTimeout(() => inputRef.current?.focus(), 10);
 
       try {
         await fetch(`/api/chats/${chatId}/messages/${tempId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalEditedContent }) });
@@ -292,7 +296,6 @@ export default function ChatPage() {
     setContent('');
     setReplyingTo(null);
     
-    // Возвращаем фокус в поле ввода, чтобы клавиатура не пропадала
     setTimeout(() => {
       if (inputRef.current) {
         inputRef.current.focus();
@@ -488,7 +491,6 @@ export default function ChatPage() {
   };
 
   return (
-    {/* ИСПРАВЛЕНИЕ 1: Использование h-[100dvh] вместо h-screen для мобильных браузеров */}
     <div className="flex flex-col h-[100dvh] bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative font-sans overflow-hidden">
       
       {/* ЛАЙТБОКС */}
@@ -667,12 +669,12 @@ export default function ChatPage() {
                     <div className={
                       isMedia 
                         ? `relative bg-transparent`
-                        : `shadow-sm relative flex flex-col px-2.5 pt-1.5 pb-1.5 min-w-[60px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[12px] rounded-tr-[2px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[12px] rounded-tl-[2px] border border-gray-100/50 dark:border-zinc-800'}`
+                        : `shadow-sm relative flex flex-col px-2.5 pt-1.5 pb-1.5 min-w-[60px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[12px] rounded-tr-[3px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[12px] rounded-tl-[3px] border border-gray-100/50 dark:border-zinc-800'}`
                     }>
                       
                       {renderMessageContent(msg.content, isMe, msg.isEdited)}
                       
-                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium bottom-1 right-1.5 opacity-60 ${isMedia ? 'bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10 bottom-1.5 right-1.5' : ''}`}>
+                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium bottom-1 right-2 opacity-60 ${isMedia ? 'bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10 bottom-1.5 right-1.5' : ''}`}>
                         <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                         {msg.isEdited && !isMedia && <span className="ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
                         
@@ -763,7 +765,7 @@ export default function ChatPage() {
                           <div className="flex flex-col bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 dark:border-zinc-800 overflow-hidden w-full">
                              <button 
                                onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }}
-                               className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-100/50 dark:border-zinc-800/50"
+                               className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
                              >
                                <Reply size={18} className="text-gray-500 dark:text-gray-400" />
                                {t.replyAction}
@@ -777,7 +779,7 @@ export default function ChatPage() {
                                    navigator.clipboard.writeText(textToCopy); 
                                    setActiveContextMenu(null); 
                                  }}
-                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-100/50 dark:border-zinc-800/50"
+                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
                                >
                                  <Copy size={18} className="text-gray-500 dark:text-gray-400" />
                                  {t.copy}
@@ -787,7 +789,7 @@ export default function ChatPage() {
                              {isMe && !isMedia && (
                                <button 
                                  onClick={(e) => { e.stopPropagation(); startEditing(msg); setActiveContextMenu(null); }}
-                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-100/50 dark:border-zinc-800/50"
+                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
                                >
                                  <Edit2 size={18} className="text-gray-500 dark:text-gray-400" />
                                  {t.editAction}
@@ -851,7 +853,6 @@ export default function ChatPage() {
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-10 h-10 shrink-0 flex items-center justify-center text-gray-500 hover:text-black dark:hover:text-white transition-colors disabled:opacity-50">
               {isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={24} />}
             </button>
-            {/* ИСПРАВЛЕНИЕ 2: Привязываем input к ref */}
             <input 
               ref={inputRef}
               className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" 
