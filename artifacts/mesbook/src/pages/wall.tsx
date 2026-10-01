@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send, ArrowLeft, Download, Copy, Reply } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send, ArrowLeft, Download, Copy, Reply, Check, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -133,6 +133,16 @@ export default function WallPage() {
   useEffect(() => {
     if (activeThread) loadComments(activeThread.chatId, activeThread.id);
   }, [activeThread]);
+
+  const parsePostContent = (content: string) => {
+    const mediaUrls: string[] = [];
+    const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
+    let match;
+    let text = content;
+    while ((match = mediaRegex.exec(content)) !== null) mediaUrls.push(match[1]);
+    text = text.replace(mediaRegex, '').trim();
+    return { text, mediaUrls };
+  };
 
   const parseContent = (rawText: string) => {
     const mediaUrls: string[] = [];
