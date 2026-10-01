@@ -386,7 +386,6 @@ export default function ChatsPage() {
   const renderChatCard = (chat: any) => {
     const participant = chat.participant || {};
     const isSaved = participant.isSaved || String(chat.id) === 'saved';
-    // ИСПРАВЛЕНИЕ: Статус онлайн теперь реагирует за 15 секунд
     const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 15000) : false;
     const timeRaw = chat.lastMessageAt || chat.lastMessageTime;
     
@@ -467,7 +466,6 @@ export default function ChatsPage() {
   };
 
   const renderGlobalUserCard = (user: any) => {
-    // ИСПРАВЛЕНИЕ: Статус онлайн теперь реагирует за 15 секунд
     const isOnline = user.lastSeen ? (Date.now() - user.lastSeen < 15000) : false;
     
     return (
@@ -503,7 +501,7 @@ export default function ChatsPage() {
 
   return (
     <div 
-      className="flex h-screen flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative overflow-hidden font-sans"
+      className="flex h-[100dvh] flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative overflow-hidden font-sans"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
@@ -791,8 +789,8 @@ export default function ChatsPage() {
                 )}
               </button>
               
-              <h1 className="text-[20px] font-semibold text-black dark:text-white tracking-wide">
-                {t.chats}
+              <h1 className="text-[22px] font-extrabold text-black dark:text-white tracking-tight" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                mesogram
               </h1>
               
               <button 
