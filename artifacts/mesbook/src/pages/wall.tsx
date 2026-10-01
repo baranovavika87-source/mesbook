@@ -134,14 +134,27 @@ export default function WallPage() {
     if (activeThread) loadComments(activeThread.chatId, activeThread.id);
   }, [activeThread]);
 
-  const parsePostContent = (content: string) => {
+  const parseContent = (rawText: string) => {
     const mediaUrls: string[] = [];
     const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
     let match;
-    let text = content;
-    while ((match = mediaRegex.exec(content)) !== null) mediaUrls.push(match[1]);
+    let text = rawText;
+    while ((match = mediaRegex.exec(text)) !== null) mediaUrls.push(match[1]);
     text = text.replace(mediaRegex, '').trim();
-    return { text, mediaUrls };
+    
+    let quotedText = null;
+    if (text.startsWith('> ')) {
+      const parts = text.split('\n\n');
+      quotedText = parts[0].replace('> ', '');
+      if (quotedText.startsWith('[MEDIA]')) quotedText = t.photo;
+      text = parts.slice(1).join('\n\n');
+    }
+
+    const hasMedia = mediaUrls.length > 0;
+    const hasText = !!text || !!quotedText;
+    const isVideo = hasMedia && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
+    
+    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
   };
 
   const startEditingPost = (post: any) => {
@@ -253,180 +266,117 @@ export default function WallPage() {
             </Link>
           </div>
         ) : (
-          <div className="flex flex-col space-y-5">
+          <div className="flex flex-col">
             {posts.map((post) => {
-              const { text, mediaUrls } = parsePostContent(post.content);
+              const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
               const reactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
               const isMenuOpen = activeContextMenu === post.id;
               const isMe = String(post.senderId) === String(currentUserId);
+              const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
               return (
-                <div 
-                  key={post.id} 
-                  className={`bg-white dark:bg-[#1c1c1e] rounded-[24px] overflow-hidden shadow-sm border border-gray-100 dark:border-zinc-800/50 relative ${isMenuOpen ? 'z-50' : 'z-10'}`}
+                <div key={post.id} className={`w-full bg-white dark:bg-[#1c1c1e] rounded-[16px] shadow-sm border border-gray-100/50 dark:border-zinc-800/50 flex flex-col overflow-hidden relative mb-4 ${isMenuOpen ? 'z-50' : 'z-10'}`}
                   onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(post.id); }}
-                  onTouchStart={(e) => { 
-                    pressTimer.current = setTimeout(() => {
-                      if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
-                      setActiveContextMenu(post.id);
-                    }, 400); 
-                  }}
-                  onTouchMove={() => {
-                    if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
-                  }}
-                  onTouchEnd={() => { 
-                    if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
-                  }}
+                  onTouchStart={(e) => { pressTimer.current = setTimeout(() => { if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); setActiveContextMenu(post.id); }, 400); }}
+                  onTouchMove={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
+                  onTouchEnd={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
                 >
-                  
-                  <div className="px-5 py-3.5 border-b border-gray-100/50 dark:border-zinc-800/50 flex items-center justify-between bg-white dark:bg-[#1c1c1e]">
-                    <span className="text-black dark:text-white font-semibold text-[16px] truncate">{post.channelName}</span>
+                  <div className="px-3 pt-3 pb-2 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      {post.isEdited && <span className="text-[10px] text-gray-400 italic font-medium">{t.edited}</span>}
-                      <span className="text-gray-400 text-[12px] shrink-0 font-medium">{new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                       <div className="w-8 h-8 bg-gray-200 dark:bg-zinc-800 rounded-full flex items-center justify-center font-bold text-[13px] text-black dark:text-white border border-gray-300/30 dark:border-zinc-700">{post.channelName.charAt(0).toUpperCase()}</div>
+                       <span className="font-semibold text-[15px] text-black dark:text-white">{post.channelName}</span>
                     </div>
                   </div>
-                  
-                  {mediaUrls.length > 0 && (
-                    <div className={`grid gap-0.5 bg-gray-200 dark:bg-black ${mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+
+                  {hasMedia && (
+                    <div className={`relative w-full overflow-hidden flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
                       {mediaUrls.map((url, idx) => (
-                        <div key={idx} className="w-full aspect-square bg-gray-100 dark:bg-zinc-900 relative">
-                          {url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/') ? (
-                            <video src={url} controls className="w-full h-full object-cover absolute inset-0" />
-                          ) : (
-                            <img onClick={() => setFullScreenImage(url)} src={url} alt="Media" className="w-full h-full object-cover absolute inset-0 cursor-pointer" />
-                          )}
-                        </div>
+                         isVideo 
+                           ? <video key={idx} src={url} controls className="w-full h-auto max-h-[400px] object-cover" />
+                           : <img key={idx} src={url} onClick={() => setFullScreenImage(url)} className="w-full h-auto max-h-[400px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                       ))}
                     </div>
                   )}
-
-                  {text && (
-                    <div className="px-5 pt-4 pb-2">
-                      <p className="text-black dark:text-white text-[15px] leading-relaxed whitespace-pre-wrap">{text}</p>
+                  
+                  {hasText && (
+                    <div className="px-3 pt-2 pb-2">
+                       {quotedText && (
+                         <div className={`mb-1 pl-2 border-l-[3px] text-[12px] font-medium opacity-80 truncate border-black/30 dark:border-white/30`}>{quotedText}</div>
+                       )}
+                       <div className="text-[15px] leading-snug break-words whitespace-pre-wrap text-black dark:text-white">
+                         {text}
+                         <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none">
+                           {post.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
+                           {timeStr}
+                           {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                         </span>
+                         <div className="clear-both"></div>
+                       </div>
+                    </div>
+                  )}
+                  
+                  {!hasText && hasMedia && (
+                    <div className="px-3 pb-2 pt-1 flex justify-end">
+                       <span className="text-[10px] opacity-60 flex gap-1 items-center text-gray-500">
+                         {timeStr}
+                         {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                       </span>
                     </div>
                   )}
 
-                  <div className="px-5 pb-4 pt-2 flex flex-col gap-3 relative">
-                    
-                    {reactionsKeys.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {reactionsKeys.map(key => {
-                           const rData = post.reactions[key] || { count: 1, users: [] };
-                           return (
-                             <button 
-                               key={key} 
-                               onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }}
-                               className={`flex items-center justify-center gap-1.5 h-[26px] px-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-md z-10' : 'bg-gray-50 dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
-                             >
-                               <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
-                               <span className="text-[12px] font-bold leading-none flex items-center justify-center mt-[1px]">{rData.count}</span>
-                             </button>
-                           )
-                        })}
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between border-t border-gray-100/50 dark:border-zinc-800/50 pt-3">
-                      <button 
-                        onClick={() => { setActiveThread(post); setThreadComments([]); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full text-[12px] font-bold text-gray-600 dark:text-gray-300 active:scale-95 transition-transform"
-                      >
-                        <MessageCircle size={14} />
-                        {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
-                      </button>
-
-                      <div className="relative">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); setActiveReactionMsg(activeReactionMsg === post.id ? null : post.id); }} 
-                          className="text-gray-400 hover:text-black dark:hover:text-white transition-colors p-1"
-                        >
-                          <Smile size={20} />
-                        </button>
-                        
-                        {activeReactionMsg === post.id && !isMenuOpen && (
-                          <div className="absolute z-50 flex gap-2 p-2 bg-white dark:bg-[#1c1c1e] rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800 right-0 bottom-8">
-                             {FAST_REACTIONS.map(emoji => (
-                               <button 
-                                 key={emoji} 
-                                 onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); setActiveReactionMsg(null); }}
-                                 className={`w-8 h-8 flex items-center justify-center text-[20px] hover:scale-125 transition-transform active:scale-95 ${post.myReaction === emoji ? 'bg-black/10 dark:bg-white/10' : ''}`}
-                               >
-                                 {emoji}
-                               </button>
-                             ))}
-                          </div>
-                        )}
-                      </div>
+                  {reactionsKeys.length > 0 && (
+                    <div className="px-3 pb-3 flex flex-wrap gap-1.5">
+                       {reactionsKeys.map(key => (
+                         <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }} className={`flex items-center justify-center gap-1 h-[26px] px-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-md' : 'bg-gray-50 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700 shadow-sm'}`}>
+                           <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                           <span className="text-[12px] font-bold leading-none flex items-center justify-center mt-[1px]">{post.reactions[key].count}</span>
+                         </button>
+                       ))}
                     </div>
+                  )}
 
-                    {isMenuOpen && (
-                      <>
-                        <div 
-                          className="fixed inset-0 z-[60]" 
-                          onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} 
-                          onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(null); }}
-                        />
-                        <div className="absolute z-[70] flex flex-col gap-2 right-4 bottom-14 min-w-[200px] items-end">
-                          <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800">
-                             {FAST_REACTIONS.map(emoji => (
-                               <button 
-                                 key={emoji} 
-                                 onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); setActiveContextMenu(null); }}
-                                 className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${post.myReaction === emoji ? 'bg-black/10 dark:bg-white/10' : ''}`}
-                               >
-                                 {emoji}
-                               </button>
-                             ))}
-                          </div>
+                  <button onClick={() => { setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 dark:bg-white/5 border-t border-gray-100/50 dark:border-zinc-800 transition-colors">
+                    <div className="flex gap-2 items-center">
+                      <MessageCircle size={16} className="text-gray-500 dark:text-zinc-400" />
+                      <span className="text-[13px] font-medium text-blue-500 dark:text-blue-400">
+                        {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
+                      </span>
+                    </div>
+                    <ChevronRight size={16} className="text-gray-400 dark:text-zinc-500" />
+                  </button>
 
-                          <div className="flex flex-col bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 dark:border-zinc-800 overflow-hidden w-full">
-                             <button 
-                               onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); setActiveContextMenu(null); }}
-                               className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
-                             >
-                               <Reply size={18} className="text-gray-500 dark:text-gray-400" />
-                               {t.replyAction}
+                  {isMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(null); }} />
+                      <div className="absolute z-[70] flex flex-col gap-2 right-4 bottom-14 min-w-[200px] items-end">
+                        <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800">
+                           {FAST_REACTIONS.map(emoji => (
+                             <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${post.myReaction === emoji ? 'bg-black/10 dark:bg-white/10' : ''}`}>
+                               {emoji}
                              </button>
-                             
-                             <button 
-                               onClick={(e) => { 
-                                 e.stopPropagation(); 
-                                 const textToCopy = parsePostContent(post.content).text;
-                                 navigator.clipboard.writeText(textToCopy); 
-                                 setActiveContextMenu(null); 
-                               }}
-                               className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
-                             >
-                               <Copy size={18} className="text-gray-500 dark:text-gray-400" />
-                               {t.copy}
-                             </button>
-
-                             {isMe && (
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); startEditingPost(post); setActiveContextMenu(null); }}
-                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
-                               >
-                                 <Edit2 size={18} className="text-gray-500 dark:text-gray-400" />
-                                 {t.editAction}
-                               </button>
-                             )}
-
-                             {isMe && (
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); deletePost(post); }}
-                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left"
-                               >
-                                 <Trash2 size={18} className="text-red-500" />
-                                 {t.deleteAction}
-                               </button>
-                             )}
-                          </div>
+                           ))}
                         </div>
-                      </>
-                    )}
-                  </div>
-
+                        <div className="flex flex-col bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 dark:border-zinc-800 overflow-hidden w-full">
+                           <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); setActiveContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50">
+                             <Reply size={18} className="text-gray-500 dark:text-gray-400" /> {t.replyAction}
+                           </button>
+                           <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(post.content).text); setActiveContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50">
+                             <Copy size={18} className="text-gray-500 dark:text-gray-400" /> {t.copy}
+                           </button>
+                           {isMe && (
+                             <button onClick={(e) => { e.stopPropagation(); startEditingPost(post); setActiveContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50">
+                               <Edit2 size={18} className="text-gray-500 dark:text-gray-400" /> {t.editAction}
+                             </button>
+                           )}
+                           {isMe && (
+                             <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); deletePost(post); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left">
+                               <Trash2 size={18} className="text-red-500" /> {t.deleteAction}
+                             </button>
+                           )}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -447,7 +397,7 @@ export default function WallPage() {
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
             <div className="bg-white dark:bg-[#1c1c1e] p-4 rounded-[20px] shadow-sm mb-2 border border-gray-100/50 dark:border-zinc-800">
               <span className="font-semibold text-[14px] text-gray-500 mb-1 block">{activeThread.channelName}</span>
-              <p className="text-[15px] text-black dark:text-white whitespace-pre-wrap">{parsePostContent(activeThread.content).text}</p>
+              <p className="text-[15px] text-black dark:text-white whitespace-pre-wrap">{parseContent(activeThread.content).text}</p>
             </div>
             
             {threadComments.length === 0 ? (
