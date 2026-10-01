@@ -110,9 +110,7 @@ export default function ChatPage() {
   const isSavedChat = chatId === 'saved';
   const currentUserId = getUserId();
   
-  const currentUser = (() => {
-    try { return JSON.parse(localStorage.getItem('mesbook_user') || '{}'); } catch(e) { return {}; }
-  })();
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('mesbook_user') || '{}'); } catch(e) { return {}; } })();
 
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
@@ -293,7 +291,6 @@ export default function ChatPage() {
     const finalContent = replyingTo ? `> ${replyingTo.content}\n\n${tempContent}` : tempContent;
     setContent('');
     setReplyingTo(null);
-    
     setTimeout(() => { if (inputRef.current) inputRef.current.focus(); }, 10);
     
     const tempMsg = { id: Date.now(), content: finalContent, isSending: !isSavedChat, senderId: currentUserId, createdAt: new Date().toISOString() };
@@ -416,7 +413,7 @@ export default function ChatPage() {
   const isOnline = lastSeen ? (Date.now() - lastSeen < 15000) : false;
   
   let subtitleText = "";
-  let subtitleColor = "text-gray-400 dark:text-zinc-500"; 
+  let subtitleColor = "text-[#86868b] dark:text-[#98989d]"; 
 
   if (typingUsers.length > 0) {
     if (typingUsers.length === 1) { subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping; } 
@@ -429,12 +426,11 @@ export default function ChatPage() {
         else { subtitleText = `${membersCount} ${declOfNum(membersCount, t.members, lang)}, ${onlineCount || 1} ${t.onlineCount}`; }
       }
     } else {
-      subtitleColor = isOnline ? 'text-black dark:text-white font-medium' : 'text-gray-400 dark:text-zinc-500';
+      subtitleColor = isOnline ? 'text-[#1d1d1f] dark:text-[#f5f5f7] font-medium' : 'text-[#86868b] dark:text-[#98989d]';
       subtitleText = isOnline ? t.online : (lastSeen ? `${t.lastSeenAt} ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : t.recently);
     }
   }
 
-  // Парсинг контента сообщений
   const parseContent = (rawText: string) => {
     const mediaUrls: string[] = [];
     const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
@@ -463,33 +459,33 @@ export default function ChatPage() {
       <>
         <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(null); }} />
         <div className={`absolute z-[70] flex flex-col gap-2 ${isMe ? 'right-0 items-end' : 'left-0 items-start'} top-full mt-1 min-w-[200px]`}>
-          <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800">
+          <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
              {FAST_REACTIONS.map(emoji => (
-               <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/10 dark:bg-white/10' : ''}`}>
+               <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
                  {emoji}
                </button>
              ))}
           </div>
 
-          <div className="flex flex-col bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 dark:border-zinc-800 overflow-hidden w-full">
-             <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50">
-               <Reply size={18} className="text-gray-500 dark:text-gray-400" /> {t.replyAction}
+          <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
+             <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+               <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
              </button>
              
              {parseContent(msg.content).hasText && (
-               <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(msg.content).text); setActiveContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50">
-                 <Copy size={18} className="text-gray-500 dark:text-gray-400" /> {t.copy}
+               <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(msg.content).text); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                 <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
                </button>
              )}
 
              {isMe && parseContent(msg.content).hasText && (
-               <button onClick={(e) => { e.stopPropagation(); startEditing(msg); setActiveContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50">
-                 <Edit2 size={18} className="text-gray-500 dark:text-gray-400" /> {t.editAction}
+               <button onClick={(e) => { e.stopPropagation(); startEditing(msg); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                 <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
                </button>
              )}
 
              {(isMe || isAdmin) && (
-               <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left">
+               <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left">
                  <Trash2 size={18} className="text-red-500" /> {t.deleteAction}
                </button>
              )}
@@ -500,7 +496,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative font-sans overflow-hidden">
+    <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20">
       
       {/* ЛАЙТБОКС */}
       {fullScreenImage && (
@@ -517,47 +513,46 @@ export default function ChatPage() {
 
       {/* МОДАЛКА КОММЕНТАРИЕВ */}
       {activeThread && (
-        <div className="fixed inset-0 z-[80] bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-bottom duration-300">
-          <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
+        <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300">
+          <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
             <div className="flex items-center gap-4">
-              <button onClick={() => setActiveThread(null)} className="text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
-              <h1 className="text-[18px] font-semibold text-black dark:text-white">{t.comments}</h1>
+              <button onClick={() => setActiveThread(null)} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
+              <h1 className="text-[18px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.comments}</h1>
             </div>
           </header>
           
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            {/* Отрисовка исходного поста в комментах */}
-            <div className="bg-white dark:bg-[#1c1c1e] p-4 rounded-[16px] shadow-sm mb-2 border border-gray-100/50 dark:border-zinc-800">
-              <span className="font-semibold text-[14px] text-gray-500 mb-1 block">{activeThread.senderName || t.companion}</span>
-              <p className="text-[15px] text-black dark:text-white whitespace-pre-wrap">{parseContent(activeThread.content).text}</p>
+            <div className="bg-white dark:bg-[#222224] p-4 rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none mb-2 border border-black/5 dark:border-white/5">
+              <span className="font-semibold text-[14px] text-[#86868b] dark:text-[#98989d] mb-1 block">{activeThread.senderName || t.companion}</span>
+              <p className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap">{parseContent(activeThread.content).text}</p>
             </div>
             
             {threadComments.length === 0 ? (
-               <div className="text-center text-gray-400 dark:text-zinc-600 mt-10 font-medium">{t.noComments}</div>
+               <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
             ) : (
                threadComments.map(c => (
                  <div key={c.id} className="flex gap-3 items-start">
-                   <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center shrink-0 overflow-hidden text-[12px] font-medium border border-gray-300/30 dark:border-zinc-700">
+                   <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
                      {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
                    </div>
-                   <div className="flex flex-col flex-1 bg-white dark:bg-[#1c1c1e] p-3 rounded-[16px] rounded-tl-none shadow-sm border border-gray-100/50 dark:border-zinc-800">
-                     <span className="text-[12px] font-bold mb-1 text-black dark:text-white">{c.senderName}</span>
-                     <span className="text-[14px] text-black dark:text-white whitespace-pre-wrap leading-snug">{c.content}</span>
-                     <span className="text-[10px] text-gray-400 mt-1 text-right">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                   <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
+                     <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
+                     <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{c.content}</span>
+                     <span className="text-[11px] text-[#86868b] dark:text-[#98989d] mt-1.5 text-right">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                    </div>
                  </div>
                ))
             )}
           </div>
           
-          <form onSubmit={handleSendComment} className="p-3 bg-[#f2f2f7] dark:bg-black border-t border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-2 pb-6">
+          <form onSubmit={handleSendComment} className="p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl border-t border-black/5 dark:border-white/5 flex items-center gap-2 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
             <input 
-              className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[15px] shadow-sm focus:border-black dark:focus:border-white" 
+              className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px]" 
               value={commentContent} 
               onChange={e => setCommentContent(e.target.value)} 
               placeholder={t.commentPlaceholder} 
             />
-            <button type="submit" disabled={!commentContent.trim()} className="w-10 h-10 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-sm">
+            <button type="submit" disabled={!commentContent.trim()} className="w-[42px] h-[42px] rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">
               <Send size={18} className="ml-1" />
             </button>
           </form>
@@ -566,17 +561,17 @@ export default function ChatPage() {
 
       {/* ПРОФИЛЬ */}
       {showProfile && chatInfo?.participant && (
-        <div className="fixed inset-0 z-50 bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-bottom duration-200 overflow-y-auto">
-          <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-gray-200/50 dark:border-zinc-900 sticky top-0 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md z-10">
+        <div className="fixed inset-0 z-50 bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-200 overflow-y-auto">
+          <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
             <div className="flex items-center gap-6">
-              <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
-              <h1 className="text-[20px] font-semibold text-black dark:text-white">{t.info}</h1>
+              <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
+              <h1 className="text-[20px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.info}</h1>
             </div>
             {isAdmin && !isEditingChat && (
-              <button onClick={handleEditChatClick} className="p-1 text-black dark:text-white active:scale-95 transition-transform"><Edit3 size={24} /></button>
+              <button onClick={handleEditChatClick} className="p-1 text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform"><Edit3 size={24} /></button>
             )}
             {isEditingChat && (
-              <button onClick={handleSaveChatSettings} disabled={isSavingChat} className="p-1 text-black dark:text-white active:scale-95 transition-transform">
+              <button onClick={handleSaveChatSettings} disabled={isSavingChat} className="p-1 text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform">
                 {isSavingChat ? <Loader2 size={24} className="animate-spin" /> : <Check size={26} strokeWidth={2.5} />}
               </button>
             )}
@@ -585,30 +580,30 @@ export default function ChatPage() {
           {isEditingChat ? (
             <div className="px-4 pt-8 w-full max-w-lg mx-auto flex flex-col gap-5">
               <div className="flex justify-center mb-4">
-                <div className="w-[120px] h-[120px] rounded-full shadow-md bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-800 relative cursor-pointer" onClick={() => editAvatarRef.current?.click()}>
-                  {editChatAvatar && editChatAvatar.length > 5 ? <img src={editChatAvatar} className="w-full h-full object-cover" /> : <Camera size={36} className="text-gray-400" />}
+                <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-white dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 relative cursor-pointer" onClick={() => editAvatarRef.current?.click()}>
+                  {editChatAvatar && editChatAvatar.length > 5 ? <img src={editChatAvatar} className="w-full h-full object-cover" /> : <Camera size={36} className="text-[#86868b] dark:text-[#98989d]" />}
                   {isSavingChat && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
                 </div>
                 <input type="file" accept="image/*" className="hidden" ref={editAvatarRef} onChange={handleEditAvatarUpload} />
               </div>
-              <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden border border-gray-100/50 dark:border-zinc-800/50">
-                <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-900/60">
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mt-1">{t.name}</label>
-                  <input type="text" value={editChatName} onChange={e => setEditChatName(e.target.value)} className="w-full bg-transparent py-1.5 text-[17px] font-medium text-black dark:text-white outline-none" />
+              <div className="bg-white dark:bg-[#222224] rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden border border-black/5 dark:border-white/5">
+                <div className="px-5 py-3 border-b border-black/5 dark:border-white/5">
+                  <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mt-1">{t.name}</label>
+                  <input type="text" value={editChatName} onChange={e => setEditChatName(e.target.value)} className="w-full bg-transparent py-1.5 text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
                 </div>
                 <div className="px-5 py-4">
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t.desc}</label>
-                  <textarea rows={4} value={editChatDesc} onChange={e => setEditChatDesc(e.target.value)} className="w-full bg-transparent text-[16px] text-black dark:text-white outline-none resize-none" />
+                  <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mb-2">{t.desc}</label>
+                  <textarea rows={4} value={editChatDesc} onChange={e => setEditChatDesc(e.target.value)} className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none" />
                 </div>
               </div>
             </div>
           ) : (
             <div className="flex flex-col items-center pt-8 pb-4">
-              <div className="w-[120px] h-[120px] rounded-full shadow-md bg-white dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-zinc-800 mb-4">
-                {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? <img src={chatInfo.participant.avatarUrl} className="w-full h-full object-cover" /> : <span className="text-[40px] font-medium text-black dark:text-white">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>}
+              <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 mb-4">
+                {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? <img src={chatInfo.participant.avatarUrl} className="w-full h-full object-cover" /> : <span className="text-[40px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>}
               </div>
-              <h2 className="text-[22px] font-bold text-black dark:text-white mb-1 text-center px-4">{chatInfo.participant.displayName}</h2>
-              {chatInfo.participant.username && <p className="text-[15px] text-gray-500">{chatInfo.participant.username}</p>}
+              <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 text-center px-4 tracking-tight">{chatInfo.participant.displayName}</h2>
+              {chatInfo.participant.username && <p className="text-[15px] text-[#86868b] dark:text-[#98989d]">{chatInfo.participant.username}</p>}
               <p className={`mt-1.5 text-[13px] font-medium ${subtitleColor}`}>{subtitleText}</p>
             </div>
           )}
@@ -616,17 +611,17 @@ export default function ChatPage() {
       )}
 
       {/* ШАПКА ЧАТА */}
-      <header className="px-3 pt-10 pb-3 border-b border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-3 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md relative z-10 shadow-sm">
-        <Link href="/"><a className="p-2 text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
-        <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
+      <header className="px-3 pt-10 pb-3 border-b border-black/5 dark:border-white/5 flex items-center gap-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl relative z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+        <Link href="/"><a className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
+        <div className="flex items-center gap-3.5 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
           <div className="relative w-[44px] h-[44px] shrink-0">
-            <div className={`w-full h-full rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSavedChat ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
+            <div className={`w-full h-full rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-black/5 dark:border-white/5 ${isSavedChat ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
               {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} className="w-full h-full object-cover" /> : displayName.charAt(0).toUpperCase()}
             </div>
-            {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-black dark:bg-white border-2 border-white dark:border-[#1c1c1e] rounded-full z-10"></div>}
+            {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>}
           </div>
           <div className="flex flex-col">
-            <h2 className="font-semibold text-black dark:text-white text-[16px] leading-tight truncate pr-2">{displayName}</h2>
+            <h2 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] leading-tight truncate pr-2 tracking-tight">{displayName}</h2>
             {subtitleText && <p className={`text-[12px] font-medium mt-0.5 ${subtitleColor}`}>{subtitleText}</p>}
           </div>
         </div>
@@ -652,24 +647,23 @@ export default function ChatPage() {
               const isMenuOpen = activeContextMenu === msg.id;
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
-              // --- СТИЛЬ ДЛЯ КАНАЛОВ И ГРУПП (В ВИДЕ КАРТОЧЕК КАК У КХЛ) ---
               if (isGroupOrChannel) {
                 return (
-                  <div key={msg.id} className={`flex flex-col w-[90%] sm:w-[85%] mb-3 relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} ${isMenuOpen ? 'z-50' : 'z-10'}`}>
+                  <div key={msg.id} className={`flex flex-col w-[90%] sm:w-[85%] mb-4 relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} ${isMenuOpen ? 'z-50' : 'z-10'}`}>
                     {showDate && (
-                      <div className="flex justify-center my-3 w-full">
-                        <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm capitalize">{currentDateStr}</span>
+                      <div className="flex justify-center my-4 w-full">
+                        <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">{currentDateStr}</span>
                       </div>
                     )}
                     <div 
-                      className={`w-full bg-white dark:bg-[#1c1c1e] rounded-[16px] shadow-sm border border-gray-100/50 dark:border-zinc-800/50 flex flex-col overflow-hidden relative`}
+                      className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative`}
                       onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(msg.id); }}
                       onTouchStart={(e) => { pressTimer.current = setTimeout(() => { if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); setActiveContextMenu(msg.id); }, 400); }}
                       onTouchMove={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
                       onTouchEnd={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
                     >
                       {hasMedia && (
-                        <div className={`relative w-full overflow-hidden flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
+                        <div className={`relative w-full overflow-hidden flex justify-center bg-[#f5f5f7] dark:bg-[#161618] ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
                           {mediaUrls.map((url, idx) => (
                              isVideo 
                                ? <video key={idx} src={url} controls className="w-full h-auto max-h-[400px] object-cover" />
@@ -679,16 +673,16 @@ export default function ChatPage() {
                       )}
                       
                       {hasText && (
-                        <div className="px-3 pt-2 pb-2">
+                        <div className="px-4 pt-3 pb-2.5">
                            {quotedText && (
-                             <div className={`mb-1 pl-2 border-l-[3px] text-[12px] font-medium opacity-80 truncate border-black/30 dark:border-white/30`}>{quotedText}</div>
+                             <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
                            )}
-                           <div className="text-[15px] leading-snug break-words whitespace-pre-wrap text-black dark:text-white">
+                           <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
                              {text}
-                             <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none">
+                             <span className="float-right inline-flex items-center gap-1 text-[11px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
                                {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                {timeStr}
-                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/><Check size={12} strokeWidth={2.5}/></div>}
                              </span>
                              <div className="clear-both"></div>
                            </div>
@@ -696,33 +690,33 @@ export default function ChatPage() {
                       )}
                       
                       {!hasText && hasMedia && (
-                        <div className="px-3 pb-2 pt-1 flex justify-end">
-                           <span className="text-[10px] opacity-60 flex gap-1 items-center text-gray-500">
+                        <div className="px-4 pb-2 pt-1.5 flex justify-end">
+                           <span className="text-[11px] text-[#86868b] dark:text-[#98989d] flex gap-1 items-center">
                              {timeStr}
-                             {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                             {isMe && <div className="flex -space-x-1"><Check size={12} strokeWidth={2.5}/><Check size={12} strokeWidth={2.5}/></div>}
                            </span>
                         </div>
                       )}
 
                       {reactionsKeys.length > 0 && (
-                        <div className="px-3 pb-3 flex flex-wrap gap-1.5">
+                        <div className="px-4 pb-3 flex flex-wrap gap-1.5">
                            {reactionsKeys.map(key => (
-                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[26px] px-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-md' : 'bg-gray-50 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700 shadow-sm'}`}>
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] border-[#1d1d1f] dark:border-[#f5f5f7]' : 'bg-[#f5f5f7] dark:bg-[#333336] text-[#86868b] dark:text-[#98989d] border-black/5 dark:border-white/5'}`}>
                                <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
-                               <span className="text-[12px] font-bold leading-none flex items-center justify-center mt-[1px]">{msg.reactions[key].count}</span>
+                               <span className="text-[13px] font-bold leading-none flex items-center justify-center mt-[1px]">{msg.reactions[key].count}</span>
                              </button>
                            ))}
                         </div>
                       )}
 
-                      <button onClick={() => { setActiveThread(msg); setThreadComments([]); }} className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 dark:bg-white/5 border-t border-gray-100/50 dark:border-zinc-800 transition-colors">
-                        <div className="flex gap-2 items-center">
-                          <MessageCircle size={16} className="text-gray-500 dark:text-zinc-400" />
-                          <span className="text-[13px] font-medium text-blue-500 dark:text-blue-400">
+                      <button onClick={() => { setActiveThread(msg); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3.5 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
+                        <div className="flex gap-2.5 items-center">
+                          <MessageCircle size={18} className="text-[#86868b] dark:text-[#98989d]" />
+                          <span className="text-[14px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
                             {msg.commentsCount > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount, t.commentsCount, lang)}` : t.comments}
                           </span>
                         </div>
-                        <ChevronRight size={16} className="text-gray-400 dark:text-zinc-500" />
+                        <ChevronRight size={18} className="text-[#86868b] dark:text-[#98989d]" />
                       </button>
 
                       {isMenuOpen && renderContextMenu(msg, isMe)}
@@ -731,12 +725,11 @@ export default function ChatPage() {
                 );
               }
 
-              // --- СТИЛЬ ДЛЯ ЛИЧНЫХ ЧАТОВ (КОМПАКТНЫЕ ПУЗЫРИ С АВАТАРКАМИ) ---
               return (
                 <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative ${isMenuOpen ? 'z-50' : 'z-10'}`}>
                   {showDate && (
-                    <div className="flex justify-center my-3 w-full">
-                      <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm capitalize">{currentDateStr}</span>
+                    <div className="flex justify-center my-4 w-full">
+                      <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">{currentDateStr}</span>
                     </div>
                   )}
                   
@@ -748,28 +741,28 @@ export default function ChatPage() {
                     onTouchEnd={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
                   >
                     
-                    <div className={`shadow-sm relative flex flex-col min-w-[60px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[14px] rounded-tr-[4px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[14px] rounded-tl-[4px] border border-gray-100/50 dark:border-zinc-800'}`}>
+                    <div className={`shadow-[0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-none relative flex flex-col min-w-[60px] ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`}>
                       {hasMedia && (
                         <div className={`relative w-full overflow-hidden flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
                           {mediaUrls.map((url, idx) => (
                              isVideo 
-                               ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[14px]' : 'rounded-[14px]'}`} />
-                               : <img key={idx} src={url} onClick={() => setFullScreenImage(url)} className={`w-full h-auto max-h-[400px] object-cover cursor-pointer ${hasText ? 'rounded-t-[14px]' : 'rounded-[14px]'}`} onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
+                               ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} />
+                               : <img key={idx} src={url} onClick={() => setFullScreenImage(url)} className={`w-full h-auto max-h-[400px] object-cover cursor-pointer ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                           ))}
                         </div>
                       )}
                       
                       {hasText && (
-                        <div className="px-3 pt-1.5 pb-2">
+                        <div className="px-3.5 pt-2 pb-2.5">
                            {quotedText && (
-                             <div className={`mb-1 pl-2 border-l-[3px] text-[12px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/30 dark:border-white/30'}`}>{quotedText}</div>
+                             <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/10 dark:border-white/10'}`}>{quotedText}</div>
                            )}
-                           <div className="text-[15px] leading-snug break-words whitespace-pre-wrap">
+                           <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap">
                              {text}
                              <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
                                {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                {timeStr}
-                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/><Check size={12} strokeWidth={2.5}/></div>}
                              </span>
                              <div className="clear-both"></div>
                            </div>
@@ -777,9 +770,9 @@ export default function ChatPage() {
                       )}
 
                       {!hasText && hasMedia && (
-                        <div className="absolute bottom-2 right-2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 backdrop-blur-md">
+                        <div className="absolute bottom-2 right-2 bg-black/50 text-white px-2.5 py-1 rounded-full text-[10px] flex items-center gap-1 backdrop-blur-md">
                            {timeStr}
-                           {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                           {isMe && <div className="flex -space-x-1"><Check size={12} strokeWidth={2.5}/><Check size={12} strokeWidth={2.5}/></div>}
                         </div>
                       )}
                     </div>
@@ -791,11 +784,11 @@ export default function ChatPage() {
                            const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
                            
                            return (
-                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white border-black dark:border-white shadow-md z-10' : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 shadow-sm'}`}>
-                               <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-gray-200 dark:bg-zinc-700 text-[9px] font-bold text-gray-500 dark:text-gray-300 border border-black/10 dark:border-white/10">
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[26px] pl-0.5 pr-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                               <div className="w-[20px] h-[20px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[10px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                  {firstUser?.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
                                </div>
-                               <span className="text-[12px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                               <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
                              </button>
                            );
                         })}
@@ -811,44 +804,44 @@ export default function ChatPage() {
         </div>
       </main>
 
-      <div className="p-3 bg-[#f2f2f7] dark:bg-black border-t border-gray-200/50 dark:border-zinc-900/50 pb-6 relative z-10 flex flex-col">
+      <div className="p-3 bg-white/80 dark:bg-[#222224]/80 border-t border-black/5 dark:border-white/5 pb-6 relative z-10 flex flex-col backdrop-blur-xl shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         {(replyingTo || editingMsg) && (
-          <div className="flex items-center justify-between mb-2 mx-1 px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-[16px] border-l-[3px] border-black dark:border-white shadow-sm">
+          <div className="flex items-center justify-between mb-3 mx-1 px-4 py-3 bg-[#f5f5f7] dark:bg-[#161618] rounded-[18px] border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7]">
             <div className="flex flex-col overflow-hidden mr-4">
-              <span className="text-[11px] font-bold text-black dark:text-white uppercase tracking-wider mb-0.5">
+              <span className="text-[11px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] uppercase tracking-wider mb-0.5">
                 {editingMsg ? t.editing : t.reply}
               </span>
-              <span className="text-[13px] text-gray-500 dark:text-zinc-400 truncate">
+              <span className="text-[14px] text-[#86868b] dark:text-[#98989d] truncate">
                 {editingMsg 
                   ? (editingMsg.content.startsWith('[MEDIA]') ? t.photo : (editingMsg.content.startsWith('> ') ? editingMsg.content.split('\n\n').slice(1).join('\n\n') : editingMsg.content)) 
                   : (replyingTo.content.startsWith('[MEDIA]') ? t.photo : replyingTo.content.replace(/^> .*\n\n/, ''))}
               </span>
             </div>
-            <button type="button" onClick={() => { setReplyingTo(null); setEditingMsg(null); setContent(''); }} className="p-1.5 flex-shrink-0 text-gray-400 hover:text-black dark:hover:text-white rounded-full transition-colors"><X size={18} /></button>
+            <button type="button" onClick={() => { setReplyingTo(null); setEditingMsg(null); setContent(''); }} className="p-1.5 flex-shrink-0 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] rounded-full transition-colors"><X size={18} /></button>
           </div>
         )}
 
         {!isMember ? (
           <div className="flex items-center justify-center pt-1 px-1">
-            <button onClick={joinChat} className="w-full py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-[20px] shadow-sm transition-transform active:scale-95 text-[16px]">
+            <button onClick={joinChat} className="w-full py-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] font-semibold rounded-[20px] transition-transform active:scale-95 text-[16px] shadow-[0_4px_15px_rgba(0,0,0,0.1)] dark:shadow-none">
               {isChannel ? t.subscribe : t.joinGroup}
             </button>
           </div>
         ) : (isChannel && !isAdmin) ? (
           <div className="flex items-center justify-center pt-2 pb-2">
-            <button onClick={() => setIsMuted(!isMuted)} className="text-gray-500 hover:text-black dark:hover:text-white transition-colors text-[16px] font-medium active:scale-95">
+            <button onClick={() => setIsMuted(!isMuted)} className="text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors text-[16px] font-medium active:scale-95">
               {isMuted ? t.unmute : t.mute}
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSend} className="flex items-center gap-2 px-1">
+          <form onSubmit={handleSend} className="flex items-center gap-2.5 px-1">
             <input type="file" accept="image/*,video/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-10 h-10 shrink-0 flex items-center justify-center text-gray-500 hover:text-black dark:hover:text-white transition-colors disabled:opacity-50">
-              {isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={24} />}
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-[42px] h-[42px] shrink-0 flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors disabled:opacity-50">
+              {isUploading ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}
             </button>
             <input 
               ref={inputRef}
-              className="flex-1 bg-white dark:bg-[#1c1c1e] border border-gray-200/50 dark:border-zinc-800 rounded-full px-5 py-2.5 outline-none text-black dark:text-white placeholder-gray-400 text-[16px] shadow-sm transition-colors focus:border-gray-300 dark:focus:border-zinc-600" 
+              className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-3 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[16px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
               value={content} 
               onChange={(e) => {
                 setContent(e.target.value);
@@ -859,7 +852,7 @@ export default function ChatPage() {
               }} 
               placeholder={t.messagePlaceholder} 
             />
-            <button type="submit" disabled={!content.trim()} className="w-[36px] h-[36px] flex-shrink-0 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600 transition-colors active:scale-95 shadow-sm ml-1">
+            <button type="submit" disabled={!content.trim()} className="w-[42px] h-[42px] flex-shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:bg-[#e5e5ea] disabled:text-[#86868b] dark:disabled:bg-[#333336] dark:disabled:text-[#98989d] transition-transform active:scale-95 shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">
               <ChevronRight size={22} strokeWidth={2.5} className="ml-0.5" />
             </button>
           </form>
