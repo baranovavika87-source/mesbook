@@ -22,14 +22,14 @@ const translations = {
     globalSearch: "Глобальный поиск",
     yourChats: "Ваши чаты",
     nothingFound: "Ничего не найдено",
-    startTyping: "Начните вводить имя или название",
-    noChats: "Нет чатов",
+    startTyping: "Начните вводить имя",
+    noChats: "Нет сообщений",
     addAccount: "Добавить аккаунт",
     createGroup: "Создать группу",
     createChannel: "Создать канал",
     saved: "Избранное",
     settings: "Настройки",
-    loginAcc: "Войти в аккаунт",
+    loginAcc: "Войти",
     newAcc: "Новый аккаунт",
     login: "Войти",
     create: "Создать",
@@ -40,12 +40,12 @@ const translations = {
     groupName: "Название группы",
     channelName: "Название канала",
     description: "Описание",
-    descPlaceholderGroup: "Можете указать дополнительное описание группы.",
-    descPlaceholderChannel: "Можете указать дополнительное описание канала.",
+    descPlaceholderGroup: "Дополнительное описание группы",
+    descPlaceholderChannel: "Дополнительное описание канала",
     attachment: "Вложение",
     noMessages: "Нет сообщений",
     companion: "Собеседник",
-    errorLogin: "Ошибка при входе",
+    errorLogin: "Ошибка входа",
     errorNet: "Ошибка сети",
     isTyping: "печатает...",
     areTyping: "печатают..."
@@ -57,8 +57,8 @@ const translations = {
     globalSearch: "Global Search",
     yourChats: "Your Chats",
     nothingFound: "Nothing found",
-    startTyping: "Start typing a name or title",
-    noChats: "No chats",
+    startTyping: "Start typing a name",
+    noChats: "No messages",
     addAccount: "Add Account",
     createGroup: "Create Group",
     createChannel: "Create Channel",
@@ -75,8 +75,8 @@ const translations = {
     groupName: "Group Name",
     channelName: "Channel Name",
     description: "Description",
-    descPlaceholderGroup: "You can add an optional group description.",
-    descPlaceholderChannel: "You can add an optional channel description.",
+    descPlaceholderGroup: "Optional group description",
+    descPlaceholderChannel: "Optional channel description",
     attachment: "Attachment",
     noMessages: "No messages",
     companion: "Companion",
@@ -325,12 +325,8 @@ export default function ChatsPage() {
       const data = await res.json();
       if (data.secure_url) {
         setModalAvatarUrl(data.secure_url);
-      } else {
-        alert("Ошибка загрузки");
       }
-    } catch (err) {
-      alert("Ошибка сети при загрузке аватара");
-    }
+    } catch (err) {}
     setIsUploadingModalAvatar(false);
   };
 
@@ -407,9 +403,9 @@ export default function ChatsPage() {
 
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
-        <a className="flex items-center px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 bg-white dark:bg-[#1c1c1e]">
+        <a className="flex items-center px-4 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors border-b border-black/[0.04] dark:border-white/[0.04] last:border-0 bg-white dark:bg-[#222224]">
           <div className="relative w-[52px] h-[52px] shrink-0">
-            <div className={`w-full h-full rounded-full flex items-center justify-center shadow-sm overflow-hidden border border-gray-200/50 dark:border-zinc-700/50 ${isSaved ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-zinc-800 text-black dark:text-white'}`}>
+            <div className={`w-full h-full rounded-full flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 ${isSaved ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
               {isSaved ? (
                 <Bookmark size={24} fill="currentColor" />
               ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
@@ -420,39 +416,39 @@ export default function ChatsPage() {
                   onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
                 />
               ) : (
-                <span className="text-[20px] font-medium text-black dark:text-white">{participant.displayName?.charAt(0) || "U"}</span>
+                <span className="text-[20px] font-medium">{participant.displayName?.charAt(0) || "U"}</span>
               )}
             </div>
             {isOnline && !participant.isGroup && !participant.isChannel && !isSaved && (
-              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-black dark:bg-white border-2 border-white dark:border-[#1c1c1e] rounded-full z-10"></div>
+              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>
             )}
           </div>
-          <div className="ml-4 flex-1 overflow-hidden">
+          <div className="ml-3.5 flex-1 overflow-hidden">
             <div className="flex justify-between items-baseline mb-0.5">
-              <h3 className="font-semibold text-black dark:text-white text-[16px] truncate pr-2">
+              <h3 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] truncate pr-2 tracking-tight">
                 {isSaved ? t.saved : (participant.displayName || t.companion)}
               </h3>
               {timeRaw && (
-                <span className={`text-[12px] shrink-0 font-medium ${isTyping ? 'text-gray-400 dark:text-zinc-500' : 'text-gray-400 dark:text-zinc-500'}`}>
+                <span className="text-[13px] shrink-0 font-medium text-[#86868b] dark:text-[#98989d]">
                   {new Date(timeRaw).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               )}
             </div>
             <div className="flex items-center justify-between">
-              <p className={`text-[15px] truncate pr-2 ${isTyping ? 'text-gray-500 dark:text-zinc-400 font-medium' : 'text-gray-500 dark:text-zinc-400'}`}>
+              <p className={`text-[15px] truncate pr-2 ${isTyping ? 'text-[#1d1d1f] dark:text-[#f5f5f7] font-medium' : 'text-[#86868b] dark:text-[#98989d]'}`}>
                 {lastMessageText}
               </p>
               {chat.lastMessage && !isTyping && (
-                <div className="flex -space-x-1 shrink-0 text-black dark:text-white items-center">
+                <div className="flex -space-x-1 shrink-0 items-center opacity-60">
                   {isSaved ? (
-                    <><Check size={14} /><Check size={14} /></>
+                    <><Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" /><Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" /></>
                   ) : isLastMessageMine ? (
                     <>
-                      <Check size={14} />
-                      {(isLastMessageRead || participant.isGroup || participant.isChannel) && <Check size={14} />}
+                      <Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />
+                      {(isLastMessageRead || participant.isGroup || participant.isChannel) && <Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />}
                     </>
                   ) : chat.unreadCount > 0 ? (
-                    <div className="bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ml-1">
+                    <div className="bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] text-[11px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ml-1 opacity-100">
                       {chat.unreadCount}
                     </div>
                   ) : null}
@@ -472,11 +468,11 @@ export default function ChatsPage() {
       <Link key={user.id} href={'/chat/' + user.id}>
         <a 
           onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
-          className="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50 bg-white dark:bg-[#1c1c1e]"
+          className="flex items-center justify-between px-4 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors border-b border-black/[0.04] dark:border-white/[0.04] bg-white dark:bg-[#222224]"
         >
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3.5">
             <div className="relative w-[52px] h-[52px] shrink-0">
-              <div className="w-full h-full rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden shadow-sm border border-gray-200/50 dark:border-zinc-700/50">
+              <div className="w-full h-full rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5">
                 {user.avatarUrl && user.avatarUrl.length > 5 ? (
                   <img 
                     src={user.avatarUrl} 
@@ -485,14 +481,14 @@ export default function ChatsPage() {
                     onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=random&color=fff&size=120`; }} 
                   />
                 ) : (
-                  <span className="text-black dark:text-white font-medium text-[20px]">{user.displayName?.charAt(0) || "U"}</span>
+                  <span className="text-[#1d1d1f] dark:text-[#f5f5f7] font-medium text-[20px]">{user.displayName?.charAt(0) || "U"}</span>
                 )}
               </div>
               {isOnline && (
-                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-black dark:bg-white border-2 border-white dark:border-[#1c1c1e] rounded-full z-10"></div>
+                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>
               )}
             </div>
-            <span className="font-semibold text-black dark:text-white text-[16px]">{user.displayName}</span>
+            <span className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] tracking-tight">{user.displayName}</span>
           </div>
         </a>
       </Link>
@@ -501,21 +497,22 @@ export default function ChatsPage() {
 
   return (
     <div 
-      className="flex h-[100dvh] flex-col bg-[#f2f2f7] dark:bg-black transition-colors duration-300 relative overflow-hidden font-sans"
+      className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative overflow-hidden font-sans selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Боковое меню (Сайдбар) */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/40 z-40 transition-opacity backdrop-blur-sm"
+          className="fixed inset-0 bg-black/20 dark:bg-black/40 z-40 transition-opacity backdrop-blur-sm"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      <div className={`fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-[#f2f2f7] dark:bg-black z-50 transform transition-transform duration-300 ease-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-6 pb-4 flex justify-between items-start relative bg-white dark:bg-[#1c1c1e] shadow-sm">
+      <div className={`fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-[#f5f5f7] dark:bg-[#161618] z-50 transform transition-transform duration-300 ease-out flex flex-col border-r border-black/5 dark:border-white/5 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-6 pb-5 flex justify-between items-start relative bg-white dark:bg-[#222224] shadow-[0_2px_20px_rgba(0,0,0,0.02)] border-b border-black/5 dark:border-white/5">
           <div className="flex flex-col">
-            <div className="w-[60px] h-[60px] bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-[22px] font-bold text-black dark:text-white mb-3 overflow-hidden shadow-sm border border-gray-200/50 dark:border-zinc-700/50">
+            <div className="w-[64px] h-[64px] bg-[#e5e5ea] dark:bg-[#333336] rounded-full flex items-center justify-center text-[24px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] mb-3 overflow-hidden border border-black/5 dark:border-white/5">
               {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
                 <img 
                   src={currentUser.avatarUrl} 
@@ -527,25 +524,25 @@ export default function ChatsPage() {
                 currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"
               )}
             </div>
-            <h2 className="text-[17px] font-semibold text-black dark:text-white leading-tight">
+            <h2 className="text-[18px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight tracking-tight">
               {currentUser?.displayName || 'Игорь'}
             </h2>
-            <p className="text-[13px] text-gray-500 dark:text-zinc-400 mt-0.5">
+            <p className="text-[14px] text-[#86868b] dark:text-[#98989d] mt-0.5">
               {currentUser?.username || '@игорь'}
             </p>
           </div>
 
           <button 
             onClick={toggleTheme} 
-            className="p-2.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-black dark:text-white transition-colors active:scale-95 border border-gray-200/50 dark:border-zinc-700/50"
+            className="p-2.5 rounded-full bg-[#f5f5f7] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 border border-black/5 dark:border-white/5"
           >
             {isDark ? <Sun size={20} /> : <Moon size={20} />}
           </button>
         </div>
 
-        <div className="flex flex-col py-3 overflow-y-auto flex-1 gap-4 px-3">
+        <div className="flex flex-col py-4 overflow-y-auto flex-1 gap-4 px-4">
           
-          <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl overflow-hidden shadow-sm border border-gray-100/50 dark:border-zinc-800/50">
+          <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
             {sortedAccounts.length > 1 && (
               <div className="flex flex-col">
                 {sortedAccounts.map(acc => {
@@ -554,15 +551,15 @@ export default function ChatsPage() {
                     <button 
                       key={acc.id} 
                       onClick={() => !isActive && switchAccount(acc)} 
-                      className={`flex items-center gap-3 px-4 py-3 transition-colors w-full text-left border-b border-gray-100/50 dark:border-zinc-800/50 last:border-0 ${isActive ? 'cursor-default' : 'active:bg-gray-50 dark:active:bg-zinc-800'}`}
+                      className={`flex items-center gap-3 px-4 py-3.5 transition-colors w-full text-left border-b border-black/5 dark:border-white/5 last:border-0 ${isActive ? 'cursor-default' : 'active:bg-black/[0.02] dark:active:bg-white/[0.02]'}`}
                     >
-                      <div className="w-8 h-8 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center overflow-hidden shrink-0 text-black dark:text-white font-medium text-xs border border-gray-200/50 dark:border-zinc-700/50">
+                      <div className="w-9 h-9 bg-[#e5e5ea] dark:bg-[#333336] rounded-full flex items-center justify-center overflow-hidden shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] font-medium text-[13px] border border-black/5 dark:border-white/5">
                         {acc.avatarUrl && acc.avatarUrl.length > 5 ? <img src={acc.avatarUrl} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(acc.displayName || 'U')}&background=random&color=fff&size=120`; }} /> : acc.displayName?.charAt(0).toUpperCase()}
                       </div>
-                      <span className={`text-[15px] font-medium flex-1 truncate ${isActive ? 'text-black dark:text-white' : 'text-gray-500 dark:text-zinc-400'}`}>
+                      <span className={`text-[16px] tracking-tight flex-1 truncate ${isActive ? 'font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]' : 'font-medium text-[#86868b] dark:text-[#98989d]'}`}>
                         {acc.displayName}
                       </span>
-                      {isActive && <Check size={18} className="text-black dark:text-white" />}
+                      {isActive && <Check size={18} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />}
                     </button>
                   );
                 })}
@@ -570,42 +567,42 @@ export default function ChatsPage() {
             )}
             <button 
               onClick={() => setShowAddAccountModal(true)} 
-              className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors w-full text-left"
+              className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors w-full text-left"
             >
-              <UserPlus size={20} className="text-gray-400 dark:text-zinc-400" />
-              <span className="text-[15px] font-medium">{t.addAccount}</span>
+              <UserPlus size={22} className="text-[#86868b] dark:text-[#98989d]" />
+              <span className="text-[16px] font-medium tracking-tight">{t.addAccount}</span>
             </button>
           </div>
 
-          <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl overflow-hidden shadow-sm flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
+          <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none flex flex-col border border-black/5 dark:border-white/5">
             <button 
               onClick={() => setModalType('group')} 
-              className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors w-full text-left border-b border-gray-100/50 dark:border-zinc-800/50"
+              className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors w-full text-left border-b border-black/5 dark:border-white/5"
             >
-              <Users size={20} className="text-gray-400 dark:text-zinc-400" />
-              <span className="text-[15px] font-medium">{t.createGroup}</span>
+              <Users size={22} className="text-[#86868b] dark:text-[#98989d]" />
+              <span className="text-[16px] font-medium tracking-tight">{t.createGroup}</span>
             </button>
             <button 
               onClick={() => setModalType('channel')} 
-              className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors w-full text-left"
+              className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors w-full text-left"
             >
-              <Volume2 size={20} className="text-gray-400 dark:text-zinc-400" />
-              <span className="text-[15px] font-medium">{t.createChannel}</span>
+              <Volume2 size={22} className="text-[#86868b] dark:text-[#98989d]" />
+              <span className="text-[16px] font-medium tracking-tight">{t.createChannel}</span>
             </button>
           </div>
 
-          <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl overflow-hidden shadow-sm flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
+          <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none flex flex-col border border-black/5 dark:border-white/5">
             <Link href="/chat/saved">
-              <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors border-b border-gray-100/50 dark:border-zinc-800/50">
-                <Bookmark size={20} className="text-gray-400 dark:text-zinc-400" />
-                <span className="text-[15px] font-medium">{t.saved}</span>
+              <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors border-b border-black/5 dark:border-white/5">
+                <Bookmark size={22} className="text-[#86868b] dark:text-[#98989d]" />
+                <span className="text-[16px] font-medium tracking-tight">{t.saved}</span>
               </a>
             </Link>
             
             <Link href="/settings">
-              <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 px-4 py-3 text-black dark:text-white active:bg-gray-50 dark:active:bg-zinc-800 transition-colors">
-                <Settings size={20} className="text-gray-400 dark:text-zinc-400" />
-                <span className="text-[15px] font-medium">{t.settings}</span>
+              <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
+                <Settings size={22} className="text-[#86868b] dark:text-[#98989d]" />
+                <span className="text-[16px] font-medium tracking-tight">{t.settings}</span>
               </a>
             </Link>
           </div>
@@ -613,111 +610,14 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {showAddAccountModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-[#f2f2f7] dark:bg-black rounded-3xl w-full max-w-sm p-6 shadow-2xl border border-gray-200/50 dark:border-zinc-800/50">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-black dark:text-white">
-                {isLoginMode ? t.loginAcc : t.newAcc}
-              </h3>
-              <button onClick={() => setShowAddAccountModal(false)} className="p-1 text-gray-400 hover:text-black dark:hover:text-white rounded-full transition-colors">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="flex bg-gray-200/80 dark:bg-zinc-900 rounded-lg p-1 mb-6">
-               <button type="button" onClick={() => setIsLoginMode(true)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${isLoginMode ? 'bg-white dark:bg-zinc-800 shadow-sm text-black dark:text-white' : 'text-gray-500'}`}>{t.login}</button>
-               <button type="button" onClick={() => setIsLoginMode(false)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${!isLoginMode ? 'bg-white dark:bg-zinc-800 shadow-sm text-black dark:text-white' : 'text-gray-500'}`}>{t.create}</button>
-            </div>
-
-            <form onSubmit={handleAddAccountSubmit} className="space-y-4">
-              <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl overflow-hidden shadow-sm border border-gray-100/50 dark:border-zinc-800/50">
-                {!isLoginMode && (
-                  <input type="text" placeholder={t.namePlaceholder} value={newName} onChange={e => setNewName(e.target.value)} className="w-full bg-transparent border-b border-gray-100 dark:border-zinc-800 px-4 py-3.5 text-[15px] text-black dark:text-white placeholder-gray-400 outline-none focus:bg-gray-50 dark:focus:bg-zinc-800/50 transition-colors" />
-                )}
-                <input type="text" placeholder={t.usernamePlaceholder} value={newUsername} onChange={e => setNewUsername(e.target.value)} className="w-full bg-transparent border-b border-gray-100 dark:border-zinc-800 px-4 py-3.5 text-[15px] text-black dark:text-white placeholder-gray-400 outline-none focus:bg-gray-50 dark:focus:bg-zinc-800/50 transition-colors" />
-                <input type="password" placeholder={t.passwordPlaceholder} value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full bg-transparent px-4 py-3.5 text-[15px] text-black dark:text-white placeholder-gray-400 outline-none focus:bg-gray-50 dark:focus:bg-zinc-800/50 transition-colors" />
-              </div>
-              <button type="submit" disabled={isAddingAccount} className="w-full py-3.5 bg-black dark:bg-white text-white dark:text-black font-semibold rounded-2xl transition-transform active:scale-95 mt-2 flex items-center justify-center h-12 shadow-sm">
-                {isAddingAccount ? <Loader2 size={18} className="animate-spin" /> : (isLoginMode ? t.login : t.continue)}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {modalType && (
-        <div className="fixed inset-0 z-50 bg-[#f2f2f7] dark:bg-black flex flex-col animate-in slide-in-from-right duration-200">
-          <header className="flex items-center justify-between px-4 pt-10 pb-4 bg-white dark:bg-[#1c1c1e] shadow-sm">
-            <div className="flex items-center gap-6">
-              <button onClick={() => setModalType(null)} className="text-black dark:text-white transition-colors">
-                <ArrowLeft size={26} strokeWidth={2} />
-              </button>
-              <h2 className="text-[20px] font-semibold text-black dark:text-white">
-                {modalType === 'group' ? t.createGroup : t.createChannel}
-              </h2>
-            </div>
-            <button 
-              onClick={handleCreateGroupOrChannel} 
-              disabled={modalType === 'group' ? !groupName.trim() : !channelName.trim()} 
-              className="p-1 text-black dark:text-white disabled:opacity-30 transition-opacity"
-            >
-              <Check size={26} strokeWidth={2.5} />
-            </button>
-          </header>
-
-          <div className="mt-6 px-4">
-            <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl p-4 flex items-center gap-4 shadow-sm relative overflow-hidden border border-gray-100/50 dark:border-zinc-800/50">
-              <div 
-                className="w-[64px] h-[64px] rounded-full bg-[#f2f2f7] dark:bg-black flex items-center justify-center shrink-0 overflow-hidden relative border border-gray-200/50 dark:border-zinc-800 cursor-pointer" 
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {modalAvatarUrl ? (
-                  <img src={modalAvatarUrl} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=U&background=random&color=fff&size=120`; }} />
-                ) : (
-                  <Camera size={28} className="text-gray-400 dark:text-zinc-500" />
-                )}
-                {isUploadingModalAvatar && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <Loader2 size={20} className="text-white animate-spin" />
-                  </div>
-                )}
-              </div>
-              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
-              
-              <div className="flex-1">
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder={modalType === 'group' ? t.groupName : t.channelName}
-                  value={modalType === 'group' ? groupName : channelName}
-                  onChange={e => modalType === 'group' ? setGroupName(e.target.value) : setChannelName(e.target.value)}
-                  className="w-full bg-transparent border-b border-gray-200 dark:border-zinc-800 py-2.5 text-[17px] font-medium text-black dark:text-white placeholder-gray-400 outline-none focus:border-black dark:focus:border-white transition-colors"
-                />
-              </div>
-            </div>
-
-            <div className="mt-4 bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden p-4 border border-gray-100/50 dark:border-zinc-800/50">
-              <p className="text-xs font-bold text-gray-400 dark:text-zinc-500 mb-2 uppercase tracking-wider">{t.description}</p>
-              <textarea 
-                rows={3}
-                value={channelDesc}
-                onChange={e => setChannelDesc(e.target.value)}
-                className="w-full bg-transparent text-[15px] text-black dark:text-white outline-none resize-none placeholder-gray-400" 
-                placeholder={modalType === 'group' ? t.descPlaceholderGroup : t.descPlaceholderChannel} 
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Экран поиска */}
       {isSearchOpen ? (
-        <div className="flex flex-col h-full bg-[#f2f2f7] dark:bg-black">
-          <header className="px-4 pt-12 pb-3 bg-white dark:bg-[#1c1c1e] relative z-10 flex flex-col shadow-sm border-b border-gray-200/50 dark:border-zinc-900/50">
-            <div className="flex items-center gap-4 h-10">
+        <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#161618]">
+          <header className="px-4 pt-12 pb-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl relative z-10 flex flex-col shadow-[0_1px_10px_rgba(0,0,0,0.02)] border-b border-black/5 dark:border-white/5">
+            <div className="flex items-center gap-3 h-10">
               <button 
                 onClick={() => { setIsSearchOpen(false); setSearch(''); }} 
-                className="text-black dark:text-white active:scale-95 transition-transform"
+                className="text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform p-1"
               >
                 <ArrowLeft size={24} />
               </button>
@@ -727,42 +627,42 @@ export default function ChatsPage() {
                 placeholder={t.search}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 bg-transparent border-none outline-none text-[18px] text-black dark:text-white placeholder-gray-400"
+                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b]"
               />
             </div>
           </header>
 
           <main className="flex-1 overflow-y-auto pt-4 px-4 pb-20">
             {search.length < 2 && searchResults.length === 0 && (
-              <div className="text-center py-20 text-gray-400">
-                 <Search size={40} className="mx-auto mb-3 opacity-20" />
-                 <p className="text-sm">{t.startTyping}</p>
+              <div className="text-center py-20 text-[#86868b] dark:text-[#98989d]">
+                 <Search size={40} className="mx-auto mb-3 opacity-30" />
+                 <p className="text-[15px]">{t.startTyping}</p>
               </div>
             )}
 
             {search.length >= 2 && (
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-5">
                 {searchResults.length > 0 && (
-                  <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
-                    <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-800/50 bg-gray-50/50 dark:bg-black/20">
-                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">{t.globalSearch}</span>
+                  <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden flex flex-col border border-black/5 dark:border-white/5">
+                    <div className="px-5 py-2 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/50 dark:bg-black/10">
+                      <span className="text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.globalSearch}</span>
                     </div>
                     {searchResults.map(renderGlobalUserCard)}
                   </div>
                 )}
                 {filteredChats.length > 0 && (
-                  <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
-                    <div className="px-5 py-2.5 border-b border-gray-100/50 dark:border-zinc-800/50 bg-gray-50/50 dark:bg-black/20">
-                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">{t.yourChats}</span>
+                  <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden flex flex-col border border-black/5 dark:border-white/5">
+                    <div className="px-5 py-2 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/50 dark:bg-black/10">
+                      <span className="text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.yourChats}</span>
                     </div>
                     {filteredChats.map(renderChatCard)}
                   </div>
                 )}
                 
                 {searchResults.length === 0 && filteredChats.length === 0 && (
-                   <div className="text-center py-20 text-gray-400">
-                      <Search size={40} className="mx-auto mb-3 opacity-20" />
-                      <p>{t.nothingFound}</p>
+                   <div className="text-center py-20 text-[#86868b] dark:text-[#98989d]">
+                      <Search size={40} className="mx-auto mb-3 opacity-30" />
+                      <p className="text-[15px]">{t.nothingFound}</p>
                    </div>
                 )}
               </div>
@@ -771,11 +671,12 @@ export default function ChatsPage() {
         </div>
       ) : (
         <>
-          <header className="px-6 pt-12 pb-4 relative z-10 bg-[#f2f2f7] dark:bg-black">
-            <div className="flex justify-between items-center h-full">
+          {/* Главный экран со списком чатов */}
+          <header className="px-5 pt-12 pb-3 relative z-10 bg-[#f5f5f7] dark:bg-[#161618]">
+            <div className="flex justify-between items-center h-full mb-2">
               <button 
                 onClick={() => setIsSidebarOpen(true)}
-                className="w-9 h-9 shrink-0 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center overflow-hidden border border-gray-300/30 dark:border-zinc-700/50 shadow-sm"
+                className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
               >
                 {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
                   <img 
@@ -785,47 +686,47 @@ export default function ChatsPage() {
                     onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=random&color=fff&size=120`; }} 
                   />
                 ) : (
-                  <span className="text-black dark:text-white font-medium text-sm">{currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"}</span>
+                  <span className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[15px]">{currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"}</span>
                 )}
               </button>
               
-              <h1 className="text-[22px] font-extrabold text-black dark:text-white tracking-tight" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+              <h1 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">
                 mesogram
               </h1>
               
               <button 
                 onClick={() => setIsSearchOpen(true)}
-                className="w-9 h-9 shrink-0 flex items-center justify-center text-black dark:text-white active:scale-95 transition-transform"
+                className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform"
               >
-                <Search size={22} />
+                <Search size={22} strokeWidth={2.5} />
               </button>
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto px-4 pb-4">
-            <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-sm overflow-hidden flex flex-col border border-gray-100/50 dark:border-zinc-800/50">
+          <main className="flex-1 overflow-y-auto px-4 pb-6">
+            <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden flex flex-col border border-black/5 dark:border-white/5">
               {filteredChats.map(renderChatCard)}
             </div>
 
             {filteredChats.length === 0 && (
-              <div className="text-center py-20 text-gray-400">
-                <MessageSquare size={48} className="mx-auto mb-3 opacity-20" />
-                <p>{t.noChats}</p>
+              <div className="text-center py-24 text-[#86868b] dark:text-[#98989d]">
+                <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
+                <p className="text-[16px] font-medium tracking-tight">{t.noChats}</p>
               </div>
             )}
           </main>
 
-          <nav className="border-t border-gray-200/50 dark:border-zinc-800/50 flex justify-around p-3 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-md z-10 pb-6">
+          <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
             <Link href="/">
-              <a className="flex flex-col items-center text-black dark:text-white transition-transform active:scale-95">
-                <MessageSquare size={26} className="mb-1" fill="currentColor" />
-                <span className="text-[10px] font-medium">{t.chats}</span>
+              <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95">
+                <MessageSquare size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
+                <span className="text-[11px] font-semibold tracking-wide">{t.chats}</span>
               </a>
             </Link>
             <Link href="/wall">
-              <a className="flex flex-col items-center text-gray-400 hover:text-black dark:hover:text-white transition-colors active:scale-95">
-                <Users size={26} className="mb-1" />
-                <span className="text-[10px] font-medium">{t.wall}</span>
+              <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
+                <Users size={26} className="mb-1" strokeWidth={1.5} />
+                <span className="text-[11px] font-semibold tracking-wide">{t.wall}</span>
               </a>
             </Link>
           </nav>
