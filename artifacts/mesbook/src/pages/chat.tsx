@@ -126,7 +126,6 @@ export default function ChatPage() {
   });
 
   const [content, setContent] = useState('');
-  const [readFailed, setReadFailed] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [editingMsg, setEditingMsg] = useState<any>(null);
@@ -172,7 +171,6 @@ export default function ChatPage() {
 
   const savedName = typeof window !== 'undefined' ? sessionStorage.getItem('chat_name_' + chatId) : null;
   const displayName = isSavedChat ? t.saved : (chatInfo?.participant?.displayName || chatInfo?.name || savedName || t.companion);
-  const isGroup = chatInfo?.participant?.isGroup;
   const isChannel = chatInfo?.participant?.isChannel;
 
   useEffect(() => {
@@ -296,11 +294,7 @@ export default function ChatPage() {
     setContent('');
     setReplyingTo(null);
     
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, 10);
+    setTimeout(() => { if (inputRef.current) inputRef.current.focus(); }, 10);
     
     const tempMsg = { id: Date.now(), content: finalContent, isSending: !isSavedChat, senderId: currentUserId, createdAt: new Date().toISOString() };
     if (isSavedChat) {
@@ -440,53 +434,68 @@ export default function ChatPage() {
     }
   }
 
-  const renderMessageContent = (msgContent: string, isMe: boolean, isEdited: boolean) => {
-    if (msgContent.startsWith('[MEDIA] ')) {
-      let url = msgContent.replace('[MEDIA] ', '').trim();
-      const isVideo = url.match(/\.(mp4|webm|mov|ogg)$/i) || url.includes('/video/upload/');
-      if (!isVideo && url.match(/\.(heic|heif)$/i)) url = url.replace(/\.(heic|heif)$/i, '.jpg');
-      
-      return (
-        <div className="relative flex items-center justify-center -mx-3 -mt-2 -mb-2 overflow-hidden rounded-[10px]">
-          {isVideo ? (
-            <video src={url} controls className="w-full h-auto max-w-[260px] max-h-[350px] object-cover" />
-          ) : (
-            <img 
-              onClick={() => setFullScreenImage(url)}
-              src={url} 
-              alt="Media" 
-              className="w-full h-auto max-w-[260px] max-h-[350px] object-cover cursor-pointer" 
-              onError={(e) => { e.currentTarget.src = 'https://placehold.co/260x350/1c1c1e/ffffff?text=Image+Not+Found'; }}
-            />
-          )}
-        </div>
-      );
-    }
+  // Парсинг контента сообщений
+  const parseContent = (rawText: string) => {
+    const mediaUrls: string[] = [];
+    const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
+    let match;
+    let text = rawText;
+    while ((match = mediaRegex.exec(text)) !== null) mediaUrls.push(match[1]);
+    text = text.replace(mediaRegex, '').trim();
     
-    if (msgContent.startsWith('> ')) {
-      const parts = msgContent.split('\n\n');
-      let quotedText = parts[0].replace('> ', '');
-      if (quotedText.startsWith('[MEDIA]')) { quotedText = t.photo; }
-      const replyText = parts.slice(1).join('\n\n');
-
-      return (
-        <div className="mb-0 flex flex-col w-full">
-          <div className={'pl-2 border-l-[3px] text-[12px] font-medium opacity-80 mb-1.5 truncate ' + (isMe ? 'border-white/40 dark:border-black/40' : 'border-black/30 dark:border-white/30')}>
-            {quotedText}
-          </div>
-          <p className="text-[15px] leading-[1.3] break-words whitespace-pre-wrap m-0">
-            {replyText}
-            <span className="inline-block" style={{ width: isEdited ? '75px' : '45px', height: '1px' }}></span>
-          </p>
-        </div>
-      );
+    let quotedText = null;
+    if (text.startsWith('> ')) {
+      const parts = text.split('\n\n');
+      quotedText = parts[0].replace('> ', '');
+      if (quotedText.startsWith('[MEDIA]')) quotedText = t.photo;
+      text = parts.slice(1).join('\n\n');
     }
 
+    const hasMedia = mediaUrls.length > 0;
+    const hasText = !!text || !!quotedText;
+    const isVideo = hasMedia && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
+    
+    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
+  };
+
+  const renderContextMenu = (msg: any, isMe: boolean) => {
     return (
-      <p className="text-[15px] leading-[1.3] break-words whitespace-pre-wrap m-0">
-        {msgContent}
-        <span className="inline-block" style={{ width: isEdited ? '75px' : '45px', height: '1px' }}></span>
-      </p>
+      <>
+        <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(null); }} />
+        <div className={`absolute z-[70] flex flex-col gap-2 ${isMe ? 'right-0 items-end' : 'left-0 items-start'} top-full mt-1 min-w-[200px]`}>
+          <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800">
+             {FAST_REACTIONS.map(emoji => (
+               <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/10 dark:bg-white/10' : ''}`}>
+                 {emoji}
+               </button>
+             ))}
+          </div>
+
+          <div className="flex flex-col bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 dark:border-zinc-800 overflow-hidden w-full">
+             <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50">
+               <Reply size={18} className="text-gray-500 dark:text-gray-400" /> {t.replyAction}
+             </button>
+             
+             {parseContent(msg.content).hasText && (
+               <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(msg.content).text); setActiveContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50">
+                 <Copy size={18} className="text-gray-500 dark:text-gray-400" /> {t.copy}
+               </button>
+             )}
+
+             {isMe && parseContent(msg.content).hasText && (
+               <button onClick={(e) => { e.stopPropagation(); startEditing(msg); setActiveContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50">
+                 <Edit2 size={18} className="text-gray-500 dark:text-gray-400" /> {t.editAction}
+               </button>
+             )}
+
+             {(isMe || isAdmin) && (
+               <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }} className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left">
+                 <Trash2 size={18} className="text-red-500" /> {t.deleteAction}
+               </button>
+             )}
+          </div>
+        </div>
+      </>
     );
   };
 
@@ -517,8 +526,10 @@ export default function ChatPage() {
           </header>
           
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            <div className="bg-white dark:bg-[#1c1c1e] p-4 rounded-[20px] shadow-sm mb-2 border border-gray-100/50 dark:border-zinc-800">
-              {renderMessageContent(activeThread.content, false, false)}
+            {/* Отрисовка исходного поста в комментах */}
+            <div className="bg-white dark:bg-[#1c1c1e] p-4 rounded-[16px] shadow-sm mb-2 border border-gray-100/50 dark:border-zinc-800">
+              <span className="font-semibold text-[14px] text-gray-500 mb-1 block">{activeThread.senderName || t.companion}</span>
+              <p className="text-[15px] text-black dark:text-white whitespace-pre-wrap">{parseContent(activeThread.content).text}</p>
             </div>
             
             {threadComments.length === 0 ? (
@@ -605,7 +616,7 @@ export default function ChatPage() {
       )}
 
       {/* ШАПКА ЧАТА */}
-      <header className="px-3 pt-10 pb-3 border-b border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-3 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-md relative z-10 shadow-sm">
+      <header className="px-3 pt-10 pb-3 border-b border-gray-200/50 dark:border-zinc-900/50 flex items-center gap-3 bg-[#f2f2f7]/90 dark:bg-black/90 backdrop-blur-md relative z-10 shadow-sm">
         <Link href="/"><a className="p-2 text-black dark:text-white transition-colors active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
           <div className="relative w-[44px] h-[44px] shrink-0">
@@ -629,7 +640,8 @@ export default function ChatPage() {
             
             return messages.map((msg: any) => {
               const isMe = String(msg.senderId) === String(currentUserId);
-              const isMedia = msg.content.startsWith('[MEDIA] ');
+              const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(msg.content);
+              
               const dateObj = new Date(msg.createdAt);
               const dateLocale = lang === 'ru' ? 'ru-RU' : 'en-US';
               const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString(dateLocale, { day: 'numeric', month: 'long' });
@@ -638,61 +650,138 @@ export default function ChatPage() {
 
               const reactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
               const isMenuOpen = activeContextMenu === msg.id;
+              const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
+              // --- СТИЛЬ ДЛЯ КАНАЛОВ И ГРУПП (В ВИДЕ КАРТОЧЕК КАК У КХЛ) ---
+              if (isGroupOrChannel) {
+                return (
+                  <div key={msg.id} className={`flex flex-col w-[90%] sm:w-[85%] mb-3 relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} ${isMenuOpen ? 'z-50' : 'z-10'}`}>
+                    {showDate && (
+                      <div className="flex justify-center my-3 w-full">
+                        <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm capitalize">{currentDateStr}</span>
+                      </div>
+                    )}
+                    <div 
+                      className={`w-full bg-white dark:bg-[#1c1c1e] rounded-[16px] shadow-sm border border-gray-100/50 dark:border-zinc-800/50 flex flex-col overflow-hidden relative`}
+                      onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(msg.id); }}
+                      onTouchStart={(e) => { pressTimer.current = setTimeout(() => { if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); setActiveContextMenu(msg.id); }, 400); }}
+                      onTouchMove={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
+                      onTouchEnd={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
+                    >
+                      {hasMedia && (
+                        <div className={`relative w-full overflow-hidden flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
+                          {mediaUrls.map((url, idx) => (
+                             isVideo 
+                               ? <video key={idx} src={url} controls className="w-full h-auto max-h-[400px] object-cover" />
+                               : <img key={idx} src={url} onClick={() => setFullScreenImage(url)} className="w-full h-auto max-h-[400px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
+                          ))}
+                        </div>
+                      )}
+                      
+                      {hasText && (
+                        <div className="px-3 pt-2 pb-2">
+                           {quotedText && (
+                             <div className={`mb-1 pl-2 border-l-[3px] text-[12px] font-medium opacity-80 truncate border-black/30 dark:border-white/30`}>{quotedText}</div>
+                           )}
+                           <div className="text-[15px] leading-snug break-words whitespace-pre-wrap text-black dark:text-white">
+                             {text}
+                             <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none">
+                               {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
+                               {timeStr}
+                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                             </span>
+                             <div className="clear-both"></div>
+                           </div>
+                        </div>
+                      )}
+                      
+                      {!hasText && hasMedia && (
+                        <div className="px-3 pb-2 pt-1 flex justify-end">
+                           <span className="text-[10px] opacity-60 flex gap-1 items-center text-gray-500">
+                             {timeStr}
+                             {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                           </span>
+                        </div>
+                      )}
+
+                      {reactionsKeys.length > 0 && (
+                        <div className="px-3 pb-3 flex flex-wrap gap-1.5">
+                           {reactionsKeys.map(key => (
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[26px] px-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-md' : 'bg-gray-50 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700 shadow-sm'}`}>
+                               <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                               <span className="text-[12px] font-bold leading-none flex items-center justify-center mt-[1px]">{msg.reactions[key].count}</span>
+                             </button>
+                           ))}
+                        </div>
+                      )}
+
+                      <button onClick={() => { setActiveThread(msg); setThreadComments([]); }} className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 dark:bg-white/5 border-t border-gray-100/50 dark:border-zinc-800 transition-colors">
+                        <div className="flex gap-2 items-center">
+                          <MessageCircle size={16} className="text-gray-500 dark:text-zinc-400" />
+                          <span className="text-[13px] font-medium text-blue-500 dark:text-blue-400">
+                            {msg.commentsCount > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount, t.commentsCount, lang)}` : t.comments}
+                          </span>
+                        </div>
+                        <ChevronRight size={16} className="text-gray-400 dark:text-zinc-500" />
+                      </button>
+
+                      {isMenuOpen && renderContextMenu(msg, isMe)}
+                    </div>
+                  </div>
+                );
+              }
+
+              // --- СТИЛЬ ДЛЯ ЛИЧНЫХ ЧАТОВ (КОМПАКТНЫЕ ПУЗЫРИ С АВАТАРКАМИ) ---
               return (
                 <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative ${isMenuOpen ? 'z-50' : 'z-10'}`}>
                   {showDate && (
                     <div className="flex justify-center my-3 w-full">
-                      <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm capitalize">
-                        {currentDateStr}
-                      </span>
+                      <span className="bg-gray-400/20 dark:bg-zinc-700/50 text-gray-600 dark:text-zinc-300 text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-sm capitalize">{currentDateStr}</span>
                     </div>
                   )}
                   
                   <div 
                     className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} relative`}
                     onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(msg.id); }}
-                    onTouchStart={(e) => { 
-                      pressTimer.current = setTimeout(() => {
-                        if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
-                        setActiveContextMenu(msg.id);
-                      }, 400); 
-                    }}
-                    onTouchMove={() => {
-                      if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
-                    }}
-                    onTouchEnd={() => { 
-                      if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
-                    }}
+                    onTouchStart={(e) => { pressTimer.current = setTimeout(() => { if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); setActiveContextMenu(msg.id); }, 400); }}
+                    onTouchMove={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
+                    onTouchEnd={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
                   >
                     
-                    <div className={
-                      isMedia 
-                        ? `relative bg-transparent`
-                        : `shadow-sm relative flex flex-col px-2.5 pt-1.5 pb-1.5 min-w-[60px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[12px] rounded-tr-[3px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[12px] rounded-tl-[3px] border border-gray-100/50 dark:border-zinc-800'}`
-                    }>
+                    <div className={`shadow-sm relative flex flex-col min-w-[60px] ${isMe ? 'bg-black dark:bg-white text-white dark:text-black rounded-[14px] rounded-tr-[4px]' : 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white rounded-[14px] rounded-tl-[4px] border border-gray-100/50 dark:border-zinc-800'}`}>
+                      {hasMedia && (
+                        <div className={`relative w-full overflow-hidden flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
+                          {mediaUrls.map((url, idx) => (
+                             isVideo 
+                               ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[14px]' : 'rounded-[14px]'}`} />
+                               : <img key={idx} src={url} onClick={() => setFullScreenImage(url)} className={`w-full h-auto max-h-[400px] object-cover cursor-pointer ${hasText ? 'rounded-t-[14px]' : 'rounded-[14px]'}`} onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
+                          ))}
+                        </div>
+                      )}
                       
-                      {renderMessageContent(msg.content, isMe, msg.isEdited)}
-                      
-                      <div className={`absolute flex items-center justify-end gap-1 text-[10px] font-medium bottom-1 right-2 opacity-60 ${isMedia ? 'bg-black/40 text-white px-2 py-0.5 rounded-full backdrop-blur-md z-10 bottom-1.5 right-1.5' : ''}`}>
-                        <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
-                        {msg.isEdited && !isMedia && <span className="ml-0.5 mr-0.5 text-[9px] italic">• {t.edited}</span>}
-                        
-                        {isMe && (
-                          <div className="flex items-center ml-0.5">
-                            {isSavedChat || isGroupOrChannel ? (
-                              <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5} /><Check size={11} strokeWidth={2.5} /></div>
-                            ) : msg.isSending ? (
-                              <Loader2 size={10} className="animate-spin" />
-                            ) : (
-                              <div className="flex -space-x-1">
-                                <Check size={11} strokeWidth={2.5} />
-                                {(msg.readAt || msg.isRead || msg.read || msg.status === 'read') && <Check size={11} strokeWidth={2.5} />}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      {hasText && (
+                        <div className="px-3 pt-1.5 pb-2">
+                           {quotedText && (
+                             <div className={`mb-1 pl-2 border-l-[3px] text-[12px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/30 dark:border-white/30'}`}>{quotedText}</div>
+                           )}
+                           <div className="text-[15px] leading-snug break-words whitespace-pre-wrap">
+                             {text}
+                             <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
+                               {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
+                               {timeStr}
+                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                             </span>
+                             <div className="clear-both"></div>
+                           </div>
+                        </div>
+                      )}
+
+                      {!hasText && hasMedia && (
+                        <div className="absolute bottom-2 right-2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 backdrop-blur-md">
+                           {timeStr}
+                           {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                        </div>
+                      )}
                     </div>
                     
                     {reactionsKeys.length > 0 && (
@@ -701,115 +790,19 @@ export default function ChatPage() {
                            const rData = msg.reactions[key] || { count: 1, users: [] };
                            const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
                            
-                           if (isGroupOrChannel) {
-                             return (
-                               <button 
-                                 key={key} 
-                                 onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
-                                 className={`flex items-center justify-center gap-1.5 h-[26px] px-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-md z-10' : 'bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
-                               >
-                                 <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
-                                 <span className="text-[12px] font-bold leading-none flex items-center justify-center mt-[1px]">{rData.count}</span>
-                               </button>
-                             );
-                           } else {
-                             return (
-                               <button 
-                                 key={key} 
-                                 onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
-                                 className={`flex items-center justify-center gap-1 h-[26px] pl-0.5 pr-2 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white border-black dark:border-white shadow-md z-10' : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 shadow-sm'}`}
-                               >
-                                 <div className="w-[20px] h-[20px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-gray-200 dark:bg-zinc-700 text-[10px] font-bold text-gray-500 dark:text-gray-300 border border-black/10 dark:border-white/10">
-                                   {firstUser?.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
-                                 </div>
-                                 <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
-                               </button>
-                             );
-                           }
+                           return (
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black dark:bg-white border-black dark:border-white shadow-md z-10' : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 shadow-sm'}`}>
+                               <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-gray-200 dark:bg-zinc-700 text-[9px] font-bold text-gray-500 dark:text-gray-300 border border-black/10 dark:border-white/10">
+                                 {firstUser?.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
+                               </div>
+                               <span className="text-[12px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                             </button>
+                           );
                         })}
                       </div>
                     )}
 
-                    {isGroupOrChannel && (
-                      <button 
-                        onClick={() => { setActiveThread(msg); setThreadComments([]); }}
-                        className={`mt-1 flex items-center gap-1.5 px-3 py-1 bg-white/60 dark:bg-zinc-800/60 backdrop-blur-sm rounded-full text-[11px] font-bold text-gray-500 dark:text-gray-400 border border-gray-200/50 dark:border-zinc-700/50 shadow-sm active:scale-95 transition-all`}
-                      >
-                        <MessageCircle size={12} />
-                        {msg.commentsCount > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount, t.commentsCount, lang)}` : t.comments}
-                      </button>
-                    )}
-
-                    {isMenuOpen && (
-                      <>
-                        <div 
-                          className="fixed inset-0 z-[60]" 
-                          onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} 
-                          onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(null); }}
-                        />
-                        
-                        <div className={`absolute z-[70] flex flex-col gap-2 ${isMe ? 'right-0 items-end' : 'left-0 items-start'} top-full mt-1 min-w-[200px]`}>
-                          
-                          <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-full shadow-lg border border-gray-200/50 dark:border-zinc-800">
-                             {FAST_REACTIONS.map(emoji => (
-                               <button 
-                                 key={emoji} 
-                                 onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); setActiveContextMenu(null); }}
-                                 className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/10 dark:bg-white/10' : ''}`}
-                               >
-                                 {emoji}
-                               </button>
-                             ))}
-                          </div>
-
-                          <div className="flex flex-col bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 dark:border-zinc-800 overflow-hidden w-full">
-                             <button 
-                               onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }}
-                               className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
-                             >
-                               <Reply size={18} className="text-gray-500 dark:text-gray-400" />
-                               {t.replyAction}
-                             </button>
-                             
-                             {!isMedia && (
-                               <button 
-                                 onClick={(e) => { 
-                                   e.stopPropagation(); 
-                                   const textToCopy = msg.content.startsWith('> ') ? msg.content.split('\n\n').slice(1).join('\n\n') : msg.content;
-                                   navigator.clipboard.writeText(textToCopy); 
-                                   setActiveContextMenu(null); 
-                                 }}
-                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
-                               >
-                                 <Copy size={18} className="text-gray-500 dark:text-gray-400" />
-                                 {t.copy}
-                               </button>
-                             )}
-
-                             {isMe && !isMedia && (
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); startEditing(msg); setActiveContextMenu(null); }}
-                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-black dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors text-left border-b border-gray-200/50 dark:border-zinc-800/50"
-                               >
-                                 <Edit2 size={18} className="text-gray-500 dark:text-gray-400" />
-                                 {t.editAction}
-                               </button>
-                             )}
-
-                             {(isMe || isAdmin) && (
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }}
-                                 className="flex items-center gap-3 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left"
-                               >
-                                 <Trash2 size={18} className="text-red-500" />
-                                 {t.deleteAction}
-                               </button>
-                             )}
-                          </div>
-                        </div>
-                      </>
-                    )}
-
+                    {isMenuOpen && renderContextMenu(msg, isMe)}
                   </div>
                 </div>
               );
