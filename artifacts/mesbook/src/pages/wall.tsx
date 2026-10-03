@@ -122,9 +122,7 @@ export default function WallPage() {
     socket.on('global_update', handleUpdate);
     socket.on('wall:post', handleUpdate);
 
-    const interval = setInterval(handleUpdate, 15000);
     return () => {
-      clearInterval(interval);
       socket.off('global_update', handleUpdate);
       socket.off('wall:post', handleUpdate);
     };
@@ -248,7 +246,7 @@ export default function WallPage() {
         <div className="w-[80px]"></div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pt-4 pb-6 px-4">
+      <main className="flex-1 overflow-y-auto pt-4 pb-20 px-4">
         {isLoading ? (
           <div className="flex justify-center items-center py-24"><Loader2 size={32} className="animate-spin text-[#86868b] dark:text-[#98989d]" /></div>
         ) : posts.length === 0 ? (
@@ -266,7 +264,7 @@ export default function WallPage() {
             </Link>
           </div>
         ) : (
-          <div className="flex flex-col space-y-5">
+          <div className="flex flex-col">
             {posts.map((post) => {
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
               const reactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
@@ -277,7 +275,7 @@ export default function WallPage() {
               return (
                 <div 
                   key={post.id} 
-                  className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative ${isMenuOpen ? 'z-50' : 'z-10'}`}
+                  className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative mb-4 ${isMenuOpen ? 'z-50' : 'z-10'}`}
                   onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(post.id); }}
                   onTouchStart={(e) => { pressTimer.current = setTimeout(() => { if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); setActiveContextMenu(post.id); }, 400); }}
                   onTouchMove={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
@@ -301,7 +299,7 @@ export default function WallPage() {
                       {mediaUrls.map((url, idx) => (
                          isVideo 
                            ? <video key={idx} src={url} controls className="w-full h-auto max-h-[400px] object-cover" />
-                           : <img key={idx} src={url} onClick={() => setFullScreenImage(url)} className="w-full h-auto max-h-[400px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
+                           : <img key={idx} src={url} loading="lazy" decoding="async" onClick={() => setFullScreenImage(url)} className="w-full h-auto max-h-[400px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                       ))}
                     </div>
                   )}
@@ -377,7 +375,7 @@ export default function WallPage() {
         )}
       </main>
 
-      {/* МОДАЛКА КОММЕНТАРИЕВ */}
+      {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ СТЕНЫ */}
       {activeThread && (
         <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300">
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
@@ -399,7 +397,7 @@ export default function WallPage() {
                threadComments.map(c => (
                  <div key={c.id} className="flex gap-3 items-start">
                    <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
-                     {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
+                     {c.senderAvatar ? <img src={c.senderAvatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
                    </div>
                    <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
                      <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
@@ -425,7 +423,7 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* ИСПРАВЛЕНИЕ: Вернули нижнюю панель навигации для Стены */}
+      {/* НИЖНЯЯ ПАНЕЛЬ СТЕНЫ С РАЗМЫТИЕМ */}
       <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         <Link href="/">
           <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
