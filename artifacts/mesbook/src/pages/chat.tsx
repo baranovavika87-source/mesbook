@@ -506,9 +506,10 @@ export default function ChatPage() {
                </button>
              )}
 
+             {/* ИСПРАВЛЕНИЕ: Кнопка удаления теперь тоже монохромная (серая) */}
              {(isMe || isAdmin) && (
-               <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left">
-                 <Trash2 size={18} className="text-red-500" /> {t.deleteAction}
+               <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
+                 <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
                </button>
              )}
           </div>
@@ -544,7 +545,6 @@ export default function ChatPage() {
           </header>
           
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            {/* Отрисовка исходного поста в комментах */}
             <div className="bg-white dark:bg-[#222224] p-4 rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none mb-2 border border-black/5 dark:border-white/5">
               <span className="font-semibold text-[14px] text-[#86868b] dark:text-[#98989d] mb-1 block">{activeThread.senderName || t.companion}</span>
               <p className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap">{parseContent(activeThread.content).text}</p>
@@ -707,38 +707,50 @@ export default function ChatPage() {
                            {quotedText && (
                              <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
                            )}
-                           <div className="text-[15px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
+                           <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
                              {text}
-                             <span className="float-right inline-flex items-center gap-1 text-[10px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
+                             <span className="float-right inline-flex items-center gap-1 text-[11px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
                                {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                {timeStr}
-                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/><Check size={12} strokeWidth={2.5}/></div>}
                              </span>
                              <div className="clear-both"></div>
                            </div>
+                        </div>
+                      )}
+                      
+                      {!hasText && hasMedia && (
+                        <div className="px-4 pb-2 pt-1.5 flex justify-end">
+                           <span className="text-[11px] text-[#86868b] dark:text-[#98989d] flex gap-1 items-center">
+                             {timeStr}
+                             {isMe && <div className="flex -space-x-1"><Check size={12} strokeWidth={2.5}/><Check size={12} strokeWidth={2.5}/></div>}
+                           </span>
                         </div>
                       )}
 
                       {reactionsKeys.length > 0 && (
                         <div className="px-4 pb-3 flex flex-wrap gap-1.5">
                            {reactionsKeys.map(key => (
-                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[24px] px-2.5 rounded-full border transition-transform active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f]/10 dark:bg-[#f5f5f7]/10 border-[#1d1d1f]/20 dark:border-[#f5f5f7]/20' : 'bg-black/5 dark:bg-white/5 border-transparent hover:bg-black/10 dark:hover:bg-white/10'}`}>
-                               <span className="text-[13px] leading-none mb-[1px]">{key}</span>
-                               <span className={`text-[12px] font-bold leading-none mb-[1px] ${msg.myReaction === key ? 'text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{msg.reactions[key].count}</span>
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] border-[#1d1d1f] dark:border-[#f5f5f7]' : 'bg-[#f5f5f7] dark:bg-[#333336] text-[#86868b] dark:text-[#98989d] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                               <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                               <span className="text-[13px] font-bold leading-none flex items-center justify-center mt-[1px]">{msg.reactions[key].count}</span>
                              </button>
                            ))}
                         </div>
                       )}
 
-                      <button onClick={() => { setActiveThread(msg); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
-                        <div className="flex gap-2 items-center">
-                          <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                          <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-                            {msg.commentsCount > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount, t.commentsCount, lang)}` : t.comments}
-                          </span>
-                        </div>
-                        <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                      </button>
+                      {/* ИСПРАВЛЕНИЕ: Кнопка "Комментарии" отображается ТОЛЬКО В КАНАЛАХ */}
+                      {isChannel && (
+                        <button onClick={() => { setActiveThread(msg); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3.5 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
+                          <div className="flex gap-2.5 items-center">
+                            <MessageCircle size={18} className="text-[#86868b] dark:text-[#98989d]" />
+                            <span className="text-[14px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+                              {msg.commentsCount > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount, t.commentsCount, lang)}` : t.comments}
+                            </span>
+                          </div>
+                          <ChevronRight size={18} className="text-[#86868b] dark:text-[#98989d]" />
+                        </button>
+                      )}
 
                       {isMenuOpen && renderContextMenu(msg, isMe)}
                     </div>
@@ -767,8 +779,8 @@ export default function ChatPage() {
                         <div className={`relative w-full overflow-hidden flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
                           {mediaUrls.map((url, idx) => (
                              isVideo 
-                               ? <video key={idx} src={url} controls className="w-full h-auto max-h-[350px] object-cover" />
-                               : <img key={idx} src={url} loading="lazy" decoding="async" onClick={() => setFullScreenImage(url)} className="w-full h-auto max-h-[350px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
+                               ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[350px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} />
+                               : <img key={idx} src={url} loading="lazy" decoding="async" onClick={() => setFullScreenImage(url)} className={`w-full h-auto max-h-[350px] object-cover cursor-pointer ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                           ))}
                           {/* Прозрачное время на фото, если нет текста */}
                           {!hasText && (
@@ -781,16 +793,16 @@ export default function ChatPage() {
                       )}
                       
                       {hasText && (
-                        <div className="px-3 pt-1.5 pb-2">
+                        <div className="px-3.5 pt-2 pb-2.5">
                            {quotedText && (
-                             <div className={`mb-1.5 pl-2 border-l-[3px] text-[12px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/10 dark:border-white/10'}`}>{quotedText}</div>
+                             <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/10 dark:border-white/10'}`}>{quotedText}</div>
                            )}
-                           <div className="text-[15px] leading-snug break-words whitespace-pre-wrap">
+                           <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap">
                              {text}
                              <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
                                {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                {timeStr}
-                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/><Check size={12} strokeWidth={2.5}/></div>}
                              </span>
                              <div className="clear-both"></div>
                            </div>
@@ -805,7 +817,7 @@ export default function ChatPage() {
                            const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
                            
                            return (
-                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2.5 rounded-full border transition-transform active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                  {firstUser?.avatar ? <img src={firstUser.avatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
                                </div>
