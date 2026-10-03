@@ -246,7 +246,7 @@ export default function WallPage() {
         <div className="w-[80px]"></div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pt-4 pb-20 px-4">
+      <main className="flex-1 overflow-y-auto pt-4 pb-6 px-4">
         {isLoading ? (
           <div className="flex justify-center items-center py-24"><Loader2 size={32} className="animate-spin text-[#86868b] dark:text-[#98989d]" /></div>
         ) : posts.length === 0 ? (
@@ -301,6 +301,12 @@ export default function WallPage() {
                            ? <video key={idx} src={url} controls className="w-full h-auto max-h-[400px] object-cover" />
                            : <img key={idx} src={url} loading="lazy" decoding="async" onClick={() => setFullScreenImage(url)} className="w-full h-auto max-h-[400px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                       ))}
+                      {!hasText && (
+                        <div className="absolute bottom-2 right-2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
+                           {timeStr}
+                           {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                        </div>
+                      )}
                     </div>
                   )}
                   
@@ -311,22 +317,37 @@ export default function WallPage() {
                        )}
                        <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
                          {text}
+                         <span className="float-right inline-flex items-center gap-1 text-[11px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
+                           {post.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
+                           {timeStr}
+                           {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/><Check size={12} strokeWidth={2.5}/></div>}
+                         </span>
+                         <div className="clear-both"></div>
                        </div>
+                    </div>
+                  )}
+                  
+                  {!hasText && hasMedia && (
+                    <div className="px-4 pb-2 pt-1.5 flex justify-end">
+                       <span className="text-[11px] text-[#86868b] dark:text-[#98989d] flex gap-1 items-center">
+                         {timeStr}
+                         {isMe && <div className="flex -space-x-1"><Check size={12} strokeWidth={2.5}/><Check size={12} strokeWidth={2.5}/></div>}
+                       </span>
                     </div>
                   )}
 
                   {reactionsKeys.length > 0 && (
-                    <div className="px-4 pb-4 pt-1 flex flex-wrap gap-1.5">
+                    <div className="px-4 pb-3 flex flex-wrap gap-1.5">
                        {reactionsKeys.map(key => (
-                         <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)]' : 'bg-[#f5f5f7] dark:bg-[#333336] text-[#86868b] dark:text-[#98989d] border-black/5 dark:border-white/5 shadow-sm'}`}>
-                           <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
-                           <span className="text-[13px] font-bold leading-none flex items-center justify-center mt-[1px]">{post.reactions[key].count}</span>
+                         <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }} className={`flex items-center justify-center gap-1 h-[26px] px-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-[#1d1d1f]/10 dark:bg-[#f5f5f7]/10 border-[#1d1d1f]/20 dark:border-[#f5f5f7]/20' : 'bg-black/5 dark:bg-white/5 border-transparent hover:bg-black/10 dark:hover:bg-white/10'}`}>
+                           <span className="text-[13px] leading-none mb-[1px]">{key}</span>
+                           <span className={`text-[12px] font-bold leading-none mb-[1px] ${post.myReaction === key ? 'text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{post.reactions[key].count}</span>
                          </button>
                        ))}
                     </div>
                   )}
 
-                  <button onClick={() => { setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3.5 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
+                  <button onClick={() => { setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
                     <div className="flex gap-2.5 items-center">
                       <MessageCircle size={18} className="text-[#86868b] dark:text-[#98989d]" />
                       <span className="text-[14px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
