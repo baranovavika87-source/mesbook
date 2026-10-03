@@ -240,9 +240,9 @@ export default function WallPage() {
         </div>
       )}
 
-      <header className="flex justify-between items-center px-4 pt-12 pb-3 bg-white/80 dark:bg-[#222224]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl">
+      <header className="flex justify-between items-center px-4 pt-12 pb-4 bg-white/80 dark:bg-[#222224]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl">
         <button onClick={() => loadFeed(false)} className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] font-medium active:scale-95 transition-all ml-1">{t.refresh}</button>
-        <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[19px] font-bold absolute left-1/2 -translate-x-1/2 tracking-tight">{t.wall}</h1>
+        <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[20px] font-bold absolute left-1/2 -translate-x-1/2 tracking-tight">{t.wall}</h1>
         <div className="w-[80px]"></div>
       </header>
 
@@ -264,25 +264,23 @@ export default function WallPage() {
             </Link>
           </div>
         ) : (
-          <div className="flex flex-col space-y-5">
+          <div className="flex flex-col">
             {posts.map((post) => {
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
               const reactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
               const isMenuOpen = activeContextMenu === post.id;
-              const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
               const isMe = String(post.senderId) === String(currentUserId);
+              const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
               return (
                 <div 
                   key={post.id} 
-                  className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative mb-2 ${isMenuOpen ? 'z-50' : 'z-10'}`}
+                  className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative mb-5 ${isMenuOpen ? 'z-50' : 'z-10'}`}
                   onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(post.id); }}
                   onTouchStart={(e) => { pressTimer.current = setTimeout(() => { if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); setActiveContextMenu(post.id); }, 400); }}
                   onTouchMove={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
                   onTouchEnd={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
                 >
-                  
-                  {/* ИСПРАВЛЕНИЕ: Вернули время справа от названия канала! */}
                   <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#222224] flex justify-between items-center">
                      <Link href={`/chat/${post.chatId}`}>
                         <a className="font-semibold text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight hover:opacity-80 transition-opacity">
@@ -307,7 +305,7 @@ export default function WallPage() {
                        {quotedText && (
                          <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
                        )}
-                       <div className="text-[15px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
+                       <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
                          {text}
                        </div>
                     </div>
@@ -373,7 +371,7 @@ export default function WallPage() {
         )}
       </main>
 
-      {/* МОДАЛКА КОММЕНТАРИЕВ */}
+      {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ СТЕНЫ */}
       {activeThread && (
         <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300">
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
@@ -421,18 +419,18 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* ИСПРАВЛЕНИЕ: Меньше отступы у навигации! */}
-      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-2 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-5 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+      {/* НИЖНЯЯ ПАНЕЛЬ СТЕНЫ С РАЗМЫТИЕМ: ОТСТУПЫ КАК В ЧАТЕ */}
+      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         <Link href="/">
           <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
-            <MessageSquare size={24} className="mb-1" strokeWidth={1.5} />
-            <span className="text-[10px] font-semibold tracking-wide">{t.chats}</span>
+            <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
+            <span className="text-[11px] font-semibold tracking-wide">{t.chats}</span>
           </a>
         </Link>
         <Link href="/wall">
           <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95">
-            <Users size={24} className="mb-1" fill="currentColor" strokeWidth={1.5} />
-            <span className="text-[10px] font-semibold tracking-wide">{t.wall}</span>
+            <Users size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
+            <span className="text-[11px] font-semibold tracking-wide">{t.wall}</span>
           </a>
         </Link>
       </nav>
