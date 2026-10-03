@@ -137,6 +137,7 @@ export default function ChatPage() {
   const [threadComments, setThreadComments] = useState<any[]>([]);
   const [commentContent, setCommentContent] = useState('');
   
+  // ВЕРНУЛ ПЕРЕМЕННЫЕ АДМИНА
   const [isMember, setIsMember] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -203,7 +204,21 @@ export default function ChatPage() {
 
   const loadData = async () => {
     if (isSavedChat) return;
+    
+    // ВЕРНУЛ ПРОВЕРКУ ПРАВ АДМИНА!
+    try {
+      const roleRes = await fetch(`/api/chats/${chatId}/is_member`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
+      if (roleRes.ok) {
+         const roleData = await roleRes.json();
+         setIsMember(roleData.isMember);
+         setIsAdmin(roleData.role === 'admin');
+         setMembersCount(roleData.membersCount);
+         setOnlineCount(roleData.onlineCount);
+      }
+    } catch (e) {}
+
     try { await fetch('/api/chats/' + chatId + '/read', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
+    
     try {
       const infoRes = await fetch('/api/chats', { headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' } });
       if (infoRes.ok) {
@@ -212,6 +227,7 @@ export default function ChatPage() {
         if (currentChat) setChatInfo(currentChat);
       }
     } catch (e) {}
+    
     try {
       const msgRes = await fetch('/api/chats/' + chatId + '/messages', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
       if (msgRes.ok) {
@@ -233,12 +249,10 @@ export default function ChatPage() {
     }
   };
 
+  // УДАЛЕН ЖЕСТКИЙ ИНТЕРВАЛ В 10 СЕКУНД, КОТОРЫЙ ТОРМОЗИЛ ПРИЛОЖЕНИЕ! 
+  // Теперь все работает мгновенно через WebSockets
   useEffect(() => {
     loadData();
-    if (!isSavedChat) {
-      const interval = setInterval(loadData, 10000); 
-      return () => clearInterval(interval);
-    }
   }, [chatId, activeThread]);
 
   useEffect(() => {
@@ -291,7 +305,12 @@ export default function ChatPage() {
     const finalContent = replyingTo ? `> ${replyingTo.content}\n\n${tempContent}` : tempContent;
     setContent('');
     setReplyingTo(null);
-    setTimeout(() => { if (inputRef.current) inputRef.current.focus(); }, 10);
+    
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 10);
     
     const tempMsg = { id: Date.now(), content: finalContent, isSending: !isSavedChat, senderId: currentUserId, createdAt: new Date().toISOString() };
     if (isSavedChat) {
@@ -533,7 +552,7 @@ export default function ChatPage() {
                threadComments.map(c => (
                  <div key={c.id} className="flex gap-3 items-start">
                    <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
-                     {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
+                     {c.senderAvatar ? <img src={c.senderAvatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
                    </div>
                    <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
                      <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
@@ -586,7 +605,7 @@ export default function ChatPage() {
                 </div>
                 <input type="file" accept="image/*" className="hidden" ref={editAvatarRef} onChange={handleEditAvatarUpload} />
               </div>
-              <div className="bg-white dark:bg-[#222224] rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden border border-black/5 dark:border-white/5">
+              <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden border border-black/5 dark:border-white/5">
                 <div className="px-5 py-3 border-b border-black/5 dark:border-white/5">
                   <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mt-1">{t.name}</label>
                   <input type="text" value={editChatName} onChange={e => setEditChatName(e.target.value)} className="w-full bg-transparent py-1.5 text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
@@ -600,7 +619,7 @@ export default function ChatPage() {
           ) : (
             <div className="flex flex-col items-center pt-8 pb-4">
               <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 mb-4">
-                {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? <img src={chatInfo.participant.avatarUrl} className="w-full h-full object-cover" /> : <span className="text-[40px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>}
+                {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? <img src={chatInfo.participant.avatarUrl} loading="lazy" className="w-full h-full object-cover" /> : <span className="text-[40px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>}
               </div>
               <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 text-center px-4 tracking-tight">{chatInfo.participant.displayName}</h2>
               {chatInfo.participant.username && <p className="text-[15px] text-[#86868b] dark:text-[#98989d]">{chatInfo.participant.username}</p>}
@@ -667,7 +686,7 @@ export default function ChatPage() {
                           {mediaUrls.map((url, idx) => (
                              isVideo 
                                ? <video key={idx} src={url} controls className="w-full h-auto max-h-[400px] object-cover" />
-                               : <img key={idx} src={url} onClick={() => setFullScreenImage(url)} className="w-full h-auto max-h-[400px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
+                               : <img key={idx} src={url} loading="lazy" decoding="async" onClick={() => setFullScreenImage(url)} className="w-full h-auto max-h-[400px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                           ))}
                         </div>
                       )}
@@ -747,7 +766,7 @@ export default function ChatPage() {
                           {mediaUrls.map((url, idx) => (
                              isVideo 
                                ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} />
-                               : <img key={idx} src={url} onClick={() => setFullScreenImage(url)} className={`w-full h-auto max-h-[400px] object-cover cursor-pointer ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
+                               : <img key={idx} src={url} loading="lazy" decoding="async" onClick={() => setFullScreenImage(url)} className={`w-full h-auto max-h-[400px] object-cover cursor-pointer ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                           ))}
                         </div>
                       )}
@@ -821,6 +840,7 @@ export default function ChatPage() {
           </div>
         )}
 
+        {/* ЕСЛИ НЕ УЧАСТНИК -> КНОПКА ВСТУПИТЬ */}
         {!isMember ? (
           <div className="flex items-center justify-center pt-1 px-1">
             <button onClick={joinChat} className="w-full py-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] font-semibold rounded-[20px] transition-transform active:scale-95 text-[16px] shadow-[0_4px_15px_rgba(0,0,0,0.1)] dark:shadow-none">
