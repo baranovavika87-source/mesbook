@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { ArrowLeft, Loader2, Camera, LogOut, Moon, Sun, User as UserIcon, Calendar, Link as LinkIcon, AtSign, Globe, Settings as SettingsIcon, MessageSquare, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Loader2, Camera, LogOut, Moon, Sun, User as UserIcon, Calendar, Link as LinkIcon, AtSign, Globe, Settings as SettingsIcon, MessageSquare, ChevronRight, Check } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -324,17 +324,17 @@ export default function SettingsPage() {
 
       </main>
 
-      <nav className="border-t border-white/10 flex justify-around p-2 bg-[#1c1c1e]/90 backdrop-blur-xl z-10 pb-5">
+      <nav className="border-t border-white/10 flex justify-around p-3 bg-[#1c1c1e]/90 backdrop-blur-xl z-10 pb-6">
         <Link href="/">
           <a className="flex flex-col items-center text-gray-500 hover:text-white transition-colors active:scale-95">
-            <MessageSquare size={24} className="mb-1" strokeWidth={1.5} />
-            <span className="text-[10px] font-semibold tracking-wide">{t.settings}</span>
+            <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
+            <span className="text-[11px] font-semibold tracking-wide">Чаты</span>
           </a>
         </Link>
         <Link href="/settings">
           <a className="flex flex-col items-center text-white transition-transform active:scale-95">
-            <SettingsIcon size={24} className="mb-1" fill="currentColor" strokeWidth={1.5} />
-            <span className="text-[10px] font-semibold tracking-wide">{t.settings}</span>
+            <SettingsIcon size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
+            <span className="text-[11px] font-semibold tracking-wide">{t.settings}</span>
           </a>
         </Link>
       </nav>
