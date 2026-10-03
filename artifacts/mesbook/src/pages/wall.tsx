@@ -280,9 +280,11 @@ export default function WallPage() {
                   onTouchMove={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
                   onTouchEnd={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
                 >
-                  <div className="px-4 pt-3.5 pb-2.5 bg-white dark:bg-[#222224]">
+                  
+                  {/* ИСПРАВЛЕНИЕ: Только название канала + линия border-b, ссылка внутрь чата, монохром */}
+                  <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#222224]">
                      <Link href={`/chat/${post.chatId}`}>
-                        <a className="font-semibold text-[15px] text-[#007aff] dark:text-[#0a84ff] tracking-tight hover:opacity-80 transition-opacity">
+                        <a className="font-semibold text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight hover:opacity-80 transition-opacity flex items-center justify-between">
                           {post.channelName}
                         </a>
                      </Link>
@@ -341,6 +343,7 @@ export default function WallPage() {
                              </button>
                            ))}
                         </div>
+                        {/* ИСПРАВЛЕНИЕ: монохромная кнопка удаления без красного текста */}
                         <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
                            <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
                              <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
@@ -354,8 +357,8 @@ export default function WallPage() {
                              </button>
                            )}
                            {isMe && (
-                             <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); deletePost(post); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left">
-                               <Trash2 size={18} className="text-red-500" /> {t.deleteAction}
+                             <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); deletePost(post); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
+                               <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
                              </button>
                            )}
                         </div>
