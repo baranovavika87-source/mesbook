@@ -264,7 +264,7 @@ export default function WallPage() {
             </Link>
           </div>
         ) : (
-          <div className="flex flex-col">
+          <div className="flex flex-col space-y-5">
             {posts.map((post) => {
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
               const reactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
@@ -419,7 +419,7 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* НИЖНЯЯ ПАНЕЛЬ СТЕНЫ С РАЗМЫТИЕМ: ОТСТУПЫ КАК В ЧАТЕ */}
+      {/* ИСПРАВЛЕНИЕ: Точная копия нижней панели из чатов */}
       <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         <Link href="/">
           <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
