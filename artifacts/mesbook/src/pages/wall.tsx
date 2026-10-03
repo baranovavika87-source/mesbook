@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send, ArrowLeft, Download, Copy, Reply, Check, ChevronRight } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Send, ArrowLeft, Download, Check, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -30,8 +30,6 @@ const translations = {
     noComments: "Пока нет комментариев",
     commentPlaceholder: "Комментарий...",
     commentsCount: ['комментарий', 'комментария', 'комментариев'],
-    replyAction: "Ответить",
-    copy: "Копировать",
     editAction: "Изменить",
     deleteAction: "Удалить"
   },
@@ -50,8 +48,6 @@ const translations = {
     noComments: "No comments yet",
     commentPlaceholder: "Comment...",
     commentsCount: ['comment', 'comments', 'comments'],
-    replyAction: "Reply",
-    copy: "Copy",
     editAction: "Edit",
     deleteAction: "Delete"
   }
@@ -78,14 +74,12 @@ export default function WallPage() {
   const [editingPost, setEditingPost] = useState<any>(null);
   const [editContent, setEditContent] = useState("");
 
-  const [activeReactionMsg, setActiveReactionMsg] = useState<number | null>(null);
   const [activeContextMenu, setActiveContextMenu] = useState<number | null>(null);
   const [activeThread, setActiveThread] = useState<any>(null);
   const [threadComments, setThreadComments] = useState<any[]>([]);
   const [commentContent, setCommentContent] = useState('');
   
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
-  const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const activeThreadRef = useRef<any>(null);
   useEffect(() => {
@@ -191,7 +185,6 @@ export default function WallPage() {
         body: JSON.stringify({ reaction }) 
       });
     } catch (e) {}
-    setActiveReactionMsg(null);
     setActiveContextMenu(null);
   };
 
@@ -225,7 +218,7 @@ export default function WallPage() {
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20" onClick={() => { setActiveReactionMsg(null); setActiveContextMenu(null); }}>
+    <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20" onClick={() => setActiveContextMenu(null)}>
       
       {/* ЛАЙТБОКС */}
       {fullScreenImage && (
@@ -236,6 +229,30 @@ export default function WallPage() {
           </div>
           <div className="flex-1 flex items-center justify-center p-2 overflow-hidden touch-pinch-zoom">
             <img src={fullScreenImage} alt="Fullscreen Media" className="max-w-full max-h-full object-contain select-none" />
+          </div>
+        </div>
+      )}
+
+      {/* МОДАЛКА РЕДАКТИРОВАНИЯ */}
+      {editingPost && (
+        <div className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#222224] w-full max-w-md rounded-[24px] overflow-hidden shadow-[0_4px_25px_rgba(0,0,0,0.1)] dark:shadow-none border border-black/5 dark:border-white/5">
+            <div className="px-5 py-4 border-b border-black/5 dark:border-white/5 flex justify-between items-center">
+              <h3 className="font-bold text-[18px] text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.editPost}</h3>
+              <button onClick={() => setEditingPost(null)} className="text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors"><X size={22}/></button>
+            </div>
+            <div className="p-5">
+              <textarea
+                className="w-full bg-[#f5f5f7] dark:bg-[#161618] rounded-[16px] p-4 text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none border border-black/5 dark:border-white/5 transition-colors focus:border-black/20 dark:focus:border-white/20"
+                rows={5}
+                value={editContent}
+                onChange={e => setEditContent(e.target.value)}
+              />
+            </div>
+            <div className="px-5 py-4 flex gap-3">
+              <button onClick={() => setEditingPost(null)} className="flex-1 py-3.5 font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] bg-[#f5f5f7] dark:bg-[#333336] rounded-[16px] active:scale-95 transition-transform">{t.cancel}</button>
+              <button onClick={saveEditedPost} className="flex-1 py-3.5 font-semibold text-[#f5f5f7] dark:text-[#1d1d1f] bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-[16px] active:scale-95 transition-transform shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">{t.save}</button>
+            </div>
           </div>
         </div>
       )}
@@ -264,7 +281,7 @@ export default function WallPage() {
             </Link>
           </div>
         ) : (
-          <div className="flex flex-col space-y-5">
+          <div className="flex flex-col">
             {posts.map((post) => {
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
               const reactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
@@ -275,11 +292,8 @@ export default function WallPage() {
               return (
                 <div 
                   key={post.id} 
-                  className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative mb-5 ${isMenuOpen ? 'z-50' : 'z-10'}`}
-                  onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(post.id); }}
-                  onTouchStart={(e) => { pressTimer.current = setTimeout(() => { if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40); setActiveContextMenu(post.id); }, 400); }}
-                  onTouchMove={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
-                  onTouchEnd={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
+                  className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative mb-5 cursor-pointer ${isMenuOpen ? 'z-50' : 'z-10'}`}
+                  onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : post.id); }}
                 >
                   <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#222224] flex justify-between items-center">
                      <Link href={`/chat/${post.chatId}`}>
@@ -295,7 +309,7 @@ export default function WallPage() {
                       {mediaUrls.map((url, idx) => (
                          isVideo 
                            ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" />
-                           : <img key={idx} src={url} loading="lazy" decoding="async" onClick={() => setFullScreenImage(url)} className="w-full h-auto max-h-[500px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
+                           : <img key={idx} src={url} loading="lazy" decoding="async" onClick={(e) => { e.stopPropagation(); setFullScreenImage(url); }} className="w-full h-auto max-h-[500px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                       ))}
                     </div>
                   )}
@@ -322,7 +336,7 @@ export default function WallPage() {
                     </div>
                   )}
 
-                  <button onClick={() => { setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3.5 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
+                  <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3.5 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
                     <div className="flex gap-2.5 items-center">
                       <MessageCircle size={18} className="text-[#86868b] dark:text-[#98989d]" />
                       <span className="text-[14px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
@@ -334,7 +348,7 @@ export default function WallPage() {
 
                   {isMenuOpen && (
                     <>
-                      <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} onContextMenu={(e) => { e.preventDefault(); setActiveContextMenu(null); }} />
+                      <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} />
                       <div className="absolute z-[70] flex flex-col gap-2 right-4 bottom-14 min-w-[200px] items-end">
                         <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
                            {FAST_REACTIONS.map(emoji => (
@@ -343,24 +357,17 @@ export default function WallPage() {
                              </button>
                            ))}
                         </div>
-                        <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
-                           <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                             <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
-                           </button>
-                           <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(post.content).text); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                             <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
-                           </button>
-                           {isMe && (
+                        {/* Меню только для автора */}
+                        {isMe && (
+                          <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
                              <button onClick={(e) => { e.stopPropagation(); startEditingPost(post); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
                                <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
                              </button>
-                           )}
-                           {isMe && (
                              <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); deletePost(post); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
                                <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
                              </button>
-                           )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
@@ -419,18 +426,17 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* ИСПРАВЛЕНИЕ: Точная копия нижней панели из чатов */}
-      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-2 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-5 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         <Link href="/">
           <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
-            <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
-            <span className="text-[11px] font-semibold tracking-wide">{t.chats}</span>
+            <MessageSquare size={24} className="mb-1" strokeWidth={1.5} />
+            <span className="text-[10px] font-semibold tracking-wide">{t.chats}</span>
           </a>
         </Link>
         <Link href="/wall">
           <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95">
-            <Users size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
-            <span className="text-[11px] font-semibold tracking-wide">{t.wall}</span>
+            <Users size={24} className="mb-1" fill="currentColor" strokeWidth={1.5} />
+            <span className="text-[10px] font-semibold tracking-wide">{t.wall}</span>
           </a>
         </Link>
       </nav>
