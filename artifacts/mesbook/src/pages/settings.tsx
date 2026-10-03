@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'wouter';
-import { ArrowLeft, Loader2, Camera, LogOut, Moon, Sun, User as UserIcon, Calendar, Link as LinkIcon, AtSign, Globe, Settings as SettingsIcon, MessageSquare, ChevronRight, Check } from 'lucide-react';
+import { Link, useLocation } from 'wouter';
+import { ArrowLeft, Loader2, Camera, LogOut, Moon, Sun, User as UserIcon, Calendar, Link as LinkIcon, AtSign, Globe, Settings as SettingsIcon, ChevronRight, Check } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -12,7 +12,6 @@ const getUserId = () => {
 const translations = {
   ru: {
     settings: "Настройки",
-    accounts: "Аккаунты",
     account: "Аккаунт",
     accountDesc: "Номер, имя пользователя, «О себе»",
     chatSettings: "Настройки чатов",
@@ -30,7 +29,6 @@ const translations = {
   },
   en: {
     settings: "Settings",
-    accounts: "Accounts",
     account: "Account",
     accountDesc: "Number, username, Bio",
     chatSettings: "Chat Settings",
@@ -50,17 +48,19 @@ const translations = {
 
 export default function SettingsPage() {
   const currentUserId = getUserId();
+  const [, setLocation] = useLocation();
   
   const [lang, setLang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
 
   const [user, setUser] = useState<any>(null);
-  const [accounts, setAccounts] = useState<any[]>([]);
   const [isDark, setIsDark] = useState(false);
   
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [view, setView] = useState<'main' | 'profile'>('main');
+  const [showLangModal, setShowLangModal] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -74,11 +74,6 @@ export default function SettingsPage() {
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     setIsDark(savedTheme === 'dark');
-
-    try {
-      const accs = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
-      setAccounts(accs);
-    } catch(e) {}
 
     const fetchUser = async () => {
       try {
@@ -156,21 +151,16 @@ export default function SettingsPage() {
     }
   };
 
-  const toggleLanguage = () => {
-    const newLang = lang === 'ru' ? 'en' : 'ru';
+  const changeLanguage = (newLang: 'ru' | 'en') => {
     setLang(newLang);
     localStorage.setItem('mesbook_lang', newLang);
-    window.location.reload();
-  };
-
-  const switchAccount = (acc: any) => {
-    localStorage.setItem('mesbook_user', JSON.stringify(acc));
+    setShowLangModal(false);
     window.location.reload();
   };
 
   const handleLogout = () => {
-    const accs = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
-    const newAccounts = accs.filter((a: any) => String(a.id) !== String(currentUserId));
+    const accounts = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
+    const newAccounts = accounts.filter((a: any) => String(a.id) !== String(currentUserId));
     localStorage.setItem('mesbook_accounts', JSON.stringify(newAccounts));
     if (newAccounts.length > 0) {
       localStorage.setItem('mesbook_user', JSON.stringify(newAccounts[0]));
@@ -180,44 +170,61 @@ export default function SettingsPage() {
     window.location.href = '/';
   };
 
-  if (!user) return <div className="flex h-[100dvh] items-center justify-center bg-black"><Loader2 size={32} className="animate-spin text-white" /></div>;
+  if (!user) return <div className="flex h-[100dvh] items-center justify-center bg-[#f5f5f7] dark:bg-[#161618]"><Loader2 size={32} className="animate-spin text-[#86868b]" /></div>;
 
   const phoneDisplay = "+7 (996) 697-77-52"; 
 
+  // --- ЭКРАН ПРОФИЛЯ ---
   if (view === 'profile') {
     return (
-      <div className="flex h-[100dvh] flex-col bg-black transition-colors duration-300 font-sans relative overflow-hidden">
-        <header className="flex items-center justify-between px-4 pt-12 pb-4 bg-black sticky top-0 z-10">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setView('main')} className="text-blue-500 transition-transform active:scale-95 flex items-center gap-1">
-              <ArrowLeft size={24} /> <span className="text-[17px] font-medium">{t.settings}</span>
-            </button>
-          </div>
-          <button onClick={handleSaveProfile} disabled={isSaving} className="text-blue-500 font-medium text-[17px] active:opacity-70 transition-opacity">
+      <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20">
+        <header className="flex items-center justify-between px-4 pt-12 pb-4 bg-[#f5f5f7]/90 dark:bg-[#161618]/90 sticky top-0 z-10 backdrop-blur-xl border-b border-black/5 dark:border-white/5">
+          <button onClick={() => setView('main')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 flex items-center gap-1">
+            <ArrowLeft size={26} strokeWidth={2} /> 
+          </button>
+          <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[18px] font-semibold absolute left-1/2 -translate-x-1/2 tracking-tight">{t.profile}</h1>
+          <button onClick={handleSaveProfile} disabled={isSaving} className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[16px] active:opacity-70 transition-opacity">
             {isSaving ? <Loader2 size={20} className="animate-spin" /> : t.save}
           </button>
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 pt-6 pb-20">
-          <div className="bg-[#1c1c1e] rounded-[10px] overflow-hidden flex flex-col">
-            <div className="flex items-center px-4 py-2 border-b border-white/10">
-              <UserIcon size={20} className="text-gray-400 shrink-0 mr-3" />
-              <input type="text" value={formData.displayName} onChange={e => setFormData({...formData, displayName: e.target.value})} placeholder={t.name} className="flex-1 bg-transparent py-2 text-[16px] text-white outline-none placeholder-gray-500" />
+          <div className="flex flex-col items-center mb-8">
+            <div className="relative w-[100px] h-[100px] rounded-full shadow-sm bg-white dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 cursor-pointer mb-3" onClick={() => fileInputRef.current?.click()}>
+              {user.avatarUrl && user.avatarUrl.length > 5 ? (
+                <img src={user.avatarUrl} className="w-full h-full object-cover" />
+              ) : (
+                <Camera size={36} className="text-[#86868b] dark:text-[#98989d]" />
+              )}
+              {isUploading && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm">
+                  <Loader2 size={24} className="text-white animate-spin" />
+                </div>
+              )}
             </div>
-            <div className="flex items-center px-4 py-2 border-b border-white/10">
-              <AtSign size={20} className="text-gray-400 shrink-0 mr-3" />
-              <input type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} placeholder={t.username} className="flex-1 bg-transparent py-2 text-[16px] text-white outline-none placeholder-gray-500" />
+            <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
+          </div>
+
+          <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden flex flex-col shadow-sm border border-black/5 dark:border-white/5">
+            <div className="flex items-center px-4 py-3 border-b border-black/5 dark:border-white/5">
+              <span className="w-[100px] text-[15px] text-[#86868b] dark:text-[#98989d]">{t.name}</span>
+              <input type="text" value={formData.displayName} onChange={e => setFormData({...formData, displayName: e.target.value})} className="flex-1 bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
             </div>
-            <div className="flex items-start px-4 py-2 border-b border-white/10">
-              <textarea rows={2} value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} placeholder={t.bio} className="flex-1 bg-transparent py-2 text-[16px] text-white outline-none resize-none placeholder-gray-500" />
+            <div className="flex items-center px-4 py-3 border-b border-black/5 dark:border-white/5">
+              <span className="w-[100px] text-[15px] text-[#86868b] dark:text-[#98989d]">{t.username}</span>
+              <input type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="flex-1 bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
             </div>
-            <div className="flex items-center px-4 py-2 border-b border-white/10">
-              <LinkIcon size={20} className="text-gray-400 shrink-0 mr-3" />
-              <input type="text" value={formData.personalChannel} onChange={e => setFormData({...formData, personalChannel: e.target.value})} placeholder={t.personalChannel} className="flex-1 bg-transparent py-2 text-[16px] text-white outline-none placeholder-gray-500" />
+            <div className="flex items-start px-4 py-3 border-b border-black/5 dark:border-white/5">
+              <span className="w-[100px] text-[15px] text-[#86868b] dark:text-[#98989d] mt-0.5">{t.bio}</span>
+              <textarea rows={2} value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} className="flex-1 bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none" />
             </div>
-            <div className="flex items-center px-4 py-2">
-              <Calendar size={20} className="text-gray-400 shrink-0 mr-3" />
-              <input type="text" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} placeholder={t.birthDate} className="flex-1 bg-transparent py-2 text-[16px] text-white outline-none placeholder-gray-500" />
+            <div className="flex items-center px-4 py-3 border-b border-black/5 dark:border-white/5">
+              <span className="w-[100px] text-[15px] text-[#86868b] dark:text-[#98989d]">{t.personalChannel}</span>
+              <input type="text" value={formData.personalChannel} onChange={e => setFormData({...formData, personalChannel: e.target.value})} className="flex-1 bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
+            </div>
+            <div className="flex items-center px-4 py-3">
+              <span className="w-[100px] text-[15px] text-[#86868b] dark:text-[#98989d]">{t.birthDate}</span>
+              <input type="text" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="flex-1 bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
             </div>
           </div>
         </main>
@@ -225,119 +232,100 @@ export default function SettingsPage() {
     );
   }
 
+  // --- ГЛАВНЫЙ ЭКРАН НАСТРОЕК ---
   return (
-    <div className="flex h-[100dvh] flex-col bg-black transition-colors duration-300 font-sans relative overflow-hidden text-white">
+    <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20">
       
-      <main className="flex-1 overflow-y-auto px-4 pt-12 pb-20">
+      <header className="flex items-center px-4 pt-12 pb-4 bg-white/80 dark:bg-[#222224]/80 sticky top-0 z-10 shadow-[0_1px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl border-b border-black/5 dark:border-white/5">
+        <button onClick={() => setLocation('/')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 mr-4">
+           <ArrowLeft size={26} strokeWidth={2} />
+        </button>
+        <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[22px] font-bold tracking-tight">{t.settings}</h1>
+      </header>
+
+      <main className="flex-1 overflow-y-auto px-4 pt-6 pb-20">
         
         {/* Аватарка */}
-        <div className="flex flex-col items-center pt-2 pb-6">
-          <div className="w-[100px] h-[100px] rounded-full bg-blue-500 text-white flex items-center justify-center text-[40px] font-medium relative mb-3 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+        <div className="flex flex-col items-center pt-2 pb-8">
+          <div className="w-[110px] h-[110px] rounded-full bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7] flex items-center justify-center text-[40px] font-medium mb-3 border border-black/5 dark:border-white/5 shadow-sm">
             {user.avatarUrl && user.avatarUrl.length > 5 ? (
               <img src={user.avatarUrl} className="w-full h-full object-cover rounded-full" />
             ) : (
               <span>{user.displayName?.charAt(0).toUpperCase()}</span>
             )}
-            <div className="absolute bottom-0 right-0 w-8 h-8 bg-black rounded-full flex items-center justify-center">
-               <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-white">
-                 {isUploading ? <Loader2 size={12} className="animate-spin" /> : <Camera size={14}/>}
-               </div>
-            </div>
           </div>
-          <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
-          
-          <h2 className="text-[22px] font-semibold tracking-tight">{user.displayName}</h2>
-          <p className="text-[15px] text-gray-400 mt-1">{phoneDisplay} • {user.username}</p>
+          <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{user.displayName}</h2>
+          <p className="text-[15px] text-[#86868b] dark:text-[#98989d] mt-0.5">{phoneDisplay} • {user.username}</p>
         </div>
 
-        {/* Аккаунты */}
+        {/* Основные настройки - Строгий монохром */}
         <div className="mb-6">
-           <h3 className="text-[13px] font-semibold text-gray-500 ml-4 mb-1.5 uppercase tracking-wide">{t.accounts}</h3>
-           <div className="bg-[#1c1c1e] rounded-[10px] overflow-hidden">
-               {accounts.map((acc, index) => {
-                 const isActive = String(acc.id) === String(currentUserId);
-                 return (
-                   <button key={acc.id} onClick={() => !isActive && switchAccount(acc)} className={`flex items-center justify-between w-full px-4 py-2.5 transition-colors ${index !== accounts.length - 1 ? 'border-b border-white/5' : ''} ${isActive ? 'cursor-default' : 'active:bg-white/5'}`}>
-                     <div className="flex items-center gap-3">
-                       <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-[14px]">
-                         {acc.avatarUrl && acc.avatarUrl.length > 5 ? <img src={acc.avatarUrl} className="w-full h-full object-cover rounded-full" /> : acc.displayName?.charAt(0).toUpperCase()}
-                       </div>
-                       <span className="text-[16px] font-medium">{acc.displayName}</span>
-                     </div>
-                     {isActive && (
-                       <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
-                         <Check size={14} className="text-white" />
-                       </div>
-                     )}
-                   </button>
-                 );
-               })}
-           </div>
-        </div>
-
-        {/* Основные настройки */}
-        <div className="mb-6">
-           <div className="bg-[#1c1c1e] rounded-[10px] overflow-hidden flex flex-col">
-               <button onClick={() => setView('profile')} className="flex items-center justify-between px-4 py-2.5 w-full text-left border-b border-white/5 active:bg-white/5 transition-colors">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-8 h-8 rounded-[8px] bg-blue-500 flex items-center justify-center text-white"><UserIcon size={18}/></div>
+           <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden flex flex-col shadow-sm border border-black/5 dark:border-white/5">
+               <button onClick={() => setView('profile')} className="flex items-center justify-between px-4 py-3.5 w-full text-left border-b border-black/5 dark:border-white/5 active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className="w-9 h-9 rounded-[10px] bg-[#f5f5f7] dark:bg-[#333336] flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7]"><UserIcon size={20}/></div>
                     <div className="flex flex-col">
-                       <span className="text-[16px] font-medium leading-tight">{t.account}</span>
-                       <span className="text-[13px] text-gray-500 leading-tight mt-0.5">{t.accountDesc}</span>
+                       <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight">{t.account}</span>
+                       <span className="text-[13px] text-[#86868b] dark:text-[#98989d] leading-tight mt-0.5">{t.accountDesc}</span>
                     </div>
                   </div>
-                  <ChevronRight size={20} className="text-gray-500" />
+                  <ChevronRight size={20} className="text-[#86868b] dark:text-[#98989d]" />
                </button>
 
-               <button onClick={toggleTheme} className="flex items-center justify-between px-4 py-2.5 w-full text-left border-b border-white/5 active:bg-white/5 transition-colors">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-8 h-8 rounded-[8px] bg-orange-500 flex items-center justify-center text-white"><SettingsIcon size={18}/></div>
+               <button onClick={toggleTheme} className="flex items-center justify-between px-4 py-3.5 w-full text-left border-b border-black/5 dark:border-white/5 active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className="w-9 h-9 rounded-[10px] bg-[#f5f5f7] dark:bg-[#333336] flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7]"><SettingsIcon size={20}/></div>
                     <div className="flex flex-col">
-                       <span className="text-[16px] font-medium leading-tight">{t.chatSettings}</span>
-                       <span className="text-[13px] text-gray-500 leading-tight mt-0.5">{t.chatSettingsDesc}</span>
+                       <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight">{t.chatSettings}</span>
+                       <span className="text-[13px] text-[#86868b] dark:text-[#98989d] leading-tight mt-0.5">{t.chatSettingsDesc}</span>
                     </div>
                   </div>
-                  <ChevronRight size={20} className="text-gray-500" />
+                  <div className={`w-12 h-6 rounded-full p-1 transition-colors ${isDark ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7]' : 'bg-[#e5e5ea] dark:bg-[#333336]'}`}>
+                    <div className={`w-4 h-4 bg-white dark:bg-[#1d1d1f] rounded-full transition-transform ${isDark ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                  </div>
                </button>
 
-               <button onClick={toggleLanguage} className="flex items-center justify-between px-4 py-2.5 w-full text-left active:bg-white/5 transition-colors">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-8 h-8 rounded-[8px] bg-purple-500 flex items-center justify-center text-white"><Globe size={18}/></div>
+               <button onClick={() => setShowLangModal(true)} className="flex items-center justify-between px-4 py-3.5 w-full text-left active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className="w-9 h-9 rounded-[10px] bg-[#f5f5f7] dark:bg-[#333336] flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7]"><Globe size={20}/></div>
                     <div className="flex flex-col">
-                       <span className="text-[16px] font-medium leading-tight">{t.language}</span>
-                       <span className="text-[13px] text-gray-500 leading-tight mt-0.5 uppercase">{lang}</span>
+                       <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight">{t.language}</span>
+                       <span className="text-[13px] text-[#86868b] dark:text-[#98989d] leading-tight mt-0.5 uppercase">{lang}</span>
                     </div>
                   </div>
-                  <ChevronRight size={20} className="text-gray-500" />
+                  <ChevronRight size={20} className="text-[#86868b] dark:text-[#98989d]" />
                </button>
            </div>
         </div>
 
-        {/* Логаут */}
+        {/* Логаут - Монохром */}
         <div className="mb-8">
-           <div className="bg-[#1c1c1e] rounded-[10px] overflow-hidden">
-               <button onClick={handleLogout} className="flex items-center justify-center w-full px-4 py-3.5 text-red-500 font-medium text-[16px] active:bg-white/5 transition-colors">
+           <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden shadow-sm border border-black/5 dark:border-white/5">
+               <button onClick={handleLogout} className="flex items-center justify-center w-full px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[16px] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
                   {t.logout}
                </button>
            </div>
         </div>
-
       </main>
 
-      <nav className="border-t border-white/10 flex justify-around p-3 bg-[#1c1c1e]/90 backdrop-blur-xl z-10 pb-6">
-        <Link href="/">
-          <a className="flex flex-col items-center text-gray-500 hover:text-white transition-colors active:scale-95">
-            <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
-            <span className="text-[11px] font-semibold tracking-wide">Чаты</span>
-          </a>
-        </Link>
-        <Link href="/settings">
-          <a className="flex flex-col items-center text-white transition-transform active:scale-95">
-            <SettingsIcon size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
-            <span className="text-[11px] font-semibold tracking-wide">{t.settings}</span>
-          </a>
-        </Link>
-      </nav>
+      {/* Модалка выбора языка */}
+      {showLangModal && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/20 dark:bg-black/50 backdrop-blur-sm animate-in fade-in" onClick={() => setShowLangModal(false)}>
+           <div className="w-full max-w-sm bg-[#f5f5f7] dark:bg-[#161618] rounded-t-[24px] sm:rounded-[24px] p-6 pb-10 sm:pb-6 animate-in slide-in-from-bottom" onClick={e => e.stopPropagation()}>
+              <h3 className="text-[18px] font-bold mb-5 text-center text-[#1d1d1f] dark:text-[#f5f5f7]">{t.language}</h3>
+              <div className="flex flex-col gap-3">
+                 <button onClick={() => changeLanguage('ru')} className={`flex items-center justify-between p-4 rounded-[16px] border transition-colors ${lang === 'ru' ? 'border-[#1d1d1f] dark:border-[#f5f5f7] bg-white dark:bg-[#222224]' : 'border-black/5 dark:border-white/5 bg-white/50 dark:bg-[#222224]/50'}`}>
+                   <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">Русский</span>
+                   {lang === 'ru' && <Check size={20} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />}
+                 </button>
+                 <button onClick={() => changeLanguage('en')} className={`flex items-center justify-between p-4 rounded-[16px] border transition-colors ${lang === 'en' ? 'border-[#1d1d1f] dark:border-[#f5f5f7] bg-white dark:bg-[#222224]' : 'border-black/5 dark:border-white/5 bg-white/50 dark:bg-[#222224]/50'}`}>
+                   <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">English</span>
+                   {lang === 'en' && <Check size={20} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />}
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 }
