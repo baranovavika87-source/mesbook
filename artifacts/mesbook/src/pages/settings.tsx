@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { ArrowLeft, Loader2, Camera, LogOut, Moon, Sun, User as UserIcon, Calendar, Link as LinkIcon, AtSign, Globe, Settings as SettingsIcon, ChevronRight, Check } from 'lucide-react';
+import { ArrowLeft, Loader2, Camera, LogOut, User as UserIcon, Calendar, Link as LinkIcon, AtSign, Globe, Settings as SettingsIcon, ChevronRight, Check } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -13,7 +13,7 @@ const translations = {
   ru: {
     settings: "Настройки",
     account: "Аккаунт",
-    accountDesc: "Номер, имя пользователя, «О себе»",
+    accountDesc: "Имя пользователя, «О себе»",
     chatSettings: "Настройки чатов",
     chatSettingsDesc: "Обои, ночной режим, анимации",
     language: "Язык",
@@ -30,7 +30,7 @@ const translations = {
   en: {
     settings: "Settings",
     account: "Account",
-    accountDesc: "Number, username, Bio",
+    accountDesc: "Username, Bio",
     chatSettings: "Chat Settings",
     chatSettingsDesc: "Wallpaper, dark mode, animations",
     language: "Language",
@@ -54,7 +54,6 @@ export default function SettingsPage() {
   const t = translations[lang] || translations.ru;
 
   const [user, setUser] = useState<any>(null);
-  const [isDark, setIsDark] = useState(false);
   
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -72,9 +71,6 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
-    setIsDark(savedTheme === 'dark');
-
     const fetchUser = async () => {
       try {
         const res = await fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
@@ -138,19 +134,6 @@ export default function SettingsPage() {
     setIsSaving(false);
   };
 
-  const toggleTheme = () => {
-    const html = document.documentElement;
-    if (isDark) {
-      html.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-      setIsDark(false);
-    } else {
-      html.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-      setIsDark(true);
-    }
-  };
-
   const changeLanguage = (newLang: 'ru' | 'en') => {
     setLang(newLang);
     localStorage.setItem('mesbook_lang', newLang);
@@ -172,9 +155,6 @@ export default function SettingsPage() {
 
   if (!user) return <div className="flex h-[100dvh] items-center justify-center bg-[#f5f5f7] dark:bg-[#161618]"><Loader2 size={32} className="animate-spin text-[#86868b]" /></div>;
 
-  const phoneDisplay = "+7 (996) 697-77-52"; 
-
-  // --- ЭКРАН ПРОФИЛЯ ---
   if (view === 'profile') {
     return (
       <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20">
@@ -206,25 +186,25 @@ export default function SettingsPage() {
           </div>
 
           <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden flex flex-col shadow-sm border border-black/5 dark:border-white/5">
-            <div className="flex items-center px-4 py-3 border-b border-black/5 dark:border-white/5">
-              <span className="w-[100px] text-[15px] text-[#86868b] dark:text-[#98989d]">{t.name}</span>
-              <input type="text" value={formData.displayName} onChange={e => setFormData({...formData, displayName: e.target.value})} className="flex-1 bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
+            <div className="flex flex-col px-4 py-3 border-b border-black/5 dark:border-white/5">
+              <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase mb-1">{t.name}</span>
+              <input type="text" value={formData.displayName} onChange={e => setFormData({...formData, displayName: e.target.value})} className="bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
             </div>
-            <div className="flex items-center px-4 py-3 border-b border-black/5 dark:border-white/5">
-              <span className="w-[100px] text-[15px] text-[#86868b] dark:text-[#98989d]">{t.username}</span>
-              <input type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="flex-1 bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
+            <div className="flex flex-col px-4 py-3 border-b border-black/5 dark:border-white/5">
+              <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase mb-1">{t.username}</span>
+              <input type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
             </div>
-            <div className="flex items-start px-4 py-3 border-b border-black/5 dark:border-white/5">
-              <span className="w-[100px] text-[15px] text-[#86868b] dark:text-[#98989d] mt-0.5">{t.bio}</span>
-              <textarea rows={2} value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} className="flex-1 bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none" />
+            <div className="flex flex-col px-4 py-3 border-b border-black/5 dark:border-white/5">
+              <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase mb-1">{t.bio}</span>
+              <textarea rows={2} value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} className="bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none" />
             </div>
-            <div className="flex items-center px-4 py-3 border-b border-black/5 dark:border-white/5">
-              <span className="w-[100px] text-[15px] text-[#86868b] dark:text-[#98989d]">{t.personalChannel}</span>
-              <input type="text" value={formData.personalChannel} onChange={e => setFormData({...formData, personalChannel: e.target.value})} className="flex-1 bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
+            <div className="flex flex-col px-4 py-3 border-b border-black/5 dark:border-white/5">
+              <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase mb-1">{t.personalChannel}</span>
+              <input type="text" value={formData.personalChannel} onChange={e => setFormData({...formData, personalChannel: e.target.value})} className="bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
             </div>
-            <div className="flex items-center px-4 py-3">
-              <span className="w-[100px] text-[15px] text-[#86868b] dark:text-[#98989d]">{t.birthDate}</span>
-              <input type="text" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="flex-1 bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
+            <div className="flex flex-col px-4 py-3">
+              <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase mb-1">{t.birthDate}</span>
+              <input type="text" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
             </div>
           </div>
         </main>
@@ -232,7 +212,6 @@ export default function SettingsPage() {
     );
   }
 
-  // --- ГЛАВНЫЙ ЭКРАН НАСТРОЕК ---
   return (
     <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20">
       
@@ -244,8 +223,6 @@ export default function SettingsPage() {
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 pt-6 pb-20">
-        
-        {/* Аватарка */}
         <div className="flex flex-col items-center pt-2 pb-8">
           <div className="w-[110px] h-[110px] rounded-full bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7] flex items-center justify-center text-[40px] font-medium mb-3 border border-black/5 dark:border-white/5 shadow-sm">
             {user.avatarUrl && user.avatarUrl.length > 5 ? (
@@ -255,10 +232,9 @@ export default function SettingsPage() {
             )}
           </div>
           <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{user.displayName}</h2>
-          <p className="text-[15px] text-[#86868b] dark:text-[#98989d] mt-0.5">{phoneDisplay} • {user.username}</p>
+          <p className="text-[15px] text-[#86868b] dark:text-[#98989d] mt-0.5">{user.username}</p>
         </div>
 
-        {/* Основные настройки - Строгий монохром */}
         <div className="mb-6">
            <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden flex flex-col shadow-sm border border-black/5 dark:border-white/5">
                <button onClick={() => setView('profile')} className="flex items-center justify-between px-4 py-3.5 w-full text-left border-b border-black/5 dark:border-white/5 active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
@@ -272,7 +248,7 @@ export default function SettingsPage() {
                   <ChevronRight size={20} className="text-[#86868b] dark:text-[#98989d]" />
                </button>
 
-               <button onClick={toggleTheme} className="flex items-center justify-between px-4 py-3.5 w-full text-left border-b border-black/5 dark:border-white/5 active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
+               <button className="flex items-center justify-between px-4 py-3.5 w-full text-left border-b border-black/5 dark:border-white/5 active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
                   <div className="flex items-center gap-4">
                     <div className="w-9 h-9 rounded-[10px] bg-[#f5f5f7] dark:bg-[#333336] flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7]"><SettingsIcon size={20}/></div>
                     <div className="flex flex-col">
@@ -280,9 +256,7 @@ export default function SettingsPage() {
                        <span className="text-[13px] text-[#86868b] dark:text-[#98989d] leading-tight mt-0.5">{t.chatSettingsDesc}</span>
                     </div>
                   </div>
-                  <div className={`w-12 h-6 rounded-full p-1 transition-colors ${isDark ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7]' : 'bg-[#e5e5ea] dark:bg-[#333336]'}`}>
-                    <div className={`w-4 h-4 bg-white dark:bg-[#1d1d1f] rounded-full transition-transform ${isDark ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                  </div>
+                  <ChevronRight size={20} className="text-[#86868b] dark:text-[#98989d]" />
                </button>
 
                <button onClick={() => setShowLangModal(true)} className="flex items-center justify-between px-4 py-3.5 w-full text-left active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
@@ -298,7 +272,6 @@ export default function SettingsPage() {
            </div>
         </div>
 
-        {/* Логаут - Монохром */}
         <div className="mb-8">
            <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden shadow-sm border border-black/5 dark:border-white/5">
                <button onClick={handleLogout} className="flex items-center justify-center w-full px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[16px] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
@@ -308,7 +281,6 @@ export default function SettingsPage() {
         </div>
       </main>
 
-      {/* Модалка выбора языка */}
       {showLangModal && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/20 dark:bg-black/50 backdrop-blur-sm animate-in fade-in" onClick={() => setShowLangModal(false)}>
            <div className="w-full max-w-sm bg-[#f5f5f7] dark:bg-[#161618] rounded-t-[24px] sm:rounded-[24px] p-6 pb-10 sm:pb-6 animate-in slide-in-from-bottom" onClick={e => e.stopPropagation()}>
