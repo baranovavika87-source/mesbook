@@ -25,8 +25,8 @@ const translations = {
     personalChannel: "Личный Канал",
     birthday: "День рождения",
     online: "В сети",
-    lastSeenAt: "Был(а) в",
-    recently: "Недавно",
+    lastSeenAt: "Был(а)",
+    recently: "недавно",
     group: "Группа",
     subs: ['подписчик', 'подписчика', 'подписчиков'],
     members: ['участник', 'участника', 'участников'],
@@ -64,8 +64,8 @@ const translations = {
     personalChannel: "Personal Channel",
     birthday: "Birthday",
     online: "Online",
-    lastSeenAt: "Last seen at",
-    recently: "Recently",
+    lastSeenAt: "Last seen",
+    recently: "recently",
     group: "Group",
     subs: ['subscriber', 'subscribers'],
     members: ['member', 'members'],
@@ -101,6 +101,29 @@ function declOfNum(n: number, text_forms: string[], lang: 'ru' | 'en') {
   if (n1 === 1) return text_forms[0];
   return text_forms[2];
 }
+
+const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
+  if (!timestamp) return lang === 'ru' ? 'недавно' : 'recently';
+  const date = new Date(timestamp);
+  const now = new Date();
+  
+  const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+  
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
+
+  const timeStr = date.toLocaleTimeString(lang === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+  
+  if (isToday) return lang === 'ru' ? `сегодня в ${timeStr}` : `today at ${timeStr}`;
+  if (isYesterday) return lang === 'ru' ? `вчера в ${timeStr}` : `yesterday at ${timeStr}`;
+  
+  const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+  let dateStr = date.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', options);
+  if (lang === 'ru') dateStr = dateStr.replace('.', '');
+  
+  return lang === 'ru' ? `${dateStr} в ${timeStr}` : `${dateStr} at ${timeStr}`;
+};
 
 export default function ChatPage() {
   const [match, params] = useRoute('/chat/:chatId');
@@ -172,6 +195,16 @@ export default function ChatPage() {
   const displayName = isSavedChat ? t.saved : (chatInfo?.participant?.displayName || chatInfo?.name || savedName || t.companion);
   const isChannel = chatInfo?.participant?.isChannel;
 
+  // ВОССТАНОВЛЕН ФОНОВЫЙ ПИНГ (ЧТОБЫ РАБОТАЛ ОНЛАЙН)
+  useEffect(() => {
+    const sendPing = async () => {
+      try { await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
+    };
+    sendPing();
+    const interval = setInterval(sendPing, 10000);
+    return () => clearInterval(interval);
+  }, [currentUserId]);
+
   useEffect(() => {
     if (!socket) socket = io(window.location.origin, { path: '/socket.io' });
     
@@ -215,8 +248,8 @@ export default function ChatPage() {
            const roleData = await roleRes.json();
            setIsMember(roleData.isMember);
            setIsAdmin(roleData.role === 'admin');
-           setMembersCount(roleData.membersCount);
-           setOnlineCount(roleData.onlineCount);
+           setMembersCount(roleData.membersCount || 1);
+           setOnlineCount(roleData.onlineCount || 1);
         }
       } catch (e) {}
     }
@@ -432,7 +465,7 @@ export default function ChatPage() {
   };
 
   const lastSeen = chatInfo?.participant?.lastSeen;
-  const isOnline = lastSeen ? (Date.now() - lastSeen < 15000) : false;
+  const isOnline = lastSeen ? (Date.now() - lastSeen < 30000) : false; // 30 sec tolerance
   
   let subtitleText = "";
   let subtitleColor = "text-[#86868b] dark:text-[#98989d]"; 
@@ -449,7 +482,7 @@ export default function ChatPage() {
       }
     } else {
       subtitleColor = isOnline ? 'text-[#1d1d1f] dark:text-[#f5f5f7] font-medium' : 'text-[#86868b] dark:text-[#98989d]';
-      subtitleText = isOnline ? t.online : (lastSeen ? `${t.lastSeenAt} ${new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : t.recently);
+      subtitleText = isOnline ? t.online : `${t.lastSeenAt} ${formatLastSeen(lastSeen, lang)}`;
     }
   }
 
@@ -508,7 +541,7 @@ export default function ChatPage() {
 
              {(isMe || isAdmin) && (
                <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left">
-                 <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
+                 <Trash2 size={18} className="text-red-500" /> {t.deleteAction}
                </button>
              )}
           </div>
@@ -626,9 +659,7 @@ export default function ChatPage() {
               </div>
               <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 text-center px-4 tracking-tight">{chatInfo.participant.displayName}</h2>
               {chatInfo.participant.username && <p className="text-[15px] text-[#86868b] dark:text-[#98989d]">{chatInfo.participant.username}</p>}
-              <p className={`mt-1.5 text-[13px] font-medium text-[#86868b] dark:text-[#98989d]`}>
-                {isChannel ? t.channel : t.group}
-              </p>
+              <p className={`mt-1.5 text-[13px] font-medium ${subtitleColor}`}>{subtitleText}</p>
             </div>
           )}
         </div>
@@ -642,9 +673,11 @@ export default function ChatPage() {
             <div className={`w-full h-full rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-black/5 dark:border-white/5 ${isSavedChat ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
               {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : displayName.charAt(0).toUpperCase()}
             </div>
+            {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>}
           </div>
           <div className="flex flex-col">
             <h2 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] leading-tight truncate pr-2 tracking-tight">{displayName}</h2>
+            {subtitleText && <p className={`text-[12px] font-medium mt-0.5 ${subtitleColor}`}>{subtitleText}</p>}
           </div>
         </div>
       </header>
@@ -692,7 +725,7 @@ export default function ChatPage() {
                                : <img key={idx} src={url} loading="lazy" decoding="async" onClick={() => setFullScreenImage(url)} className="w-full h-auto max-h-[400px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                           ))}
                           
-                          {/* ИСПРАВЛЕНИЕ: Удален блок серой полоски под медиа. */}
+                          {/* Прозрачное время на фото, если нет текста */}
                           {!hasText && (
                             <div className="absolute bottom-2 right-2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
                                {timeStr}
@@ -720,9 +753,9 @@ export default function ChatPage() {
                       )}
 
                       {reactionsKeys.length > 0 && (
-                        <div className="px-4 pb-3 flex flex-wrap gap-1.5">
+                        <div className="px-4 pb-3 flex flex-wrap gap-1.5 pt-1.5">
                            {reactionsKeys.map(key => (
-                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)]' : 'bg-[#f5f5f7] dark:bg-[#333336] text-[#86868b] dark:text-[#98989d] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)]' : 'bg-[#f5f5f7] dark:bg-[#333336] text-[#86868b] dark:text-[#98989d] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
                                <span className="text-[13px] font-bold leading-none flex items-center justify-center mt-[1px]">{msg.reactions[key].count}</span>
                              </button>
@@ -771,7 +804,7 @@ export default function ChatPage() {
                                : <img key={idx} src={url} loading="lazy" decoding="async" onClick={() => setFullScreenImage(url)} className={`w-full h-auto max-h-[400px] object-cover cursor-pointer ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                           ))}
                           
-                          {/* ИСПРАВЛЕНИЕ: Удален блок серой полоски под медиа. */}
+                          {/* Прозрачное время на фото */}
                           {!hasText && (
                             <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
                                {timeStr}
@@ -806,7 +839,7 @@ export default function ChatPage() {
                            const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
                            
                            return (
-                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[26px] pl-0.5 pr-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2.5 rounded-full border transition-transform active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                <div className="w-[20px] h-[20px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[10px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                  {firstUser?.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
                                </div>
