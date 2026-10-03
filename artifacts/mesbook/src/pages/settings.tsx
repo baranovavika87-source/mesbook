@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { ArrowLeft, Loader2, Camera, LogOut, Moon, Sun, User as UserIcon, Calendar, Link as LinkIcon, AtSign, Globe } from 'lucide-react';
+import { ArrowLeft, Loader2, Camera, LogOut, Moon, Sun, Globe } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -12,32 +12,18 @@ const getUserId = () => {
 const translations = {
   ru: {
     settings: "Настройки",
-    profile: "Профиль",
-    name: "Имя",
-    username: "Имя пользователя",
-    bio: "О себе",
-    personalChannel: "Личный канал",
-    birthDate: "Дата рождения",
     appearance: "Внешний вид",
     theme: "Темная тема",
     language: "Язык приложения",
     logout: "Выйти из аккаунта",
-    save: "Сохранить",
     uploading: "Загрузка..."
   },
   en: {
     settings: "Settings",
-    profile: "Profile",
-    name: "Name",
-    username: "Username",
-    bio: "Bio",
-    personalChannel: "Personal Channel",
-    birthDate: "Birth Date",
     appearance: "Appearance",
     theme: "Dark Mode",
     language: "App Language",
     logout: "Log Out",
-    save: "Save",
     uploading: "Uploading..."
   }
 };
@@ -50,17 +36,8 @@ export default function SettingsPage() {
 
   const [user, setUser] = useState<any>(null);
   const [isDark, setIsDark] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [formData, setFormData] = useState({
-    displayName: '',
-    username: '',
-    bio: '',
-    personalChannel: '',
-    birthDate: ''
-  });
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -72,13 +49,6 @@ export default function SettingsPage() {
         if (res.ok) {
           const data = await res.json();
           setUser(data);
-          setFormData({
-            displayName: data.displayName || '',
-            username: data.username || '',
-            bio: data.bio || '',
-            personalChannel: data.personalChannel || '',
-            birthDate: data.birthDate || ''
-          });
         }
       } catch (e) {}
     };
@@ -109,23 +79,6 @@ export default function SettingsPage() {
       }
     } catch (err) {}
     setIsUploading(false);
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const res = await fetch('/api/me', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
-        body: JSON.stringify(formData)
-      });
-      if (res.ok) {
-        const updatedUser = await res.json();
-        setUser(updatedUser);
-        localStorage.setItem('mesbook_user', JSON.stringify(updatedUser));
-      }
-    } catch (e) {}
-    setIsSaving(false);
   };
 
   const toggleTheme = () => {
@@ -194,88 +147,6 @@ export default function SettingsPage() {
           <p className="text-[15px] text-[#86868b] dark:text-[#98989d]">{user.username}</p>
         </div>
 
-        {/* Форма профиля */}
-        <div className="mb-8">
-          <h3 className="px-4 text-[13px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mb-2">{t.profile}</h3>
-          <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 overflow-hidden flex flex-col">
-            
-            <div className="flex items-center px-4 py-1.5 border-b border-black/5 dark:border-white/5">
-              <UserIcon size={20} className="text-[#86868b] dark:text-[#98989d] shrink-0 mr-3" />
-              <div className="flex-1 py-2">
-                <input 
-                  type="text" 
-                  value={formData.displayName} 
-                  onChange={e => setFormData({...formData, displayName: e.target.value})} 
-                  placeholder={t.name}
-                  className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none placeholder-[#86868b]/50" 
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center px-4 py-1.5 border-b border-black/5 dark:border-white/5">
-              <AtSign size={20} className="text-[#86868b] dark:text-[#98989d] shrink-0 mr-3" />
-              <div className="flex-1 py-2">
-                <input 
-                  type="text" 
-                  value={formData.username} 
-                  onChange={e => setFormData({...formData, username: e.target.value})} 
-                  placeholder={t.username}
-                  className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none placeholder-[#86868b]/50" 
-                />
-              </div>
-            </div>
-
-            <div className="flex items-start px-4 py-3.5 border-b border-black/5 dark:border-white/5">
-              <div className="flex-1">
-                <textarea 
-                  rows={2}
-                  value={formData.bio} 
-                  onChange={e => setFormData({...formData, bio: e.target.value})} 
-                  placeholder={t.bio}
-                  className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none placeholder-[#86868b]/50" 
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center px-4 py-1.5 border-b border-black/5 dark:border-white/5">
-              <LinkIcon size={20} className="text-[#86868b] dark:text-[#98989d] shrink-0 mr-3" />
-              <div className="flex-1 py-2">
-                <input 
-                  type="text" 
-                  value={formData.personalChannel} 
-                  onChange={e => setFormData({...formData, personalChannel: e.target.value})} 
-                  placeholder={t.personalChannel}
-                  className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none placeholder-[#86868b]/50" 
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center px-4 py-1.5">
-              <Calendar size={20} className="text-[#86868b] dark:text-[#98989d] shrink-0 mr-3" />
-              <div className="flex-1 py-2">
-                <input 
-                  type="text" 
-                  value={formData.birthDate} 
-                  onChange={e => setFormData({...formData, birthDate: e.target.value})} 
-                  placeholder={t.birthDate}
-                  className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none placeholder-[#86868b]/50" 
-                />
-              </div>
-            </div>
-
-          </div>
-          
-          <div className="mt-4 px-2">
-             <button 
-               onClick={handleSave} 
-               disabled={isSaving}
-               className="w-full py-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] font-semibold rounded-[18px] transition-transform active:scale-95 shadow-[0_4px_15px_rgba(0,0,0,0.1)] dark:shadow-none flex items-center justify-center"
-             >
-               {isSaving ? <Loader2 size={20} className="animate-spin" /> : t.save}
-             </button>
-          </div>
-        </div>
-
         {/* Настройки приложения */}
         <div className="mb-8">
           <h3 className="px-4 text-[13px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mb-2">{t.appearance}</h3>
@@ -304,8 +175,8 @@ export default function SettingsPage() {
 
         {/* Логаут */}
         <div className="pb-10">
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 bg-white dark:bg-[#222224] text-red-500 rounded-[24px] py-4 shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 active:scale-95 transition-transform font-medium text-[16px]">
-            <LogOut size={20} />
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[24px] py-4 shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 active:scale-95 transition-transform font-medium text-[16px]">
+            <LogOut size={20} className="text-[#86868b] dark:text-[#98989d]" />
             {t.logout}
           </button>
         </div>
