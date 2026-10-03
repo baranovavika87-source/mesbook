@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Send, ArrowLeft, Download, Check, ChevronRight } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Send, ArrowLeft, Download, Copy, Reply, Check, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -30,6 +30,8 @@ const translations = {
     noComments: "Пока нет комментариев",
     commentPlaceholder: "Комментарий...",
     commentsCount: ['комментарий', 'комментария', 'комментариев'],
+    replyAction: "Ответить",
+    copy: "Копировать",
     editAction: "Изменить",
     deleteAction: "Удалить"
   },
@@ -48,6 +50,8 @@ const translations = {
     noComments: "No comments yet",
     commentPlaceholder: "Comment...",
     commentsCount: ['comment', 'comments', 'comments'],
+    replyAction: "Reply",
+    copy: "Copy",
     editAction: "Edit",
     deleteAction: "Delete"
   }
@@ -290,66 +294,68 @@ export default function WallPage() {
               const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
               return (
-                <div 
-                  key={post.id} 
-                  className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative mb-5 cursor-pointer ${isMenuOpen ? 'z-50' : 'z-10'}`}
-                  onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : post.id); }}
-                >
-                  <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#222224] flex justify-between items-center">
-                     <Link href={`/chat/${post.chatId}`}>
-                        <a className="font-semibold text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight hover:opacity-80 transition-opacity">
-                          {post.channelName}
-                        </a>
-                     </Link>
-                     <span className="text-[12px] font-medium text-[#86868b] dark:text-[#98989d]">{timeStr}</span>
+                <div key={post.id} className={`w-full relative mb-5 ${isMenuOpen ? 'z-[100]' : 'z-10'}`}>
+                  <div 
+                    className="w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden cursor-pointer"
+                    onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : post.id); }}
+                  >
+                    <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#222224] flex justify-between items-center">
+                       <Link href={`/chat/${post.chatId}`}>
+                          <a className="font-semibold text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight hover:opacity-80 transition-opacity">
+                            {post.channelName}
+                          </a>
+                       </Link>
+                       <span className="text-[12px] font-medium text-[#86868b] dark:text-[#98989d]">{timeStr}</span>
+                    </div>
+                    
+                    {hasMedia && (
+                      <div className={`relative w-full overflow-hidden flex justify-center bg-[#f5f5f7] dark:bg-[#161618] ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
+                        {mediaUrls.map((url, idx) => (
+                           isVideo 
+                             ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" />
+                             : <img key={idx} src={url} loading="lazy" decoding="async" onClick={(e) => { e.stopPropagation(); setFullScreenImage(url); }} className="w-full h-auto max-h-[500px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
+                        ))}
+                      </div>
+                    )}
+                    
+                    {hasText && (
+                      <div className="px-4 pt-3 pb-2.5">
+                         {quotedText && (
+                           <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
+                         )}
+                         <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
+                           {text}
+                         </div>
+                      </div>
+                    )}
+
+                    {reactionsKeys.length > 0 && (
+                      <div className="px-4 pb-3 flex flex-wrap gap-1.5 pt-1.5">
+                         {reactionsKeys.map(key => (
+                           <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform active:scale-95 ${post.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)]' : 'bg-[#f5f5f7] dark:bg-[#333336] text-[#86868b] dark:text-[#98989d] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                             <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                             <span className="text-[13px] font-bold leading-none flex items-center justify-center mt-[1px]">{post.reactions[key].count}</span>
+                           </button>
+                         ))}
+                      </div>
+                    )}
+
+                    <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3.5 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
+                      <div className="flex gap-2.5 items-center">
+                        <MessageCircle size={18} className="text-[#86868b] dark:text-[#98989d]" />
+                        <span className="text-[14px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+                          {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
+                        </span>
+                      </div>
+                      <ChevronRight size={18} className="text-[#86868b] dark:text-[#98989d]" />
+                    </button>
                   </div>
-                  
-                  {hasMedia && (
-                    <div className={`relative w-full overflow-hidden flex justify-center bg-[#f5f5f7] dark:bg-[#161618] ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
-                      {mediaUrls.map((url, idx) => (
-                         isVideo 
-                           ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" />
-                           : <img key={idx} src={url} loading="lazy" decoding="async" onClick={(e) => { e.stopPropagation(); setFullScreenImage(url); }} className="w-full h-auto max-h-[500px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
-                      ))}
-                    </div>
-                  )}
-                  
-                  {hasText && (
-                    <div className="px-4 pt-3 pb-2.5">
-                       {quotedText && (
-                         <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
-                       )}
-                       <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
-                         {text}
-                       </div>
-                    </div>
-                  )}
 
-                  {reactionsKeys.length > 0 && (
-                    <div className="px-4 pb-3 flex flex-wrap gap-1.5 pt-1.5">
-                       {reactionsKeys.map(key => (
-                         <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)]' : 'bg-[#f5f5f7] dark:bg-[#333336] text-[#86868b] dark:text-[#98989d] border-black/5 dark:border-white/5 shadow-sm'}`}>
-                           <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
-                           <span className="text-[13px] font-bold leading-none flex items-center justify-center mt-[1px]">{post.reactions[key].count}</span>
-                         </button>
-                       ))}
-                    </div>
-                  )}
-
-                  <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3.5 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
-                    <div className="flex gap-2.5 items-center">
-                      <MessageCircle size={18} className="text-[#86868b] dark:text-[#98989d]" />
-                      <span className="text-[14px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-                        {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
-                      </span>
-                    </div>
-                    <ChevronRight size={18} className="text-[#86868b] dark:text-[#98989d]" />
-                  </button>
-
+                  {/* МЕНЮ ВНЕ КАРТОЧКИ */}
                   {isMenuOpen && (
                     <>
                       <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} />
-                      <div className="absolute z-[70] flex flex-col gap-2 right-4 bottom-14 min-w-[200px] items-end">
+                      <div className="absolute z-[70] flex flex-col gap-2 right-4 top-14 min-w-[200px] items-end">
                         <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
                            {FAST_REACTIONS.map(emoji => (
                              <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${post.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
@@ -426,17 +432,18 @@ export default function WallPage() {
         </div>
       )}
 
-      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-2 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-5 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+      {/* НИЖНЯЯ ПАНЕЛЬ СТЕНЫ С РАЗМЫТИЕМ: ОТСТУПЫ КАК В ЧАТЕ */}
+      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         <Link href="/">
           <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
-            <MessageSquare size={24} className="mb-1" strokeWidth={1.5} />
-            <span className="text-[10px] font-semibold tracking-wide">{t.chats}</span>
+            <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
+            <span className="text-[11px] font-semibold tracking-wide">{t.chats}</span>
           </a>
         </Link>
         <Link href="/wall">
           <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95">
-            <Users size={24} className="mb-1" fill="currentColor" strokeWidth={1.5} />
-            <span className="text-[10px] font-semibold tracking-wide">{t.wall}</span>
+            <Users size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
+            <span className="text-[11px] font-semibold tracking-wide">{t.wall}</span>
           </a>
         </Link>
       </nav>
