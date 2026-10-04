@@ -14,6 +14,7 @@ const getUserId = () => {
 
 const FAST_REACTIONS = ['❤️', '👍', '🔥', '😂', '😢'];
 
+// ИСПРАВЛЕНИЕ ФАТАЛЬНОЙ ОШИБКИ: Вернул все словари, из-за которых падала стена
 const translations = {
   ru: {
     wall: "Стена",
@@ -26,7 +27,11 @@ const translations = {
     replyAction: "Ответить",
     copy: "Копировать",
     editAction: "Изменить",
-    deleteAction: "Удалить"
+    deleteAction: "Удалить",
+    commentsCount: ['комментарий', 'комментария', 'комментариев'],
+    editPost: "Редактировать запись",
+    cancel: "Отмена",
+    save: "Сохранить"
   },
   en: {
     wall: "Wall",
@@ -39,12 +44,18 @@ const translations = {
     replyAction: "Reply",
     copy: "Copy",
     editAction: "Edit",
-    deleteAction: "Delete"
+    deleteAction: "Delete",
+    commentsCount: ['comment', 'comments', 'comments'],
+    editPost: "Edit post",
+    cancel: "Cancel",
+    save: "Save"
   }
 };
 
+// ИСПРАВЛЕНИЕ: Железобетонная защита от падений при склонении слов
 function declOfNum(n: number, text_forms: string[], lang: 'ru' | 'en') {
-  n = Math.abs(n) % 100;
+  if (!text_forms || text_forms.length < 3) return ''; 
+  n = Math.abs(n || 0) % 100;
   if (lang === 'en') return n === 1 ? text_forms[0] : text_forms[1];
   const n1 = n % 10;
   if (n > 10 && n < 20) return text_forms[2];
@@ -134,7 +145,6 @@ export default function WallPage() {
     }
   }, [threadComments]);
 
-  // СВЕРХБЕЗОПАСНЫЙ ПАРСЕР КОНТЕНТА (ЗАЩИТА ОТ КРАША СТЕНЫ)
   const parseContent = (rawText: any) => {
     if (!rawText || typeof rawText !== 'string') {
       return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false };
@@ -315,7 +325,10 @@ export default function WallPage() {
   const openGlobalMenu = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
     e.stopPropagation();
     e.preventDefault();
-    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
+    if (photoOpenedRef.current) { 
+      photoOpenedRef.current = false; 
+      return; 
+    }
     
     let clientX, clientY;
     if ('touches' in e && e.touches.length > 0) {
@@ -349,7 +362,10 @@ export default function WallPage() {
     e.stopPropagation();
     e.preventDefault();
     clearPhotoTimer();
-    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
+    if (photoOpenedRef.current) { 
+      photoOpenedRef.current = false; 
+      return; 
+    }
     openGlobalMenu(e, item, type);
   }
 
@@ -452,6 +468,8 @@ export default function WallPage() {
                                   onMouseDown={(e) => handleTouchStartPhoto(e, url)} 
                                   onTouchEnd={clearPhotoTimer} 
                                   onMouseUp={clearPhotoTimer} 
+                                  onClick={(e) => handlePhotoClick(e, post, 'post')}
+                                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
                                   onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
                                />
                         ))}
@@ -531,6 +549,7 @@ export default function WallPage() {
                <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
             ) : (
                threadComments.map((c) => {
+                 const isMe = String(c.senderId) === String(currentUserId);
                  const { text, quotedText, hasMedia, mediaUrls, hasText } = parseContent(c.content);
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
 
@@ -581,7 +600,7 @@ export default function WallPage() {
                              const firstUser = users.length > 0 ? users[0] : null;
 
                              return (
-                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-black/5 dark:bg-white/10 border-black/20 dark:border-white/20 shadow-sm z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                  {firstUser ? (
                                    <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                      {firstUser.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser.name?.charAt(0).toUpperCase() || 'U'}
@@ -648,7 +667,9 @@ export default function WallPage() {
          const showReply = contextMenu.type === 'comment';
          const showCopy = hasText;
          const showEdit = isMe && !hasMedia && contextMenu.type === 'post';
-         const showDelete = (isMe && !hasMedia && contextMenu.type === 'post') || (isMe && contextMenu.type === 'comment');
+         
+         // ИСПРАВЛЕНИЕ УДАЛЕНИЯ: На стене можно удалить ВСЁ своё
+         const showDelete = isMe;
 
          if (!showReply && !showCopy && !showEdit && !showDelete) return null;
 
