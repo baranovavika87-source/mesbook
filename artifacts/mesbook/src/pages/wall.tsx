@@ -126,27 +126,30 @@ export default function WallPage() {
     }
   }, [activeThread]);
 
+  // ЗАЩИТА ОТ ПАДЕНИЯ: Обработка undefined текста
   const parseContent = (rawText: string) => {
+    if (!rawText) return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
     const mediaUrls: string[] = [];
     const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
-    let match;
-    let text = rawText;
+    let match; let text = rawText;
     
     while ((match = mediaRegex.exec(text)) !== null) {
-      mediaUrls.push(match[1]);
+      if (match && match[1]) mediaUrls.push(match[1]);
     }
     text = text.replace(mediaRegex, '').trim();
     
     let quotedText = null;
     if (text.startsWith('> ')) {
       const parts = text.split('\n\n');
-      quotedText = parts[0].replace('> ', '');
-      text = parts.slice(1).join('\n\n');
+      if (parts.length > 0) {
+        quotedText = parts[0].replace('> ', '');
+        text = parts.slice(1).join('\n\n');
+      }
     }
 
     const hasMedia = mediaUrls.length > 0;
     const hasText = !!text || !!quotedText;
-    const isVideo = hasMedia && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
+    const isVideo = hasMedia && mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
     
     return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
   };
@@ -179,11 +182,8 @@ export default function WallPage() {
         headers: { 'Authorization': 'Bearer ' + currentUserId } 
       });
       
-      if (isComment) {
-        loadComments(activeThread.chatId, activeThread.id);
-      } else {
-        loadFeed();
-      }
+      if (isComment) loadComments(activeThread.chatId, activeThread.id); 
+      else loadFeed();
     } catch (e) {}
   };
 
@@ -198,11 +198,8 @@ export default function WallPage() {
         body: JSON.stringify({ reaction }) 
       });
       
-      if (isComment) {
-        loadComments(activeThread.chatId, activeThread.id);
-      } else {
-        loadFeed(true);
-      }
+      if (isComment) loadComments(activeThread.chatId, activeThread.id); 
+      else loadFeed(true);
     } catch (e) {}
     setContextMenu(null);
   };
@@ -294,6 +291,7 @@ export default function WallPage() {
     setContextMenu({ id: item.id, x: clientX, y: clientY, type, item });
   };
 
+  // ИСПРАВЛЕНИЕ: Стабильное зажатие без прерываний
   const handleTouchStartPhoto = (e: React.TouchEvent | React.MouseEvent, url: string) => {
     e.stopPropagation();
     photoOpenedRef.current = false;
@@ -319,12 +317,8 @@ export default function WallPage() {
       {fullScreenImage && (
         <div className="fixed inset-0 z-[200] bg-black flex flex-col animate-in fade-in duration-200 ease-out">
           <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-10">
-            <button onClick={() => setFullScreenImage(null)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform">
-              <X size={24} />
-            </button>
-            <button onClick={() => downloadImage(fullScreenImage)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform">
-              <Download size={24} />
-            </button>
+            <button onClick={() => setFullScreenImage(null)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><X size={24} /></button>
+            <button onClick={() => downloadImage(fullScreenImage)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><Download size={24} /></button>
           </div>
           <div className="flex-1 flex items-center justify-center p-2 overflow-hidden touch-pinch-zoom">
             <img src={fullScreenImage} alt="Fullscreen Media" className="max-w-full max-h-full object-contain select-none" />
@@ -407,20 +401,12 @@ export default function WallPage() {
                                   src={url} 
                                   loading="lazy" 
                                   decoding="async" 
-                                  className="w-full h-auto max-h-[500px] object-cover" 
+                                  className="w-full h-auto max-h-[500px] object-cover pointer-events-none" 
                                   style={{ WebkitTouchCallout: 'none', userSelect: 'none' }} 
                                   onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
                                   onMouseDown={(e) => handleTouchStartPhoto(e, url)} 
                                   onTouchEnd={clearPhotoTimer} 
-                                  onTouchMove={clearPhotoTimer} 
                                   onMouseUp={clearPhotoTimer} 
-                                  onMouseLeave={clearPhotoTimer}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
-                                    openGlobalMenu(e, post, 'post');
-                                  }}
-                                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
                                   onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
                                />
                         ))}
@@ -511,7 +497,7 @@ export default function WallPage() {
                         onContextMenu={(e) => openGlobalMenu(e, c, 'comment')}
                      >
                        <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
-                         {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
+                         {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName?.charAt(0).toUpperCase() || 'U'}
                        </div>
                        <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
                          <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
@@ -528,9 +514,7 @@ export default function WallPage() {
                                onTouchStart={(e) => handleTouchStartPhoto(e, mediaUrls[0])} 
                                onMouseDown={(e) => handleTouchStartPhoto(e, mediaUrls[0])}
                                onTouchEnd={clearPhotoTimer} 
-                               onTouchMove={clearPhotoTimer} 
-                               onMouseUp={clearPhotoTimer} 
-                               onMouseLeave={clearPhotoTimer}
+                               onMouseUp={clearPhotoTimer}
                              />
                          )}
                          {hasText && (
@@ -592,9 +576,7 @@ export default function WallPage() {
                 onChange={e => setCommentContent(e.target.value)} 
                 placeholder={t.commentPlaceholder} 
               />
-              <button type="submit" disabled={!commentContent.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">
-                <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
-              </button>
+              <button type="submit" disabled={!commentContent.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ChevronRight size={20} strokeWidth={2.5}/></button>
             </form>
           </div>
         </div>
