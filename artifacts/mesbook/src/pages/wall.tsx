@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Send, ArrowLeft, Download, Copy, Reply, Check, ChevronRight, Camera, Paperclip } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Send, ArrowLeft, Download, Copy, Reply, ChevronRight, Paperclip } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -120,9 +120,7 @@ export default function WallPage() {
   }, [currentUserId]);
 
   useEffect(() => {
-    if (activeThread) {
-      loadComments(activeThread.chatId, activeThread.id);
-    }
+    if (activeThread) loadComments(activeThread.chatId, activeThread.id);
   }, [activeThread]);
 
   const parseContent = (rawText: string) => {
@@ -206,26 +204,7 @@ export default function WallPage() {
     setContextMenu(null);
   };
 
-  const handleSendComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!commentContent.trim() || !activeThread) return;
-    
-    const tempContent = commentContent.trim();
-    const finalContent = commentReplyingTo ? `> ${commentReplyingTo.content.replace(/^> .*\n\n/, '')}\n\n${tempContent}` : tempContent;
-    
-    setCommentContent('');
-    setCommentReplyingTo(null);
-    
-    try {
-      await fetch(`/api/chats/${activeThread.chatId}/messages`, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
-        body: JSON.stringify({ content: finalContent, parentId: activeThread.id }) 
-      });
-      loadComments(activeThread.chatId, activeThread.id);
-    } catch (error) {}
-  };
-
+  // ИСПРАВЛЕНИЕ ОШИБКИ: Функция загрузки файлов теперь 100% на месте
   const handleCommentFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeThread) return;
@@ -254,6 +233,26 @@ export default function WallPage() {
     }
   };
 
+  const handleSendComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentContent.trim() || !activeThread) return;
+    
+    const tempContent = commentContent.trim();
+    const finalContent = commentReplyingTo ? `> ${commentReplyingTo.content.replace(/^> .*\n\n/, '')}\n\n${tempContent}` : tempContent;
+    
+    setCommentContent('');
+    setCommentReplyingTo(null);
+    
+    try {
+      await fetch(`/api/chats/${activeThread.chatId}/messages`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
+        body: JSON.stringify({ content: finalContent, parentId: activeThread.id }) 
+      });
+      loadComments(activeThread.chatId, activeThread.id);
+    } catch (error) {}
+  };
+
   const downloadImage = async (url: string) => {
     try {
       const response = await fetch(url);
@@ -271,15 +270,10 @@ export default function WallPage() {
     }
   };
 
-  // Координаты для умного меню
+  // Логика меню и зажатия по координатам
   const openGlobalMenu = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
     e.stopPropagation();
     e.preventDefault();
-    
-    if (photoOpenedRef.current) { 
-      photoOpenedRef.current = false; 
-      return; 
-    }
     
     let clientX, clientY;
     if ('touches' in e && e.touches.length > 0) {
@@ -304,15 +298,6 @@ export default function WallPage() {
       setContextMenu(null);
     }, 400); 
   };
-
-  const handlePhotoClick = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
-    e.stopPropagation();
-    if (photoOpenedRef.current) { 
-      photoOpenedRef.current = false; 
-      return; 
-    }
-    openGlobalMenu(e, item, type);
-  }
 
   const clearPhotoTimer = () => { 
     if (pressTimer.current) clearTimeout(pressTimer.current); 
@@ -361,7 +346,7 @@ export default function WallPage() {
       )}
 
       <header className="flex justify-between items-center px-4 pt-12 pb-4 bg-white/80 dark:bg-[#222224]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl">
-        <button onClick={() => loadFeed()} className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] font-medium active:scale-95 transition-all ml-1">{t.refresh}</button>
+        <button onClick={() => loadFeed(false)} className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] font-medium active:scale-95 transition-all ml-1">{t.refresh}</button>
         <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[20px] font-bold absolute left-1/2 -translate-x-1/2 tracking-tight">{t.wall}</h1>
         <div className="w-[80px]"></div>
       </header>
@@ -371,6 +356,7 @@ export default function WallPage() {
           {posts.map((post) => {
             const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
             const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            const pReactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
 
             return (
               <div key={post.id} className="w-full relative mb-5 z-10 animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out">
@@ -391,22 +377,26 @@ export default function WallPage() {
                   {hasMedia && (
                     <div className="relative w-full flex justify-center bg-[#f5f5f7] dark:bg-[#161618]">
                       {mediaUrls.map((url, idx) => (
-                         <img 
-                            key={idx} 
-                            src={url} 
-                            loading="lazy" 
-                            decoding="async" 
-                            className="w-full h-auto max-h-[500px] object-cover cursor-pointer" 
-                            onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
-                            onMouseDown={(e) => handleTouchStartPhoto(e, url)} 
-                            onTouchEnd={clearPhotoTimer} 
-                            onTouchMove={clearPhotoTimer} 
-                            onMouseUp={clearPhotoTimer} 
-                            onMouseLeave={clearPhotoTimer}
-                            onClick={(e) => handlePhotoClick(e, post, 'post')}
-                            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
-                            onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
-                         />
+                         isVideo 
+                           ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" onClick={(e) => e.stopPropagation()} />
+                           : <img 
+                                key={idx} src={url} loading="lazy" decoding="async" 
+                                className="w-full h-auto max-h-[500px] object-cover cursor-pointer" 
+                                style={{ WebkitTouchCallout: 'none', userSelect: 'none' }} // Блокировка системного меню
+                                onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
+                                onMouseDown={(e) => handleTouchStartPhoto(e, url)} 
+                                onTouchEnd={clearPhotoTimer} 
+                                onTouchMove={clearPhotoTimer} 
+                                onMouseUp={clearPhotoTimer} 
+                                onMouseLeave={clearPhotoTimer}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
+                                  openGlobalMenu(e, post, 'post');
+                                }}
+                                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
+                                onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
+                             />
                       ))}
                     </div>
                   )}
@@ -422,24 +412,25 @@ export default function WallPage() {
                     </div>
                   )}
 
-                  {post.reactions && Object.keys(post.reactions).length > 0 && (
+                  {/* Надежный маппинг реакций для стены */}
+                  {pReactionsKeys.length > 0 && (
                     <div className="px-4 pb-3 flex flex-wrap gap-1.5 pt-1.5">
-                       {Object.keys(post.reactions).map(key => (
-                         <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, key); }} className="flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border bg-[#f5f5f7] dark:bg-[#333336] shadow-sm">
-                           <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
-                           <span className="text-[13px] font-bold leading-none flex items-center justify-center mt-[1px]">{post.reactions[key].count}</span>
-                         </button>
-                       ))}
+                       {pReactionsKeys.map(key => {
+                         const rData = post.reactions[key];
+                         const count = typeof rData === 'number' ? rData : (rData?.count || 1);
+                         
+                         return (
+                           <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)]' : 'bg-[#f5f5f7] dark:bg-[#333336] text-[#86868b] dark:text-[#98989d] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                             <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                             <span className="text-[13px] font-bold leading-none flex items-center justify-center mt-[1px]">{count}</span>
+                           </button>
+                         );
+                       })}
                     </div>
                   )}
 
-                  <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); loadComments(post.chatId, post.id); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-b-[24px]">
-                    <div className="flex gap-2 items-center">
-                      <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                      <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-                        {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
-                      </span>
-                    </div>
+                  <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); loadComments(post.chatId, post.id); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] rounded-b-[24px]">
+                    <div className="flex gap-2 items-center"><MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" /><span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{t.comments}</span></div>
                     <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
                   </button>
                 </div>
@@ -459,7 +450,7 @@ export default function WallPage() {
             </div>
           </header>
           
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10">
             <div className="bg-white dark:bg-[#222224] p-4 rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none mb-2 border border-black/5 dark:border-white/5 flex flex-col">
               <span className="font-semibold text-[14px] text-[#86868b] dark:text-[#98989d] mb-1 block">{activeThread.channelName}</span>
               {activeThreadContent?.hasMedia && (
@@ -485,7 +476,7 @@ export default function WallPage() {
                    <div key={c.id} className="relative flex flex-col mb-2 z-10">
                      <div 
                         className="flex gap-3 items-start cursor-pointer" 
-                        onClick={(e) => openGlobalMenu(e, c, 'comment')} 
+                        onClick={(e) => openGlobalMenu(e, c, 'comment')}
                         onContextMenu={(e) => openGlobalMenu(e, c, 'comment')}
                      >
                        <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
@@ -501,13 +492,20 @@ export default function WallPage() {
                          {hasMedia && (
                              <img 
                                src={mediaUrls[0]} 
-                               className={`max-h-[200px] w-auto object-cover pointer-events-none ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
+                               className={`max-h-[200px] w-auto object-cover cursor-pointer ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
+                               style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
                                onTouchStart={(e) => handleTouchStartPhoto(e, mediaUrls[0])} 
                                onMouseDown={(e) => handleTouchStartPhoto(e, mediaUrls[0])}
                                onTouchEnd={clearPhotoTimer} 
                                onTouchMove={clearPhotoTimer} 
                                onMouseUp={clearPhotoTimer} 
                                onMouseLeave={clearPhotoTimer}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
+                                 openGlobalMenu(e, c, 'comment');
+                               }}
+                               onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, c, 'comment'); }}
                              />
                          )}
                          {hasText && (
@@ -517,18 +515,26 @@ export default function WallPage() {
                        </div>
                      </div>
 
-                     {/* Реакции под комментарием */}
+                     {/* Надежный маппинг реакций под комментарием */}
                      {cReactionsKeys.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1 justify-start pl-12">
                           {cReactionsKeys.map(key => {
-                             const rData = c.reactions[key] || { count: 1, users: [] };
-                             const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
+                             const rData = c.reactions[key];
+                             const count = typeof rData === 'number' ? rData : (rData?.count || 1);
+                             const users = Array.isArray(rData) ? rData : (rData?.users || []);
+                             const firstUser = users.length > 0 ? users[0] : null;
+
                              return (
-                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className="flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border bg-[#f5f5f7] dark:bg-[#333336] shadow-sm">
-                                 <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
-                                   {firstUser?.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
-                                 </div>
+                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                                 {firstUser ? (
+                                   <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
+                                     {firstUser.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser.name?.charAt(0).toUpperCase() || 'U'}
+                                   </div>
+                                 ) : (
+                                   <span className="pl-1"></span>
+                                 )}
                                  <span className="text-[13px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                                 {count > 1 && <span className="text-[11px] font-bold leading-none flex items-center justify-center mt-[1px] pr-1">{count}</span>}
                                </button>
                              );
                           })}
@@ -543,38 +549,29 @@ export default function WallPage() {
           <div className="bg-white/80 dark:bg-[#222224]/80 border-t border-black/5 dark:border-white/5 relative z-10 flex flex-col backdrop-blur-xl">
              {commentReplyingTo && (
               <div className="flex items-center justify-between mb-1 mt-3 mx-4 px-4 py-2.5 bg-[#f5f5f7] dark:bg-[#161618] rounded-[14px] border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7]">
-                <div className="flex flex-col mr-4">
-                  <span className="text-[11px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] uppercase">{t.replyAction}</span>
-                  <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate">{parseContent(commentReplyingTo.content).text || t.photo}</span>
-                </div>
+                <div className="flex flex-col mr-4"><span className="text-[11px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] uppercase">{t.replyAction}</span><span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate">{parseContent(commentReplyingTo.content).text || t.photo}</span></div>
                 <button type="button" onClick={() => setCommentReplyingTo(null)} className="p-1.5 flex-shrink-0 text-[#86868b]"><X size={16} /></button>
               </div>
              )}
             <form onSubmit={handleSendComment} className="p-3 flex items-center gap-2 pb-6">
               <input type="file" accept="image/*,video/*" className="hidden" ref={commentFileInputRef} onChange={handleCommentFileUpload} />
-              <button type="button" onClick={() => commentFileInputRef.current?.click()} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b]"><Paperclip size={22} /></button>
-              <input 
-                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px]" 
-                value={commentContent} 
-                onChange={e => setCommentContent(e.target.value)} 
-                placeholder={t.commentPlaceholder} 
-              />
+              <button type="button" onClick={() => commentFileInputRef.current?.click()} disabled={isCommentUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b]"><Paperclip size={22} /></button>
+              <input className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px]" value={commentContent} onChange={e => setCommentContent(e.target.value)} placeholder={t.commentPlaceholder} />
               <button type="submit" disabled={!commentContent.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50"><ChevronRight size={20} strokeWidth={2.5}/></button>
             </form>
           </div>
         </div>
       )}
 
-      {/* ГЛОБАЛЬНОЕ МЕНЮ */}
+      {/* ГЛОБАЛЬНОЕ МЕНЮ ПОВЕРХ ВСЕГО */}
       {contextMenu && (() => {
-         const menuWidth = 220; 
-         const menuHeight = 250;
-         let safeX = contextMenu.x; 
-         let safeY = contextMenu.y;
+         const menuWidth = 220; const menuHeight = 250;
+         let safeX = contextMenu.x; let safeY = contextMenu.y;
          
+         // Умная математика: если меню не влезает вниз, открываем его ВВЕРХ
          if (safeX + menuWidth > window.innerWidth) safeX = window.innerWidth - menuWidth - 10;
          if (safeY + menuHeight > window.innerHeight) safeY = safeY - menuHeight;
-         if (safeY < 0) safeY = 20;
+         if (safeY < 0) safeY = 20; // Защита от улета за верхний край
          
          const isMe = String(contextMenu.item.senderId) === String(currentUserId);
          const { hasText, hasMedia } = parseContent(contextMenu.item.content);
@@ -594,7 +591,6 @@ export default function WallPage() {
                    {hasText && (
                      <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(contextMenu.item.content).text); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Copy size={18} className="text-[#86868b]" /> {t.copy}</button>
                    )}
-                   {/* Удаление на стене доступно только автору и только если нет фото */}
                    {isMe && !hasMedia && contextMenu.type === 'post' && (
                      <button onClick={(e) => { e.stopPropagation(); setContextMenu(null); startEditingPost(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Edit2 size={18} className="text-[#86868b]" /> {t.editAction}</button>
                    )}
