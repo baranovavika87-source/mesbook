@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Send, ArrowLeft, Download, Copy, Reply, Check, ChevronRight } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send, ArrowLeft, Download, Copy, Reply, Check, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -341,14 +341,15 @@ export default function WallPage() {
                       </div>
                     )}
 
-                    <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3.5 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
-                      <div className="flex gap-2.5 items-center">
-                        <MessageCircle size={18} className="text-[#86868b] dark:text-[#98989d]" />
-                        <span className="text-[14px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+                    {/* ИСПРАВЛЕНИЕ: ТОНЕНЬКАЯ ПОЛОСКА КОММЕНТАРИЕВ */}
+                    <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04]">
+                      <div className="flex gap-2 items-center">
+                        <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
+                        <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
                           {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
                         </span>
                       </div>
-                      <ChevronRight size={18} className="text-[#86868b] dark:text-[#98989d]" />
+                      <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
                     </button>
                   </div>
 
@@ -433,18 +434,17 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* НИЖНЯЯ ПАНЕЛЬ СТЕНЫ: РАЗМЕР КАК В ЧАТАХ */}
-      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-2 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-5 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         <Link href="/">
           <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
-            <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
-            <span className="text-[11px] font-semibold tracking-wide">{t.chats}</span>
+            <MessageSquare size={24} className="mb-1" strokeWidth={1.5} />
+            <span className="text-[10px] font-semibold tracking-wide">{t.chats}</span>
           </a>
         </Link>
         <Link href="/wall">
           <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95">
-            <Users size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
-            <span className="text-[11px] font-semibold tracking-wide">{t.wall}</span>
+            <Users size={24} className="mb-1" fill="currentColor" strokeWidth={1.5} />
+            <span className="text-[10px] font-semibold tracking-wide">{t.wall}</span>
           </a>
         </Link>
       </nav>
