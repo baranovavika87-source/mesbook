@@ -106,17 +106,22 @@ const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
   if (!timestamp) return lang === 'ru' ? 'недавно' : 'recently';
   const date = new Date(timestamp);
   const now = new Date();
+  
   const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+  
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
+
   const timeStr = date.toLocaleTimeString(lang === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' });
   
   if (isToday) return lang === 'ru' ? `сегодня в ${timeStr}` : `today at ${timeStr}`;
   if (isYesterday) return lang === 'ru' ? `вчера в ${timeStr}` : `yesterday at ${timeStr}`;
+  
   const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
   let dateStr = date.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', options);
   if (lang === 'ru') dateStr = dateStr.replace('.', '');
+  
   return lang === 'ru' ? `${dateStr} в ${timeStr}` : `${dateStr} at ${timeStr}`;
 };
 
@@ -148,15 +153,12 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   
-  // Умное позиционирование меню по координатам клика
-  const [menuPos, setMenuPos] = useState<{ x: number, y: number } | null>(null);
   const [activeContextMenu, setActiveContextMenu] = useState<number | null>(null);
-  const [activeCommentMenu, setActiveCommentMenu] = useState<number | null>(null);
-  const pressTimer = useRef<NodeJS.Timeout | null>(null);
   
   const [activeThread, setActiveThread] = useState<any>(null);
   const [threadComments, setThreadComments] = useState<any[]>([]);
   const [commentContent, setCommentContent] = useState('');
+  const [activeCommentMenu, setActiveCommentMenu] = useState<number | null>(null);
   const [isCommentUploading, setIsCommentUploading] = useState(false);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
   const [commentReplyingTo, setCommentReplyingTo] = useState<any>(null);
@@ -184,6 +186,7 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const commentsScrollRef = useRef<HTMLDivElement>(null);
   const hasScrolledToBottom = useRef(false);
+  const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const [chatInfo, setChatInfo] = useState<any>(() => {
     if (isSavedChat) return { participant: { displayName: t.saved, isSaved: true } };
@@ -237,7 +240,10 @@ export default function ChatPage() {
   }, [messages, chatId, currentUserId, isSavedChat]);
 
   const loadData = async () => {
-    if (isSavedChat) { setIsLoadingRole(false); return; }
+    if (isSavedChat) {
+      setIsLoadingRole(false);
+      return;
+    }
     
     if (isGroupOrChannel) {
       try {
@@ -254,6 +260,7 @@ export default function ChatPage() {
     setIsLoadingRole(false);
 
     try { await fetch('/api/chats/' + chatId + '/read', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
+    
     try {
       const infoRes = await fetch('/api/chats', { headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' } });
       if (infoRes.ok) {
@@ -262,6 +269,7 @@ export default function ChatPage() {
         if (currentChat) setChatInfo(currentChat);
       }
     } catch (e) {}
+    
     try {
       const msgRes = await fetch('/api/chats/' + chatId + '/messages', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
       if (msgRes.ok) {
@@ -283,7 +291,9 @@ export default function ChatPage() {
     }
   };
 
-  useEffect(() => { loadData(); }, [chatId, activeThread]);
+  useEffect(() => {
+    loadData();
+  }, [chatId, activeThread]);
 
   useEffect(() => {
     if (scrollRef.current && !hasScrolledToBottom.current && messages.length > 0) {
@@ -319,13 +329,15 @@ export default function ChatPage() {
           localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
           return updated;
         });
-        setContent(''); setEditingMsg(null);
+        setContent('');
+        setEditingMsg(null);
         setTimeout(() => inputRef.current?.focus(), 10);
         return;
       }
 
       setMessages(prev => prev.map(m => m.id === tempId ? { ...m, content: finalEditedContent, isEdited: true } : m));
-      setContent(''); setEditingMsg(null);
+      setContent('');
+      setEditingMsg(null);
       setTimeout(() => inputRef.current?.focus(), 10);
 
       try {
@@ -337,9 +349,16 @@ export default function ChatPage() {
 
     const tempContent = content.trim();
     const finalContent = replyingTo ? `> ${replyingTo.content}\n\n${tempContent}` : tempContent;
-    setContent(''); setReplyingTo(null);
-    setTimeout(() => { if (inputRef.current) inputRef.current.focus(); }, 10);
+    setContent('');
+    setReplyingTo(null);
     
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 10);
+    
+    // ИСПРАВЛЕНИЕ ОДНОЙ ГАЛОЧКИ: при отправке read всегда false 
     const tempMsg = { id: Date.now(), content: finalContent, isSending: !isSavedChat, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
     if (isSavedChat) {
       setMessages((prev: any) => { const u = [...prev, { ...tempMsg, isSending: false }]; localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(u)); return u; });
@@ -356,9 +375,12 @@ export default function ChatPage() {
   const handleSendComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentContent.trim() || !activeThread) return;
+    
     const tempContent = commentContent.trim();
     const finalContent = commentReplyingTo ? `> ${commentReplyingTo.content}\n\n${tempContent}` : tempContent;
-    setCommentContent(''); setCommentReplyingTo(null);
+    
+    setCommentContent('');
+    setCommentReplyingTo(null);
     try {
       await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalContent, parentId: activeThread.id }) });
       loadData();
@@ -384,7 +406,10 @@ export default function ChatPage() {
         loadData();
       }
     } catch (err: any) {} 
-    finally { setIsCommentUploading(false); if (commentFileInputRef.current) commentFileInputRef.current.value = ''; }
+    finally { 
+      setIsCommentUploading(false); 
+      if (commentFileInputRef.current) commentFileInputRef.current.value = ''; 
+    }
   };
 
   const deleteComment = async (commentId: number) => {
@@ -487,63 +512,37 @@ export default function ChatPage() {
     setIsSavingChat(false);
   };
 
-  const openMenu = (e: React.MouseEvent | React.TouchEvent, id: number, isComment = false) => {
-    e.stopPropagation();
-    e.preventDefault();
-    let clientX, clientY;
-    if ('touches' in e && e.touches.length > 0) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = (e as React.MouseEvent).clientX;
-      clientY = (e as React.MouseEvent).clientY;
-    }
-    setMenuPos({ x: clientX, y: clientY });
-    if (isComment) {
-       setActiveCommentMenu(id);
-       setActiveContextMenu(null);
-    } else {
-       setActiveContextMenu(id);
-       setActiveCommentMenu(null);
-    }
-  };
-
   const handleImageInteraction = (e: React.TouchEvent | React.MouseEvent, url: string) => {
     e.stopPropagation();
     pressTimer.current = setTimeout(() => {
       if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
       setFullScreenImage(url);
-      setActiveContextMenu(null);
-      setActiveCommentMenu(null);
     }, 400); 
   };
 
   const clearTimer = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
+  
+  const lastSeen = chatInfo?.participant?.lastSeen;
+  const isOnline = lastSeen ? (Date.now() - lastSeen < 30000) : false; 
+  
+  let subtitleText = "";
+  let subtitleColor = "text-[#86868b] dark:text-[#98989d]"; 
 
-  const closeMenus = () => { setActiveContextMenu(null); setActiveCommentMenu(null); setMenuPos(null); };
-
-  const renderFixedMenu = (menuContent: React.ReactNode) => {
-    if (!menuPos) return null;
-    const menuWidth = 220;
-    const menuHeight = 250;
-    let safeX = menuPos.x;
-    let safeY = menuPos.y;
-    
-    if (safeX + menuWidth > window.innerWidth) safeX = window.innerWidth - menuWidth - 20;
-    if (safeY + menuHeight > window.innerHeight) safeY = window.innerHeight - menuHeight - 20;
-    
-    return (
-      <>
-        <div className="fixed inset-0 z-[110]" onClick={(e) => { e.stopPropagation(); closeMenus(); }} onContextMenu={(e) => { e.preventDefault(); closeMenus(); }} />
-        <div 
-          className="fixed z-[120] flex flex-col gap-2 animate-in zoom-in-[0.95] fade-in duration-200 ease-out" 
-          style={{ top: safeY, left: safeX }}
-        >
-           {menuContent}
-        </div>
-      </>
-    );
-  };
+  if (typingUsers.length > 0) {
+    if (typingUsers.length === 1) { subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping; } 
+    else { subtitleText = `${typingUsers.join(', ')} ${t.areTyping}`; }
+  } else if (!isSavedChat) {
+    if (isGroupOrChannel) {
+      if (membersCount === null) { subtitleText = isChannel ? t.channel : t.group; } 
+      else {
+        if (isChannel) { subtitleText = `${membersCount} ${declOfNum(membersCount, t.subs, lang)}`; } 
+        else { subtitleText = `${membersCount} ${declOfNum(membersCount, t.members, lang)}, ${onlineCount || 1} ${t.onlineCount}`; }
+      }
+    } else {
+      subtitleColor = isOnline ? 'text-[#1d1d1f] dark:text-[#f5f5f7] font-medium' : 'text-[#86868b] dark:text-[#98989d]';
+      subtitleText = isOnline ? t.online : `${t.lastSeenAt} ${formatLastSeen(lastSeen, lang)}`;
+    }
+  }
 
   const parseContent = (rawText: string) => {
     const mediaUrls: string[] = [];
@@ -552,45 +551,28 @@ export default function ChatPage() {
     let text = rawText;
     while ((match = mediaRegex.exec(text)) !== null) mediaUrls.push(match[1]);
     text = text.replace(mediaRegex, '').trim();
+    
     let quotedText = null;
     if (text.startsWith('> ')) {
       const parts = text.split('\n\n');
       quotedText = parts[0].replace('> ', '');
+      if (quotedText.startsWith('[MEDIA]')) quotedText = t.photo;
       text = parts.slice(1).join('\n\n');
     }
+
     const hasMedia = mediaUrls.length > 0;
     const hasText = !!text || !!quotedText;
     const isVideo = hasMedia && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
+    
     return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
   };
 
-  const lastSeen = chatInfo?.participant?.lastSeen;
-  const isOnline = lastSeen ? (Date.now() - lastSeen < 30000) : false; 
-  let subtitleText = "";
-  let subtitleColor = "text-[#86868b] dark:text-[#98989d]"; 
-
-  if (typingUsers.length > 0) {
-    if (typingUsers.length === 1) subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping; 
-    else subtitleText = `${typingUsers.join(', ')} ${t.areTyping}`;
-  } else if (!isSavedChat) {
-    if (isGroupOrChannel) {
-      if (membersCount === null) subtitleText = isChannel ? t.channel : t.group; 
-      else {
-        if (isChannel) subtitleText = `${membersCount} ${declOfNum(membersCount, t.subs, lang)}`; 
-        else subtitleText = `${membersCount} ${declOfNum(membersCount, t.members, lang)}, ${onlineCount || 1} ${t.onlineCount}`;
-      }
-    } else {
-      subtitleColor = isOnline ? 'text-[#1d1d1f] dark:text-[#f5f5f7] font-medium' : 'text-[#86868b] dark:text-[#98989d]';
-      subtitleText = isOnline ? t.online : `${t.lastSeenAt} ${formatLastSeen(lastSeen, lang)}`;
-    }
-  }
-
   return (
-    <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={closeMenus}>
+    <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={() => setActiveContextMenu(null)}>
       
       {/* ЛАЙТБОКС */}
       {fullScreenImage && (
-        <div className="fixed inset-0 z-[200] bg-black flex flex-col animate-in fade-in duration-200 ease-out">
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in duration-200 ease-out">
           <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-10">
             <button onClick={() => setFullScreenImage(null)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><X size={24} /></button>
             <button onClick={() => downloadImage(fullScreenImage)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><Download size={24} /></button>
@@ -603,7 +585,7 @@ export default function ChatPage() {
 
       {/* МОДАЛКА КОММЕНТАРИЕВ */}
       {activeThread && (
-        <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={closeMenus}>
+        <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={() => setActiveCommentMenu(null)}>
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
             <div className="flex items-center gap-4">
               <button onClick={() => setActiveThread(null)} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
@@ -629,18 +611,18 @@ export default function ChatPage() {
             {threadComments.length === 0 ? (
                <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
             ) : (
-               threadComments.map((c) => {
+               threadComments.map((c, index) => {
                  const isCommentMenuOpen = activeCommentMenu === c.id;
                  const isMyComment = String(c.senderId) === String(currentUserId);
                  const { text, quotedText, hasMedia, mediaUrls, hasText } = parseContent(c.content);
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
+                 const isLastComment = index === threadComments.length - 1;
 
                  return (
-                   <div key={c.id} className="relative flex flex-col mb-2 z-10">
+                   <div key={c.id} className={`relative flex flex-col mb-2 ${isCommentMenuOpen ? 'z-[100]' : 'z-10'}`}>
                      <div 
                         className="flex gap-3 items-start cursor-pointer" 
-                        onClick={(e) => openMenu(e, c.id, true)}
-                        onContextMenu={(e) => openMenu(e, c.id, true)}
+                        onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(isCommentMenuOpen ? null : c.id); }}
                      >
                        <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
                          {c.senderAvatar ? <img src={c.senderAvatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
@@ -653,13 +635,7 @@ export default function ChatPage() {
                          )}
 
                          {hasMedia && (
-                             <img 
-                               src={mediaUrls[0]} 
-                               className={`max-h-[200px] w-auto object-cover ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
-                               onTouchStart={(e) => handleImageInteraction(e, mediaUrls[0])}
-                               onMouseDown={(e) => handleImageInteraction(e, mediaUrls[0])}
-                               onTouchEnd={clearTimer} onTouchMove={clearTimer} onMouseUp={clearTimer} onMouseLeave={clearTimer}
-                             />
+                             <img src={mediaUrls[0]} onClick={(e) => { e.stopPropagation(); setFullScreenImage(mediaUrls[0]); }} className={`max-h-[200px] w-auto object-cover cursor-pointer ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} />
                          )}
                          {hasText && (
                              <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{text}</span>
@@ -668,6 +644,7 @@ export default function ChatPage() {
                        </div>
                      </div>
 
+                     {/* Реакции под комментарием */}
                      {cReactionsKeys.length > 0 && (
                         <div className={`flex flex-wrap gap-1 mt-1 justify-start pl-12`}>
                           {cReactionsKeys.map(key => {
@@ -685,32 +662,35 @@ export default function ChatPage() {
                         </div>
                      )}
 
-                     {/* МЕНЮ КОММЕНТАРИЯ (По координатам) */}
-                     {isCommentMenuOpen && renderFixedMenu(
-                       <>
-                         <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
-                           {FAST_REACTIONS.map(emoji => (
-                             <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, emoji); closeMenus(); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${c.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
-                               {emoji}
-                             </button>
-                           ))}
-                         </div>
-                         <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
-                            <button onClick={(e) => { e.stopPropagation(); setCommentReplyingTo(c); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                              <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
-                            </button>
-                            {hasText && (
-                              <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
-                              </button>
-                            )}
-                            {isMyComment && (
-                              <button onClick={(e) => { e.stopPropagation(); closeMenus(); deleteComment(c.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
-                                <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
-                              </button>
-                            )}
-                         </div>
-                       </>
+                     {/* Меню для комментариев */}
+                     {isCommentMenuOpen && (
+                        <>
+                          <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(null); }} />
+                          <div className={`absolute z-[70] flex flex-col gap-2 left-12 ${isLastComment ? 'bottom-full mb-1' : 'top-full mt-1'} min-w-[200px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out`}>
+                             <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
+                               {FAST_REACTIONS.map(emoji => (
+                                 <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, emoji); setActiveCommentMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${c.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
+                                   {emoji}
+                                 </button>
+                               ))}
+                             </div>
+                             <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
+                                <button onClick={(e) => { e.stopPropagation(); setCommentReplyingTo(c); setActiveCommentMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                  <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
+                                </button>
+                                {hasText && (
+                                  <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); setActiveCommentMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                    <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
+                                  </button>
+                                )}
+                                {isMyComment && (
+                                  <button onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(null); deleteComment(c.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
+                                    <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
+                                  </button>
+                                )}
+                             </div>
+                          </div>
+                        </>
                      )}
                    </div>
                  );
@@ -820,12 +800,12 @@ export default function ChatPage() {
       </header>
 
       {/* ОСНОВНОЕ ОКНО СООБЩЕНИЙ */}
-      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 pb-12 relative" onClick={closeMenus}>
+      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 pb-12 relative" onClick={() => setActiveContextMenu(null)}>
         <div className="flex flex-col w-full max-w-full">
           {(() => {
             let lastDateStr = '';
             
-            return messages.map((msg: any) => {
+            return messages.map((msg: any, index) => {
               const isMe = String(msg.senderId) === String(currentUserId);
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(msg.content);
               
@@ -838,10 +818,12 @@ export default function ChatPage() {
               const reactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
               const isMenuOpen = activeContextMenu === msg.id;
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+              
+              const isLastMessage = index >= messages.length - 2;
 
               if (isGroupOrChannel) {
                 return (
-                  <div key={msg.id} className={`flex flex-col w-[90%] sm:w-[85%] mb-4 relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
+                  <div key={msg.id} className={`flex flex-col w-[90%] sm:w-[85%] mb-4 relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
                     {showDate && (
                       <div className="flex justify-center w-full my-4">
                         <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">
@@ -852,8 +834,7 @@ export default function ChatPage() {
                     <div className={`flex flex-col w-[90%] sm:w-[85%] relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
                       <div 
                         className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative cursor-pointer`}
-                        onClick={(e) => openMenu(e, msg.id)}
-                        onContextMenu={(e) => openMenu(e, msg.id)}
+                        onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : msg.id); }}
                       >
                         {hasMedia && (
                           <div className={`relative w-full overflow-hidden flex justify-center bg-[#f5f5f7] dark:bg-[#161618] ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
@@ -862,7 +843,7 @@ export default function ChatPage() {
                                  ? <video key={idx} src={url} controls className="w-full h-auto max-h-[400px] object-cover" />
                                  : <img 
                                       key={idx} src={url} loading="lazy" decoding="async" 
-                                      className="w-full h-auto max-h-[400px] object-cover" 
+                                      className="w-full h-auto max-h-[400px] object-cover pointer-events-none" 
                                       onTouchStart={(e) => handleImageInteraction(e, url)} onMouseDown={(e) => handleImageInteraction(e, url)}
                                       onTouchEnd={clearTimer} onTouchMove={clearTimer} onMouseUp={clearTimer} onMouseLeave={clearTimer}
                                       onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
@@ -906,7 +887,7 @@ export default function ChatPage() {
                           </div>
                         )}
 
-                        <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); setThreadComments([]); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04]">
+                        <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); setThreadComments([]); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-b-[24px]">
                           <div className="flex gap-2 items-center">
                             <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
                             <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
@@ -917,44 +898,47 @@ export default function ChatPage() {
                         </button>
                       </div>
 
-                      {/* МЕНЮ СООБЩЕНИЯ ГРУППЫ */}
-                      {isMenuOpen && renderFixedMenu(
+                      {/* МЕНЮ ВНЕ КАРТОЧКИ */}
+                      {isMenuOpen && (
                         <>
-                          <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
-                             {FAST_REACTIONS.map(emoji => (
-                               <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); closeMenus(); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
-                                 {emoji}
-                               </button>
-                             ))}
-                          </div>
-
-                          {(!isChannel || isAdmin) && (
-                            <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
-                               {(!isChannel) && (
-                                 <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                   <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
+                          <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} />
+                          <div className={`absolute z-[70] flex flex-col gap-2 ${isMe ? 'right-0 items-end' : 'left-0 items-start'} ${isLastMessage ? 'bottom-full mb-1' : 'top-full mt-1'} min-w-[200px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out`}>
+                            <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
+                               {FAST_REACTIONS.map(emoji => (
+                                 <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
+                                   {emoji}
                                  </button>
-                               )}
-                               
-                               {hasText && (
-                                 <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                   <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
-                                 </button>
-                               )}
-
-                               {isMe && hasText && (
-                                 <button onClick={(e) => { e.stopPropagation(); startEditing(msg); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                   <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
-                                 </button>
-                               )}
-
-                               {(isMe || isAdmin) && (
-                                 <button onClick={(e) => { e.stopPropagation(); closeMenus(); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
-                                   <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
-                                 </button>
-                               )}
+                               ))}
                             </div>
-                          )}
+
+                            {(!isChannel || isAdmin) && (
+                              <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
+                                 {(!isChannel) && (
+                                   <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                     <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
+                                   </button>
+                                 )}
+                                 
+                                 {hasText && (
+                                   <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                     <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
+                                   </button>
+                                 )}
+
+                                 {isMe && hasText && (
+                                   <button onClick={(e) => { e.stopPropagation(); startEditing(msg); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                     <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
+                                   </button>
+                                 )}
+
+                                 {(isMe || isAdmin) && (
+                                   <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
+                                     <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
+                                   </button>
+                                 )}
+                              </div>
+                            )}
+                          </div>
                         </>
                       )}
                     </div>
@@ -964,7 +948,7 @@ export default function ChatPage() {
 
               // ЛИЧНЫЕ ЧАТЫ
               return (
-                <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
+                <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
                   {showDate && (
                     <div className="flex justify-center my-4 w-full">
                       <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">{currentDateStr}</span>
@@ -975,8 +959,7 @@ export default function ChatPage() {
                     
                     <div 
                       className={`shadow-[0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-none relative flex flex-col min-w-[60px] cursor-pointer ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`}
-                      onClick={(e) => openMenu(e, msg.id)}
-                      onContextMenu={(e) => openMenu(e, msg.id)}
+                      onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : msg.id); }}
                     >
                       {hasMedia && (
                         <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''} ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`}>
@@ -985,7 +968,7 @@ export default function ChatPage() {
                                ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} />
                                : <img 
                                     key={idx} src={url} loading="lazy" decoding="async" 
-                                    className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} 
+                                    className={`w-full h-auto max-h-[400px] object-cover pointer-events-none ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} 
                                     onTouchStart={(e) => handleImageInteraction(e, url)} onMouseDown={(e) => handleImageInteraction(e, url)}
                                     onTouchEnd={clearTimer} onTouchMove={clearTimer} onMouseUp={clearTimer} onMouseLeave={clearTimer}
                                     onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
@@ -1037,38 +1020,41 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    {/* МЕНЮ ЛИЧНОГО ЧАТА (По координатам) */}
-                    {isMenuOpen && renderFixedMenu(
+                    {/* МЕНЮ ВНЕ ПУЗЫРЯ */}
+                    {isMenuOpen && (
                       <>
-                        <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
-                           {FAST_REACTIONS.map(emoji => (
-                             <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); closeMenus(); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
-                               {emoji}
+                        <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} />
+                        <div className={`absolute z-[70] flex flex-col gap-2 ${isMe ? 'right-0 items-end' : 'left-0 items-start'} ${isLastMessage ? 'bottom-full mb-1' : 'top-full mt-1'} min-w-[200px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out`}>
+                          <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
+                             {FAST_REACTIONS.map(emoji => (
+                               <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
+                                 {emoji}
+                               </button>
+                             ))}
+                          </div>
+                          <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
+                             <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                               <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
                              </button>
-                           ))}
-                        </div>
-                        <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
-                           <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                             <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
-                           </button>
-                           
-                           {hasText && (
-                             <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                               <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
-                             </button>
-                           )}
+                             
+                             {hasText && (
+                               <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                 <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
+                               </button>
+                             )}
 
-                           {isMe && hasText && (
-                             <button onClick={(e) => { e.stopPropagation(); startEditing(msg); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                               <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
-                             </button>
-                           )}
+                             {isMe && hasText && (
+                               <button onClick={(e) => { e.stopPropagation(); startEditing(msg); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                 <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
+                               </button>
+                             )}
 
-                           {(isMe || isAdmin) && (
-                             <button onClick={(e) => { e.stopPropagation(); closeMenus(); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
-                               <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
-                             </button>
-                           )}
+                             {(isMe || isAdmin) && (
+                               <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
+                                 <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
+                               </button>
+                             )}
+                          </div>
                         </div>
                       </>
                     )}
