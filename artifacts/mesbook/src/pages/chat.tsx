@@ -148,7 +148,6 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   
-  // Глобальное меню
   const [contextMenu, setContextMenu] = useState<{ id: number, x: number, y: number, type: 'message' | 'comment', item: any } | null>(null);
   
   const [activeThread, setActiveThread] = useState<any>(null);
@@ -180,7 +179,6 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const commentsScrollRef = useRef<HTMLDivElement>(null);
-  const hasScrolledToBottom = useRef(false);
   
   const photoOpenedRef = useRef(false);
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
@@ -274,7 +272,6 @@ export default function ChatPage() {
   useEffect(() => { loadData(); }, [chatId, activeThread]);
 
   const forceScrollToBottom = () => { setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 10); };
-  
   useEffect(() => { forceScrollToBottom(); }, [messages]);
 
   useEffect(() => {
@@ -312,7 +309,7 @@ export default function ChatPage() {
     forceScrollToBottom();
     try {
       await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalContent }) });
-      loadData();
+      loadData(); 
     } catch (error) {}
   };
 
@@ -362,18 +359,37 @@ export default function ChatPage() {
     finally { setIsCommentUploading(false); if (commentFileInputRef.current) commentFileInputRef.current.value = ''; }
   };
 
-  // ИСПРАВЛЕНИЕ: Классический запрос реакций, как ты и просил
+  // ОПТИМИСТИЧНЫЕ РЕАКЦИИ
   const toggleReaction = async (msgId: number, reaction: string, isComment = false) => {
+    setContextMenu(null);
+    const updateFn = (item: any) => {
+      const newR = { ...(item.reactions || {}) };
+      if (item.myReaction === reaction) {
+        if (newR[reaction]) newR[reaction].count = Math.max(0, newR[reaction].count - 1);
+        if (newR[reaction]?.count === 0) delete newR[reaction];
+        return { ...item, reactions: newR, myReaction: null };
+      } else {
+        if (item.myReaction && newR[item.myReaction]) {
+          newR[item.myReaction].count = Math.max(0, newR[item.myReaction].count - 1);
+          if (newR[item.myReaction].count === 0) delete newR[item.myReaction];
+        }
+        if (!newR[reaction]) newR[reaction] = { count: 0, users: [] };
+        newR[reaction].count++;
+        if (currentUser) {
+           const userObj = { id: currentUserId, name: currentUser.displayName || 'U', avatar: currentUser.avatarUrl };
+           newR[reaction].users = [userObj, ...(newR[reaction].users || []).filter((u:any) => u.id !== currentUserId)];
+        }
+        return { ...item, reactions: newR, myReaction: reaction };
+      }
+    };
+
+    if (isComment) setThreadComments(prev => prev.map(c => c.id === msgId ? updateFn(c) : c));
+    else setMessages(prev => prev.map(m => m.id === msgId ? updateFn(m) : m));
+
     try {
       const targetChatId = isComment && activeThread ? (activeThread.chatId || chatId) : chatId;
       await fetch(`/api/chats/${targetChatId}/messages/${msgId}/reaction`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ reaction }) });
-      if (isComment && activeThread) {
-        loadComments(targetChatId, activeThread.id);
-      } else {
-        loadData();
-      }
     } catch (e) {}
-    setContextMenu(null);
   };
 
   const deleteMessage = async (msgId: number, isComment = false) => {
@@ -397,7 +413,6 @@ export default function ChatPage() {
     setContextMenu({ id: item.id, x: clientX, y: clientY, type, item });
   };
 
-  // ИСПРАВЛЕНИЕ: Старая надежная физика фото
   const handleTouchStartPhoto = (e: React.TouchEvent | React.MouseEvent, url: string) => {
     e.stopPropagation();
     photoOpenedRef.current = false;
@@ -414,6 +429,7 @@ export default function ChatPage() {
   const handlePhotoClick = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'message' | 'comment') => {
     e.stopPropagation();
     e.preventDefault();
+    clearPhotoTimer();
     if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
     openGlobalMenu(e, item, type);
   };
@@ -473,21 +489,27 @@ export default function ChatPage() {
     setIsSavingChat(false);
   };
 
-  const parseContent = (rawText: string) => {
+  const parseContent = (rawText: any) => {
+    if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false };
     const mediaUrls: string[] = [];
     const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
     let match; let text = rawText;
-    while ((match = mediaRegex.exec(text)) !== null) mediaUrls.push(match[1]);
-    text = text.replace(mediaRegex, '').trim();
+    try {
+      while ((match = mediaRegex.exec(text)) !== null) {
+        if (match && match[1]) mediaUrls.push(match[1]);
+      }
+      text = text.replace(mediaRegex, '').trim();
+    } catch(e) {}
     let quotedText = null;
-    if (text.startsWith('> ')) {
-      const parts = text.split('\n\n');
-      quotedText = parts[0].replace('> ', '');
-      text = parts.slice(1).join('\n\n');
-    }
+    try {
+      if (text.startsWith('> ')) {
+        const parts = text.split('\n\n');
+        if (parts.length > 0) { quotedText = parts[0].replace('> ', ''); text = parts.slice(1).join('\n\n'); }
+      }
+    } catch(e) {}
     const hasMedia = mediaUrls.length > 0;
     const hasText = !!text || !!quotedText;
-    const isVideo = hasMedia && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
+    const isVideo = hasMedia && !!mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
     return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
   };
 
@@ -612,7 +634,6 @@ export default function ChatPage() {
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
               const mReactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
 
-              // КАНАЛЫ: ИСПРАВЛЕНЫ РЕАКЦИИ (БЕЗ АВАТАРОК)
               if (isChannel) {
                 return (
                   <div key={msg.id} className="w-full relative mb-5 z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out">
@@ -635,11 +656,11 @@ export default function ChatPage() {
                                ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" onClick={(e) => e.stopPropagation()} />
                                : <img 
                                     key={idx} src={url} loading="lazy" decoding="async" 
-                                    className="w-full h-auto max-h-[500px] object-cover pointer-events-none rounded-t-[24px]" 
+                                    className="w-full h-auto max-h-[500px] object-cover rounded-t-[24px]" 
                                     style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
                                     onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
                                     onMouseDown={(e) => handleTouchStartPhoto(e, url)}
-                                    onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
+                                    onTouchEnd={clearPhotoTimer} onMouseUp={clearPhotoTimer}
                                     onClick={(e) => handlePhotoClick(e, msg, 'message')}
                                     onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
                                     onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
@@ -661,13 +682,11 @@ export default function ChatPage() {
                         </div>
                       )}
 
-                      {/* ИСПРАВЛЕНИЕ: Только цифры и эмодзи в каналах (без аватарок) */}
                       {mReactionsKeys.length > 0 && (
                         <div className="px-4 pb-3 flex flex-wrap gap-1.5 pt-1.5">
                            {mReactionsKeys.map(key => {
                              const rData = msg.reactions[key];
                              const count = typeof rData === 'number' ? rData : (rData?.count || 1);
-                             
                              return (
                                <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                  <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
@@ -692,7 +711,6 @@ export default function ChatPage() {
                 );
               }
 
-              // ГРУППЫ И ЛИЧНЫЕ ЧАТЫ (ПУЗЫРИ)
               return (
                 <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
                   {showDate && (
@@ -721,11 +739,11 @@ export default function ChatPage() {
                                ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} onClick={(e) => e.stopPropagation()} />
                                : <img 
                                     key={idx} src={url} loading="lazy" decoding="async" 
-                                    className={`w-full h-auto max-h-[400px] object-cover pointer-events-none ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} 
+                                    className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} 
                                     style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
                                     onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
                                     onMouseDown={(e) => handleTouchStartPhoto(e, url)}
-                                    onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
+                                    onTouchEnd={clearPhotoTimer} onMouseUp={clearPhotoTimer}
                                     onClick={(e) => handlePhotoClick(e, msg, 'message')}
                                     onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
                                     onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
@@ -758,6 +776,18 @@ export default function ChatPage() {
                         </div>
                       )}
                     </div>
+                    
+                    {isGroup && (
+                       <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }} className="w-full flex items-center justify-between px-3 py-2 mt-1 border border-black/5 dark:border-white/5 bg-white dark:bg-[#222224] transition-colors hover:bg-black/5 dark:hover:bg-white/5 rounded-[16px]">
+                          <div className="flex gap-2 items-center">
+                            <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
+                            <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+                              {(msg.commentsCount || 0) > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount || 0, t.commentsCount, lang)}` : t.comments}
+                            </span>
+                          </div>
+                          <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
+                        </button>
+                    )}
                     
                     {mReactionsKeys.length > 0 && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -837,11 +867,11 @@ export default function ChatPage() {
                          {hasMedia && (
                              <img 
                                src={mediaUrls[0]} 
-                               className={`max-h-[200px] w-auto object-cover pointer-events-none ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
+                               className={`max-h-[200px] w-auto object-cover ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
                                style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
                                onTouchStart={(e) => handleTouchStartPhoto(e, mediaUrls[0])} 
                                onMouseDown={(e) => handleTouchStartPhoto(e, mediaUrls[0])}
-                               onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
+                               onTouchEnd={clearPhotoTimer} onMouseUp={clearPhotoTimer}
                                onClick={(e) => handlePhotoClick(e, c, 'comment')}
                                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, c, 'comment'); }}
                              />
@@ -851,7 +881,6 @@ export default function ChatPage() {
                        </div>
                      </div>
 
-                     {/* ИСПРАВЛЕНИЕ: Реакции в комментариях */}
                      {cReactionsKeys.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1 justify-start pl-12">
                           {cReactionsKeys.map(key => {
@@ -866,9 +895,7 @@ export default function ChatPage() {
                                    <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                      {firstUser.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser.name?.charAt(0).toUpperCase() || 'U'}
                                    </div>
-                                 ) : (
-                                   <span className="pl-1"></span>
-                                 )}
+                                 ) : <span className="pl-1"></span>}
                                  <span className="text-[13px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
                                  {count > 1 && <span className={`text-[11px] font-bold leading-none flex items-center justify-center mt-[1px] pl-1 ${c.myReaction === key ? 'text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{count}</span>}
                                </button>
@@ -951,20 +978,22 @@ export default function ChatPage() {
 
       {/* ГЛОБАЛЬНОЕ МЕНЮ ПО КООРДИНАТАМ */}
       {contextMenu && (() => {
-         const menuWidth = 220; const menuHeight = 250;
-         let safeX = contextMenu.x; let safeY = contextMenu.y;
+         const menuWidth = 220; 
+         const menuHeight = 250;
+         let safeX = contextMenu.x; 
+         let safeY = contextMenu.y;
          
          if (safeX + menuWidth > window.innerWidth) safeX = window.innerWidth - menuWidth - 10;
          if (safeY + menuHeight > window.innerHeight) safeY = safeY - menuHeight;
          if (safeY < 0) safeY = 20;
          
          const isMe = String(contextMenu.item.senderId) === String(currentUserId);
-         const { hasText, hasMedia } = parseContent(contextMenu.item.content);
+         const { hasText } = parseContent(contextMenu.item.content);
          
          const showReply = contextMenu.type === 'comment' || !isChannel;
          const showCopy = hasText;
-         const showEdit = isMe && !hasMedia && contextMenu.type === 'message';
-         const showDelete = (isMe && !hasMedia && contextMenu.type === 'message') || (isMe && contextMenu.type === 'comment') || isAdmin;
+         const showEdit = isMe && contextMenu.type === 'message';
+         const showDelete = (isMe && contextMenu.type === 'message') || (isMe && contextMenu.type === 'comment') || isAdmin;
 
          if (!showReply && !showCopy && !showEdit && !showDelete) return null;
 
@@ -978,16 +1007,24 @@ export default function ChatPage() {
                 </div>
                 <div className="flex flex-col bg-white/95 dark:bg-[#222224]/95 backdrop-blur-xl rounded-[20px] shadow-lg border border-black/5 dark:border-white/5 overflow-hidden w-full">
                    {showReply && (
-                     <button onClick={(e) => { e.stopPropagation(); if (contextMenu.type === 'comment') setCommentReplyingTo(contextMenu.item); else setReplyingTo(contextMenu.item); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Reply size={18} className="text-[#86868b]" /> {t.replyAction}</button>
+                     <button onClick={(e) => { e.stopPropagation(); if (contextMenu.type === 'comment') setCommentReplyingTo(contextMenu.item); else setReplyingTo(contextMenu.item); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5">
+                       <Reply size={18} className="text-[#86868b]" /> {t.replyAction}
+                     </button>
                    )}
                    {showCopy && (
-                     <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(contextMenu.item.content).text); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Copy size={18} className="text-[#86868b]" /> {t.copy}</button>
+                     <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(contextMenu.item.content).text); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5">
+                       <Copy size={18} className="text-[#86868b]" /> {t.copy}
+                     </button>
                    )}
                    {showEdit && (
-                     <button onClick={(e) => { e.stopPropagation(); setContextMenu(null); startEditing(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Edit2 size={18} className="text-[#86868b]" /> {t.editAction}</button>
+                     <button onClick={(e) => { e.stopPropagation(); setContextMenu(null); startEditing(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5">
+                       <Edit2 size={18} className="text-[#86868b]" /> {t.editAction}
+                     </button>
                    )}
                    {showDelete && (
-                     <button onClick={(e) => { e.stopPropagation(); if (contextMenu.type === 'comment') deleteMessage(contextMenu.id, true); else deleteMessage(contextMenu.id); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5"><Trash2 size={18} className="text-[#86868b]" /> {t.deleteAction}</button>
+                     <button onClick={(e) => { e.stopPropagation(); if (contextMenu.type === 'comment') deleteMessage(contextMenu.id, true); else deleteMessage(contextMenu.id); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5">
+                       <Trash2 size={18} className="text-[#86868b]" /> {t.deleteAction}
+                     </button>
                    )}
                 </div>
              </div>
