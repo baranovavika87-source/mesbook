@@ -86,6 +86,7 @@ export default function WallPage() {
   const [commentContent, setCommentContent] = useState('');
   const [activeCommentMenu, setActiveCommentMenu] = useState<number | null>(null);
   const [isCommentUploading, setIsCommentUploading] = useState(false);
+  const [commentReplyingTo, setCommentReplyingTo] = useState<any>(null); // ИСПРАВЛЕНИЕ: Добавлено недостающее состояние
   
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
@@ -199,13 +200,17 @@ export default function WallPage() {
   const handleSendComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentContent.trim() || !activeThread) return;
-    const txt = commentContent.trim();
+    
+    const tempContent = commentContent.trim();
+    const finalContent = commentReplyingTo ? `> ${commentReplyingTo.content}\n\n${tempContent}` : tempContent;
+    
     setCommentContent('');
+    setCommentReplyingTo(null);
     try {
       await fetch(`/api/chats/${activeThread.chatId}/messages`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
-        body: JSON.stringify({ content: txt, parentId: activeThread.id }) 
+        body: JSON.stringify({ content: finalContent, parentId: activeThread.id }) 
       });
     } catch (error) {}
   };
@@ -322,15 +327,18 @@ export default function WallPage() {
           </div>
         ) : (
           <div className="flex flex-col w-full max-w-full">
-            {posts.map((post) => {
+            {posts.map((post, index) => {
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
               const reactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
               const isMenuOpen = activeContextMenu === post.id;
               const isMe = String(post.senderId) === String(currentUserId);
               const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+              
+              // ИСПРАВЛЕНИЕ: Интеллектуальная позиция меню
+              const isLastElements = index >= posts.length - 2;
 
               return (
-                <div key={post.id} className={`flex flex-col w-full mb-5 relative ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out`}>
+                <div key={post.id} className={`w-full relative mb-5 ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out`}>
                   
                   <div 
                     className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative cursor-pointer`}
@@ -403,7 +411,7 @@ export default function WallPage() {
                   {isMenuOpen && (
                     <>
                       <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} />
-                      <div className="absolute z-[70] flex flex-col gap-2 right-4 top-14 min-w-[200px] items-end animate-in zoom-in-[0.97] fade-in duration-200 ease-out">
+                      <div className={`absolute z-[70] flex flex-col gap-2 right-4 ${isLastElements ? 'bottom-12' : 'top-14'} min-w-[200px] items-end animate-in zoom-in-[0.97] fade-in duration-200 ease-out`}>
                         <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
                            {FAST_REACTIONS.map(emoji => (
                              <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${post.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
@@ -417,9 +425,12 @@ export default function WallPage() {
                              <button onClick={(e) => { e.stopPropagation(); startEditingPost(post); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
                                <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
                              </button>
-                             <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); deletePost(post); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
-                               <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
-                             </button>
+                             {/* ИСПРАВЛЕНИЕ: Удалить убрано, если есть фотография */}
+                             {!hasMedia && (
+                               <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); deletePost(post); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
+                                 <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
+                               </button>
+                             )}
                           </div>
                         )}
                       </div>
@@ -428,7 +439,6 @@ export default function WallPage() {
                 </div>
               );
             })}
-            <div className="h-32 shrink-0"></div>
           </div>
         )}
       </main>
@@ -446,7 +456,6 @@ export default function WallPage() {
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
             <div className="bg-white dark:bg-[#222224] p-4 rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none mb-2 border border-black/5 dark:border-white/5 flex flex-col">
               <span className="font-semibold text-[14px] text-[#86868b] dark:text-[#98989d] mb-1 block">{activeThread.channelName}</span>
-              {/* НОВОЕ: Отображение фото оригинального поста */}
               {activeThreadContent?.hasMedia && (
                 <div className="flex gap-2 overflow-x-auto my-2">
                   {activeThreadContent.mediaUrls.map((url: string) => (
@@ -462,11 +471,12 @@ export default function WallPage() {
             {threadComments.length === 0 ? (
                <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
             ) : (
-               threadComments.map(c => {
+               threadComments.map((c, index) => {
                  const isCommentMenuOpen = activeCommentMenu === c.id;
                  const isMyComment = String(c.senderId) === String(currentUserId);
                  const { text, quotedText, hasMedia, mediaUrls, hasText } = parseContent(c.content);
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
+                 const isLastComment = index >= threadComments.length - 2;
 
                  return (
                    <div key={c.id} className={`relative flex flex-col mb-2 ${isCommentMenuOpen ? 'z-[100]' : 'z-10'}`}>
@@ -491,7 +501,6 @@ export default function WallPage() {
                        </div>
                      </div>
 
-                     {/* Реакции под комментарием */}
                      {cReactionsKeys.length > 0 && (
                         <div className={`flex flex-wrap gap-1 mt-1 justify-start pl-12`}>
                           {cReactionsKeys.map(key => {
@@ -509,11 +518,10 @@ export default function WallPage() {
                         </div>
                      )}
 
-                     {/* Меню для комментариев */}
                      {isCommentMenuOpen && (
                         <>
                           <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(null); }} />
-                          <div className="absolute z-[70] flex flex-col gap-2 left-12 top-full mt-1 min-w-[200px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out">
+                          <div className={`absolute z-[70] flex flex-col gap-2 left-12 ${isLastComment ? 'bottom-full mb-1' : 'top-full mt-1'} min-w-[200px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out`}>
                              <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
                                {FAST_REACTIONS.map(emoji => (
                                  <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, emoji); setActiveCommentMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${c.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
@@ -543,7 +551,6 @@ export default function WallPage() {
                  );
                })
             )}
-            <div className="h-32 shrink-0"></div>
           </div>
           
           <div className="bg-white/80 dark:bg-[#222224]/80 border-t border-black/5 dark:border-white/5 relative z-10 flex flex-col backdrop-blur-xl shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
@@ -566,7 +573,7 @@ export default function WallPage() {
                 {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
               </button>
               <input 
-                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
+                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
                 value={commentContent} 
                 onChange={e => setCommentContent(e.target.value)} 
                 placeholder={t.commentPlaceholder} 
