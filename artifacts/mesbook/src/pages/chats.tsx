@@ -22,14 +22,14 @@ const translations = {
     globalSearch: "Глобальный поиск",
     yourChats: "Ваши чаты",
     nothingFound: "Ничего не найдено",
-    startTyping: "Начните вводить имя или название",
-    noChats: "Нет чатов",
+    startTyping: "Начните вводить имя",
+    noChats: "Нет сообщений",
     addAccount: "Добавить аккаунт",
     createGroup: "Создать группу",
     createChannel: "Создать канал",
     saved: "Избранное",
     settings: "Настройки",
-    loginAcc: "Войти в аккаунт",
+    loginAcc: "Войти",
     newAcc: "Новый аккаунт",
     login: "Войти",
     create: "Создать",
@@ -40,12 +40,12 @@ const translations = {
     groupName: "Название группы",
     channelName: "Название канала",
     description: "Описание",
-    descPlaceholderGroup: "Можете указать дополнительное описание группы.",
-    descPlaceholderChannel: "Можете указать дополнительное описание канала.",
-    attachment: "Вложение",
+    descPlaceholderGroup: "Дополнительное описание группы",
+    descPlaceholderChannel: "Дополнительное описание канала",
+    photo: "Фотография",
     noMessages: "Нет сообщений",
     companion: "Собеседник",
-    errorLogin: "Ошибка при входе",
+    errorLogin: "Ошибка входа",
     errorNet: "Ошибка сети",
     isTyping: "печатает...",
     areTyping: "печатают..."
@@ -57,8 +57,8 @@ const translations = {
     globalSearch: "Global Search",
     yourChats: "Your Chats",
     nothingFound: "Nothing found",
-    startTyping: "Start typing a name or title",
-    noChats: "No chats",
+    startTyping: "Start typing a name",
+    noChats: "No messages",
     addAccount: "Add Account",
     createGroup: "Create Group",
     createChannel: "Create Channel",
@@ -75,9 +75,9 @@ const translations = {
     groupName: "Group Name",
     channelName: "Channel Name",
     description: "Description",
-    descPlaceholderGroup: "You can add an optional group description.",
-    descPlaceholderChannel: "You can add an optional channel description.",
-    attachment: "Attachment",
+    descPlaceholderGroup: "Optional group description",
+    descPlaceholderChannel: "Optional channel description",
+    photo: "Photo",
     noMessages: "No messages",
     companion: "Companion",
     errorLogin: "Login error",
@@ -207,9 +207,7 @@ export default function ChatsPage() {
     socket.on('chat_update', loadChats);
     socket.on('typing_global', loadChats);
 
-    const interval = setInterval(loadChats, 15000);
     return () => {
-      clearInterval(interval);
       socket.off('global_update', loadChats);
       socket.off('chat_update', loadChats);
       socket.off('typing_global', loadChats);
@@ -325,12 +323,8 @@ export default function ChatsPage() {
       const data = await res.json();
       if (data.secure_url) {
         setModalAvatarUrl(data.secure_url);
-      } else {
-        alert("Ошибка загрузки");
       }
-    } catch (err) {
-      alert("Ошибка сети при загрузке аватара");
-    }
+    } catch (err) {}
     setIsUploadingModalAvatar(false);
   };
 
@@ -395,7 +389,7 @@ export default function ChatsPage() {
     const typingNames = chat.typing || [];
     const isTyping = typingNames.length > 0;
     
-    let lastMessageText = chat.lastMessage?.startsWith('[MEDIA]') ? t.attachment : (chat.lastMessage || t.noMessages);
+    let lastMessageText = chat.lastMessage?.startsWith('[MEDIA]') ? t.photo : (chat.lastMessage || t.noMessages);
     
     if (isTyping) {
        if (typingNames.length === 1) {
@@ -446,10 +440,10 @@ export default function ChatsPage() {
                 <div className="flex -space-x-1 shrink-0 items-center opacity-60">
                   {isSaved ? (
                     <><Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" /><Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" /></>
-                  ) : isLastMessageMine ? (
+                  ) : isLastMessageMine && !participant.isChannel ? (
                     <>
                       <Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />
-                      {(isLastMessageRead || participant.isGroup || participant.isChannel) && <Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />}
+                      {(isLastMessageRead || participant.isGroup) && <Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />}
                     </>
                   ) : chat.unreadCount > 0 ? (
                     <div className="bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] text-[11px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ml-1 opacity-100">
@@ -505,7 +499,6 @@ export default function ChatsPage() {
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Боковое меню (Сайдбар) */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/20 dark:bg-black/40 z-40 transition-opacity backdrop-blur-sm"
@@ -720,22 +713,54 @@ export default function ChatsPage() {
             )}
           </main>
 
-          {/* ИСПРАВЛЕНИЕ: Меньшая нижняя панель навигации */}
-          <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around pt-2.5 pb-5 px-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+          <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
             <Link href="/">
-              <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 gap-1 w-[60px]">
-                <MessageSquare size={22} fill="currentColor" strokeWidth={1.5} />
-                <span className="text-[10px] font-semibold tracking-wide leading-none">{t.chats}</span>
+              <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95">
+                <MessageSquare size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
+                <span className="text-[11px] font-semibold tracking-wide">{t.chats}</span>
               </a>
             </Link>
             <Link href="/wall">
-              <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95 gap-1 w-[60px]">
-                <Users size={22} strokeWidth={1.5} />
-                <span className="text-[10px] font-semibold tracking-wide leading-none">{t.wall}</span>
+              <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
+                <Users size={26} className="mb-1" strokeWidth={1.5} />
+                <span className="text-[11px] font-semibold tracking-wide">{t.wall}</span>
               </a>
             </Link>
           </nav>
         </>
+      )}
+
+      {showAddAccountModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#f5f5f7] dark:bg-[#161618] rounded-[24px] w-full max-w-sm p-6 shadow-2xl border border-black/5 dark:border-white/5">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-[18px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">
+                {isLoginMode ? t.loginAcc : t.newAcc}
+              </h3>
+              <button onClick={() => setShowAddAccountModal(false)} className="p-1 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] rounded-full transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex bg-[#e5e5ea] dark:bg-[#333336] rounded-[12px] p-1 mb-6">
+               <button type="button" onClick={() => setIsLoginMode(true)} className={`flex-1 py-2 text-[14px] font-medium rounded-[10px] transition-colors ${isLoginMode ? 'bg-white dark:bg-[#222224] shadow-sm text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{t.login}</button>
+               <button type="button" onClick={() => setIsLoginMode(false)} className={`flex-1 py-2 text-[14px] font-medium rounded-[10px] transition-colors ${!isLoginMode ? 'bg-white dark:bg-[#222224] shadow-sm text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{t.create}</button>
+            </div>
+
+            <form onSubmit={handleAddAccountSubmit} className="space-y-4">
+              <div className="bg-white dark:bg-[#222224] rounded-[16px] overflow-hidden shadow-sm border border-black/5 dark:border-white/5">
+                {!isLoginMode && (
+                  <input type="text" placeholder={t.namePlaceholder} value={newName} onChange={e => setNewName(e.target.value)} className="w-full bg-transparent border-b border-black/5 dark:border-white/5 px-4 py-3.5 text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] outline-none transition-colors" />
+                )}
+                <input type="text" placeholder={t.usernamePlaceholder} value={newUsername} onChange={e => setNewUsername(e.target.value)} className="w-full bg-transparent border-b border-black/5 dark:border-white/5 px-4 py-3.5 text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] outline-none transition-colors" />
+                <input type="password" placeholder={t.passwordPlaceholder} value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full bg-transparent px-4 py-3.5 text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] outline-none transition-colors" />
+              </div>
+              <button type="submit" disabled={isAddingAccount} className="w-full py-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] font-semibold rounded-[16px] transition-transform active:scale-95 mt-2 flex items-center justify-center h-12 shadow-sm">
+                {isAddingAccount ? <Loader2 size={18} className="animate-spin" /> : (isLoginMode ? t.login : t.continue)}
+              </button>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
