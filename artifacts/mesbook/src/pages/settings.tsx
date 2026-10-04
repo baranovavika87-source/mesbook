@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation } from 'wouter';
-import { ArrowLeft, Loader2, Camera, LogOut, User as UserIcon, Calendar, Link as LinkIcon, AtSign, Globe, Settings as SettingsIcon, ChevronRight, Check } from 'lucide-react';
+import { useLocation } from 'wouter';
+import { ArrowLeft, Loader2, Camera, LogOut, User as UserIcon, Calendar, Link as LinkIcon, AtSign, Globe, ChevronRight, Check } from 'lucide-react';
 
 const getUserId = () => {
   try {
@@ -14,8 +14,6 @@ const translations = {
     settings: "Настройки",
     account: "Аккаунт",
     accountDesc: "Имя пользователя, «О себе»",
-    chatSettings: "Настройки чатов",
-    chatSettingsDesc: "Обои, ночной режим, анимации",
     language: "Язык",
     logout: "Выйти из аккаунта",
     profile: "Профиль",
@@ -31,8 +29,6 @@ const translations = {
     settings: "Settings",
     account: "Account",
     accountDesc: "Username, Bio",
-    chatSettings: "Chat Settings",
-    chatSettingsDesc: "Wallpaper, dark mode, animations",
     language: "Language",
     logout: "Log Out",
     profile: "Profile",
@@ -155,9 +151,10 @@ export default function SettingsPage() {
 
   if (!user) return <div className="flex h-[100dvh] items-center justify-center bg-[#f5f5f7] dark:bg-[#161618]"><Loader2 size={32} className="animate-spin text-[#86868b]" /></div>;
 
+  // --- ЭКРАН РЕДАКТИРОВАНИЯ ПРОФИЛЯ ---
   if (view === 'profile') {
     return (
-      <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20">
+      <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right fade-in duration-300 ease-out">
         <header className="flex items-center justify-between px-4 pt-12 pb-4 bg-[#f5f5f7]/90 dark:bg-[#161618]/90 sticky top-0 z-10 backdrop-blur-xl border-b border-black/5 dark:border-white/5">
           <button onClick={() => setView('main')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 flex items-center gap-1">
             <ArrowLeft size={26} strokeWidth={2} /> 
@@ -212,8 +209,9 @@ export default function SettingsPage() {
     );
   }
 
+  // --- ГЛАВНЫЙ ЭКРАН НАСТРОЕК ---
   return (
-    <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20">
+    <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right fade-in duration-300 ease-out">
       
       <header className="flex items-center px-4 pt-12 pb-4 bg-white/80 dark:bg-[#222224]/80 sticky top-0 z-10 shadow-[0_1px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl border-b border-black/5 dark:border-white/5">
         <button onClick={() => setLocation('/')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 mr-4">
@@ -223,6 +221,8 @@ export default function SettingsPage() {
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 pt-6 pb-20">
+        
+        {/* Аватарка */}
         <div className="flex flex-col items-center pt-2 pb-8">
           <div className="w-[110px] h-[110px] rounded-full bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7] flex items-center justify-center text-[40px] font-medium mb-3 border border-black/5 dark:border-white/5 shadow-sm">
             {user.avatarUrl && user.avatarUrl.length > 5 ? (
@@ -235,25 +235,15 @@ export default function SettingsPage() {
           <p className="text-[15px] text-[#86868b] dark:text-[#98989d] mt-0.5">{user.username}</p>
         </div>
 
+        {/* Основные настройки - Строгий монохром */}
         <div className="mb-6">
-           <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden flex flex-col shadow-sm border border-black/5 dark:border-white/5">
+           <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden flex flex-col shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
                <button onClick={() => setView('profile')} className="flex items-center justify-between px-4 py-3.5 w-full text-left border-b border-black/5 dark:border-white/5 active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
                   <div className="flex items-center gap-4">
                     <div className="w-9 h-9 rounded-[10px] bg-[#f5f5f7] dark:bg-[#333336] flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7]"><UserIcon size={20}/></div>
                     <div className="flex flex-col">
                        <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight">{t.account}</span>
                        <span className="text-[13px] text-[#86868b] dark:text-[#98989d] leading-tight mt-0.5">{t.accountDesc}</span>
-                    </div>
-                  </div>
-                  <ChevronRight size={20} className="text-[#86868b] dark:text-[#98989d]" />
-               </button>
-
-               <button className="flex items-center justify-between px-4 py-3.5 w-full text-left border-b border-black/5 dark:border-white/5 active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="w-9 h-9 rounded-[10px] bg-[#f5f5f7] dark:bg-[#333336] flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7]"><SettingsIcon size={20}/></div>
-                    <div className="flex flex-col">
-                       <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight">{t.chatSettings}</span>
-                       <span className="text-[13px] text-[#86868b] dark:text-[#98989d] leading-tight mt-0.5">{t.chatSettingsDesc}</span>
                     </div>
                   </div>
                   <ChevronRight size={20} className="text-[#86868b] dark:text-[#98989d]" />
@@ -272,8 +262,9 @@ export default function SettingsPage() {
            </div>
         </div>
 
+        {/* Логаут - Монохром */}
         <div className="mb-8">
-           <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden shadow-sm border border-black/5 dark:border-white/5">
+           <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
                <button onClick={handleLogout} className="flex items-center justify-center w-full px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[16px] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
                   {t.logout}
                </button>
@@ -281,6 +272,7 @@ export default function SettingsPage() {
         </div>
       </main>
 
+      {/* Модалка выбора языка */}
       {showLangModal && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/20 dark:bg-black/50 backdrop-blur-sm animate-in fade-in" onClick={() => setShowLangModal(false)}>
            <div className="w-full max-w-sm bg-[#f5f5f7] dark:bg-[#161618] rounded-t-[24px] sm:rounded-[24px] p-6 pb-10 sm:pb-6 animate-in slide-in-from-bottom" onClick={e => e.stopPropagation()}>
