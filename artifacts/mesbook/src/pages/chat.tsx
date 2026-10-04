@@ -196,7 +196,6 @@ export default function ChatPage() {
   const savedName = typeof window !== 'undefined' ? sessionStorage.getItem('chat_name_' + chatId) : null;
   const displayName = isSavedChat ? t.saved : (chatInfo?.participant?.displayName || chatInfo?.name || savedName || t.companion);
   
-  // ИСПРАВЛЕНИЕ: Четкое разделение канала и группы
   const isChannel = chatInfo?.participant?.isChannel;
   const isGroup = chatInfo?.participant?.isGroup && !isChannel;
 
@@ -304,7 +303,6 @@ export default function ChatPage() {
     const finalContent = replyingTo ? `> ${replyingTo.content.replace(/^> .*\n\n/, '')}\n\n${tempContent}` : tempContent;
     setContent(''); setReplyingTo(null);
     
-    // ИСПРАВЛЕНИЕ: 1 Галочка при отправке (read: false)
     const tempMsg = { id: Date.now(), content: finalContent, isSending: true, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
     if (isSavedChat) {
       setMessages((prev: any) => { const u = [...prev, { ...tempMsg, isSending: false }]; localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(u)); return u; });
@@ -364,6 +362,7 @@ export default function ChatPage() {
     finally { setIsCommentUploading(false); if (commentFileInputRef.current) commentFileInputRef.current.value = ''; }
   };
 
+  // ИСПРАВЛЕНИЕ: Классический запрос реакций, как ты и просил
   const toggleReaction = async (msgId: number, reaction: string, isComment = false) => {
     try {
       const targetChatId = isComment && activeThread ? (activeThread.chatId || chatId) : chatId;
@@ -398,6 +397,7 @@ export default function ChatPage() {
     setContextMenu({ id: item.id, x: clientX, y: clientY, type, item });
   };
 
+  // ИСПРАВЛЕНИЕ: Старая надежная физика фото
   const handleTouchStartPhoto = (e: React.TouchEvent | React.MouseEvent, url: string) => {
     e.stopPropagation();
     photoOpenedRef.current = false;
@@ -406,15 +406,14 @@ export default function ChatPage() {
       if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
       setFullScreenImage(url);
       setContextMenu(null);
-    }, 500); 
+    }, 400); 
   };
-
+  
   const clearPhotoTimer = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
 
   const handlePhotoClick = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'message' | 'comment') => {
     e.stopPropagation();
     e.preventDefault();
-    clearPhotoTimer();
     if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
     openGlobalMenu(e, item, type);
   };
@@ -474,32 +473,22 @@ export default function ChatPage() {
     setIsSavingChat(false);
   };
 
-  // ЖЕЛЕЗОБЕТОННЫЙ ПАРСЕР
-  const parseContent = (rawText: any) => {
-    if (!rawText || typeof rawText !== 'string') return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
-    try {
-      const mediaUrls: string[] = [];
-      const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
-      let match; let text = rawText;
-      while ((match = mediaRegex.exec(text)) !== null) {
-        if (match[1]) mediaUrls.push(match[1]);
-      }
-      text = text.replace(mediaRegex, '').trim();
-      let quotedText = null;
-      if (text.startsWith('> ')) {
-        const parts = text.split('\n\n');
-        if (parts.length > 0) {
-          quotedText = parts[0].replace('> ', '');
-          text = parts.slice(1).join('\n\n');
-        }
-      }
-      const hasMedia = mediaUrls.length > 0;
-      const hasText = !!text || !!quotedText;
-      const isVideo = hasMedia && !!mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
-      return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
-    } catch (e) {
-      return { text: String(rawText), quotedText: null, mediaUrls: [], hasMedia: false, hasText: true, isVideo: false };
+  const parseContent = (rawText: string) => {
+    const mediaUrls: string[] = [];
+    const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
+    let match; let text = rawText;
+    while ((match = mediaRegex.exec(text)) !== null) mediaUrls.push(match[1]);
+    text = text.replace(mediaRegex, '').trim();
+    let quotedText = null;
+    if (text.startsWith('> ')) {
+      const parts = text.split('\n\n');
+      quotedText = parts[0].replace('> ', '');
+      text = parts.slice(1).join('\n\n');
     }
+    const hasMedia = mediaUrls.length > 0;
+    const hasText = !!text || !!quotedText;
+    const isVideo = hasMedia && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
+    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
   };
 
   const lastSeen = chatInfo?.participant?.lastSeen;
@@ -623,7 +612,7 @@ export default function ChatPage() {
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
               const mReactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
 
-              // ИСПРАВЛЕНИЕ: ДИЗАЙН КАНАЛОВ (БЕЗ ПУЗЫРЕЙ)
+              // КАНАЛЫ: ИСПРАВЛЕНЫ РЕАКЦИИ (БЕЗ АВАТАРОК)
               if (isChannel) {
                 return (
                   <div key={msg.id} className="w-full relative mb-5 z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out">
@@ -672,21 +661,15 @@ export default function ChatPage() {
                         </div>
                       )}
 
+                      {/* ИСПРАВЛЕНИЕ: Только цифры и эмодзи в каналах (без аватарок) */}
                       {mReactionsKeys.length > 0 && (
                         <div className="px-4 pb-3 flex flex-wrap gap-1.5 pt-1.5">
                            {mReactionsKeys.map(key => {
                              const rData = msg.reactions[key];
                              const count = typeof rData === 'number' ? rData : (rData?.count || 1);
-                             const users = Array.isArray(rData) ? rData : (rData?.users || []);
-                             const firstUser = users.length > 0 ? users[0] : null;
                              
                              return (
-                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black/5 dark:bg-white/10 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
-                                 {firstUser ? (
-                                   <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
-                                     {firstUser.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser.name?.charAt(0).toUpperCase() || 'U'}
-                                   </div>
-                                 ) : <span className="pl-1"></span>}
+                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                  <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
                                  <span className={`text-[13px] font-bold leading-none flex items-center justify-center mt-[1px] ${msg.myReaction === key ? 'text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{count}</span>
                                </button>
@@ -709,10 +692,9 @@ export default function ChatPage() {
                 );
               }
 
-              // ИСПРАВЛЕНИЕ: ГРУППЫ И ЛИЧНЫЕ ЧАТЫ (ПУЗЫРИ)
+              // ГРУППЫ И ЛИЧНЫЕ ЧАТЫ (ПУЗЫРИ)
               return (
                 <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
-                  {/* ИСПРАВЛЕНИЕ: ДАТА ВНЕ КОНТЕЙНЕРА СООБЩЕНИЯ */}
                   {showDate && (
                     <div className="flex justify-center w-full my-4 relative z-0">
                       <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">{currentDateStr}</span>
@@ -721,7 +703,6 @@ export default function ChatPage() {
                   
                   <div className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} relative`}>
                     
-                    {/* Имя отправителя в группах */}
                     {isGroup && !isMe && msg.senderName && (
                       <span className="text-[13px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] ml-2 mb-1">
                         {msg.senderName}
@@ -754,7 +735,6 @@ export default function ChatPage() {
                           {!hasText && (
                             <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
                                {timeStr}
-                               {/* ИСПРАВЛЕНИЕ: ТОЛЬКО 1 ГАЛОЧКА */}
                                {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{(msg.read === true || msg.read === 1) && <Check size={11} strokeWidth={2.5}/>}</div>}
                             </div>
                           )}
@@ -771,7 +751,6 @@ export default function ChatPage() {
                              <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
                                {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                {timeStr}
-                               {/* ИСПРАВЛЕНИЕ: ТОЛЬКО 1 ГАЛОЧКА */}
                                {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{(msg.read === true || msg.read === 1) && <Check size={12} strokeWidth={2.5}/>}</div>}
                              </span>
                              <div className="clear-both"></div>
@@ -789,7 +768,7 @@ export default function ChatPage() {
                            const firstUser = users.length > 0 ? users[0] : null;
                            
                            return (
-                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2.5 rounded-full border transition-transform active:scale-95 ${msg.myReaction === key ? 'bg-black/5 dark:bg-white/10 border-black/20 dark:border-white/20 shadow-sm z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2.5 rounded-full border transition-transform active:scale-95 ${msg.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                {firstUser ? (
                                  <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                    {firstUser.avatar ? <img src={firstUser.avatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : firstUser.name?.charAt(0).toUpperCase() || 'U'}
@@ -843,7 +822,7 @@ export default function ChatPage() {
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
 
                  return (
-                   <div key={c.id} className="relative flex flex-col mb-2 z-10">
+                   <div key={c.id} className={`relative flex flex-col mb-2 z-10`}>
                      <div 
                         className="flex gap-3 items-start cursor-pointer" 
                         onClick={(e) => openGlobalMenu(e, c, 'comment')}
@@ -872,6 +851,7 @@ export default function ChatPage() {
                        </div>
                      </div>
 
+                     {/* ИСПРАВЛЕНИЕ: Реакции в комментариях */}
                      {cReactionsKeys.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1 justify-start pl-12">
                           {cReactionsKeys.map(key => {
@@ -881,12 +861,14 @@ export default function ChatPage() {
                              const firstUser = users.length > 0 ? users[0] : null;
 
                              return (
-                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-black/5 dark:bg-white/10 border-black/20 dark:border-white/20 shadow-sm z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                  {firstUser ? (
                                    <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                      {firstUser.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser.name?.charAt(0).toUpperCase() || 'U'}
                                    </div>
-                                 ) : <span className="pl-1"></span>}
+                                 ) : (
+                                   <span className="pl-1"></span>
+                                 )}
                                  <span className="text-[13px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
                                  {count > 1 && <span className={`text-[11px] font-bold leading-none flex items-center justify-center mt-[1px] pl-1 ${c.myReaction === key ? 'text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{count}</span>}
                                </button>
