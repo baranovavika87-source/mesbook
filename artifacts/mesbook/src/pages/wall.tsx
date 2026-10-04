@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Send, ArrowLeft, Download, Copy, Reply, ChevronRight, Paperclip } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Send, ArrowLeft, Download, Copy, Reply, ChevronRight, Camera, Paperclip } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -58,6 +58,8 @@ export default function WallPage() {
   const [isLoading, setIsLoading] = useState(true);
   const currentUserId = getUserId();
   
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('mesbook_user') || '{}'); } catch(e) { return {}; } })();
+
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
 
@@ -134,19 +136,20 @@ export default function WallPage() {
   }, [threadComments]);
 
   // ЖЕЛЕЗОБЕТОННЫЙ ПАРСЕР ТЕКСТА
-  const parseContent = (rawText: string) => {
-    if (!rawText) return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
+  const parseContent = (rawText: any) => {
+    if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
+    
     const mediaUrls: string[] = [];
     const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
     let match; 
-    let text = String(rawText);
+    let text = rawText;
     
-    while ((match = mediaRegex.exec(text)) !== null) {
-      if (match && match.length > 1) {
-        mediaUrls.push(match[1]);
+    try {
+      while ((match = mediaRegex.exec(text)) !== null) {
+        if (match && match[1]) mediaUrls.push(match[1]);
       }
-    }
-    text = text.replace(mediaRegex, '').trim();
+      text = text.replace(mediaRegex, '').trim();
+    } catch (e) {}
     
     let quotedText = null;
     if (text.startsWith('> ')) {
@@ -156,6 +159,7 @@ export default function WallPage() {
         text = parts.slice(1).join('\n\n');
       }
     }
+
     const hasMedia = mediaUrls.length > 0;
     const hasText = !!text || !!quotedText;
     const isVideo = hasMedia && !!mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
@@ -196,50 +200,35 @@ export default function WallPage() {
     } catch (e) {}
   };
 
+  // ОПТИМИСТИЧНЫЙ UI ДЛЯ МГНОВЕННЫХ РЕАКЦИЙ
   const toggleReaction = async (id: number, reaction: string, isComment = false) => {
     setContextMenu(null);
     
-    // Мгновенное оптимистичное обновление для плавности
+    const updateReactions = (item: any) => {
+      const newR = { ...(item.reactions || {}) };
+      if (item.myReaction === reaction) {
+        if (newR[reaction]) newR[reaction].count = Math.max(0, newR[reaction].count - 1);
+        if (newR[reaction]?.count === 0) delete newR[reaction];
+        return { ...item, reactions: newR, myReaction: null };
+      } else {
+        if (item.myReaction && newR[item.myReaction]) {
+          newR[item.myReaction].count = Math.max(0, newR[item.myReaction].count - 1);
+          if (newR[item.myReaction].count === 0) delete newR[item.myReaction];
+        }
+        if (!newR[reaction]) newR[reaction] = { count: 0, users: [] };
+        newR[reaction].count++;
+        if (currentUser) {
+          const userObj = { id: currentUserId, name: currentUser.displayName, avatar: currentUser.avatarUrl };
+          newR[reaction].users = [userObj, ...newR[reaction].users.filter((u:any) => u.id !== currentUserId)];
+        }
+        return { ...item, reactions: newR, myReaction: reaction };
+      }
+    };
+
     if (isComment) {
-      setThreadComments(prev => prev.map(c => {
-        if (c.id === id) {
-           const newR = { ...(c.reactions || {}) };
-           if (c.myReaction === reaction) {
-              if (newR[reaction]) newR[reaction].count = Math.max(0, newR[reaction].count - 1);
-              if (newR[reaction]?.count === 0) delete newR[reaction];
-              return { ...c, reactions: newR, myReaction: null };
-           } else {
-              if (c.myReaction && newR[c.myReaction]) {
-                 newR[c.myReaction].count = Math.max(0, newR[c.myReaction].count - 1);
-                 if (newR[c.myReaction].count === 0) delete newR[c.myReaction];
-              }
-              if (!newR[reaction]) newR[reaction] = { count: 0, users: [] };
-              newR[reaction].count++;
-              return { ...c, reactions: newR, myReaction: reaction };
-           }
-        }
-        return c;
-      }));
+      setThreadComments(prev => prev.map(c => c.id === id ? updateReactions(c) : c));
     } else {
-      setPosts(prev => prev.map(p => {
-        if (p.id === id) {
-           const newR = { ...(p.reactions || {}) };
-           if (p.myReaction === reaction) {
-              if (newR[reaction]) newR[reaction].count = Math.max(0, newR[reaction].count - 1);
-              if (newR[reaction]?.count === 0) delete newR[reaction];
-              return { ...p, reactions: newR, myReaction: null };
-           } else {
-              if (p.myReaction && newR[p.myReaction]) {
-                 newR[p.myReaction].count = Math.max(0, newR[p.myReaction].count - 1);
-                 if (newR[p.myReaction].count === 0) delete newR[p.myReaction];
-              }
-              if (!newR[reaction]) newR[reaction] = { count: 0, users: [] };
-              newR[reaction].count++;
-              return { ...p, reactions: newR, myReaction: reaction };
-           }
-        }
-        return p;
-      }));
+      setPosts(prev => prev.map(p => p.id === id ? updateReactions(p) : p));
     }
 
     try {
@@ -322,7 +311,10 @@ export default function WallPage() {
   const openGlobalMenu = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
     e.stopPropagation();
     e.preventDefault();
-    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
+    if (photoOpenedRef.current) { 
+      photoOpenedRef.current = false; 
+      return; 
+    }
     
     let clientX, clientY;
     if ('touches' in e && e.touches.length > 0) {
@@ -345,7 +337,7 @@ export default function WallPage() {
       if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
       setFullScreenImage(url); 
       setContextMenu(null);
-    }, 400); 
+    }, 500); 
   };
 
   const clearPhotoTimer = () => { 
@@ -355,6 +347,7 @@ export default function WallPage() {
   const handlePhotoClick = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
     e.stopPropagation();
     e.preventDefault();
+    clearPhotoTimer();
     if (photoOpenedRef.current) { 
       photoOpenedRef.current = false; 
       return; 
@@ -451,13 +444,16 @@ export default function WallPage() {
                            isVideo 
                              ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" onClick={(e) => e.stopPropagation()} />
                              : <img 
-                                  key={idx} src={url} loading="lazy" decoding="async" 
-                                  className="w-full h-auto max-h-[500px] object-cover" 
+                                  key={idx} 
+                                  src={url} 
+                                  loading="lazy" 
+                                  decoding="async" 
+                                  className="w-full h-auto max-h-[500px] object-cover pointer-events-none" 
                                   style={{ WebkitTouchCallout: 'none', userSelect: 'none' }} 
                                   onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
                                   onMouseDown={(e) => handleTouchStartPhoto(e, url)} 
                                   onTouchEnd={clearPhotoTimer} 
-                                  onMouseUp={clearPhotoTimer} 
+                                  onMouseUp={clearPhotoTimer}
                                   onClick={(e) => handlePhotoClick(e, post, 'post')}
                                   onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
                                   onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
@@ -646,18 +642,17 @@ export default function WallPage() {
          let safeX = contextMenu.x; 
          let safeY = contextMenu.y;
          
-         // Умная логика отступов, чтобы ничего не обрезалось
          if (safeX + menuWidth > window.innerWidth) safeX = window.innerWidth - menuWidth - 10;
          if (safeY + menuHeight > window.innerHeight) safeY = safeY - menuHeight;
          if (safeY < 0) safeY = 20;
          
          const isMe = String(contextMenu.item.senderId) === String(currentUserId);
-         const { hasText, hasMedia } = parseContent(contextMenu.item.content);
+         const { hasText } = parseContent(contextMenu.item.content);
          
          const showReply = contextMenu.type === 'comment';
          const showCopy = hasText;
-         const showEdit = isMe && !hasMedia && contextMenu.type === 'post';
-         const showDelete = (isMe && !hasMedia && contextMenu.type === 'post') || (isMe && contextMenu.type === 'comment');
+         const showEdit = isMe && contextMenu.type === 'post';
+         const showDelete = isMe;
 
          if (!showReply && !showCopy && !showEdit && !showDelete) return null;
 
