@@ -79,7 +79,6 @@ export default function WallPage() {
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
   const photoOpenedRef = useRef(false);
 
-  // Единое глобальное меню с координатами
   const [contextMenu, setContextMenu] = useState<{ id: number, x: number, y: number, type: 'post' | 'comment', item: any } | null>(null);
 
   const activeThreadRef = useRef<any>(null);
@@ -135,30 +134,36 @@ export default function WallPage() {
     }
   }, [threadComments]);
 
-  // ЖЕЛЕЗОБЕТОННЫЙ ПАРСЕР ТЕКСТА
+  // СВЕРХБЕЗОПАСНЫЙ ПАРСЕР КОНТЕНТА (ЗАЩИТА ОТ КРАША СТЕНЫ)
   const parseContent = (rawText: any) => {
-    if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
+    if (!rawText || typeof rawText !== 'string') {
+      return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false };
+    }
     
     const mediaUrls: string[] = [];
     const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
-    let match; 
+    let match;
     let text = rawText;
     
     try {
       while ((match = mediaRegex.exec(text)) !== null) {
-        if (match && match[1]) mediaUrls.push(match[1]);
+        if (match && match[1]) {
+          mediaUrls.push(match[1]);
+        }
       }
       text = text.replace(mediaRegex, '').trim();
     } catch (e) {}
     
     let quotedText = null;
-    if (text.startsWith('> ')) {
-      const parts = text.split('\n\n');
-      if (parts.length > 0) {
-        quotedText = parts[0].replace('> ', '');
-        text = parts.slice(1).join('\n\n');
+    try {
+      if (text.startsWith('> ')) {
+        const parts = text.split('\n\n');
+        if (parts.length > 0) {
+          quotedText = parts[0].replace('> ', '');
+          text = parts.slice(1).join('\n\n');
+        }
       }
-    }
+    } catch (e) {}
 
     const hasMedia = mediaUrls.length > 0;
     const hasText = !!text || !!quotedText;
@@ -200,7 +205,6 @@ export default function WallPage() {
     } catch (e) {}
   };
 
-  // ОПТИМИСТИЧНЫЙ UI ДЛЯ МГНОВЕННЫХ РЕАКЦИЙ
   const toggleReaction = async (id: number, reaction: string, isComment = false) => {
     setContextMenu(null);
     
@@ -311,10 +315,7 @@ export default function WallPage() {
   const openGlobalMenu = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
     e.stopPropagation();
     e.preventDefault();
-    if (photoOpenedRef.current) { 
-      photoOpenedRef.current = false; 
-      return; 
-    }
+    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
     
     let clientX, clientY;
     if ('touches' in e && e.touches.length > 0) {
@@ -337,7 +338,7 @@ export default function WallPage() {
       if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
       setFullScreenImage(url); 
       setContextMenu(null);
-    }, 500); 
+    }, 400); 
   };
 
   const clearPhotoTimer = () => { 
@@ -348,10 +349,7 @@ export default function WallPage() {
     e.stopPropagation();
     e.preventDefault();
     clearPhotoTimer();
-    if (photoOpenedRef.current) { 
-      photoOpenedRef.current = false; 
-      return; 
-    }
+    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
     openGlobalMenu(e, item, type);
   }
 
@@ -453,9 +451,7 @@ export default function WallPage() {
                                   onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
                                   onMouseDown={(e) => handleTouchStartPhoto(e, url)} 
                                   onTouchEnd={clearPhotoTimer} 
-                                  onMouseUp={clearPhotoTimer}
-                                  onClick={(e) => handlePhotoClick(e, post, 'post')}
-                                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
+                                  onMouseUp={clearPhotoTimer} 
                                   onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
                                />
                         ))}
@@ -585,7 +581,7 @@ export default function WallPage() {
                              const firstUser = users.length > 0 ? users[0] : null;
 
                              return (
-                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-black/5 dark:bg-white/10 border-black/20 dark:border-white/20 shadow-sm z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                  {firstUser ? (
                                    <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                      {firstUser.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser.name?.charAt(0).toUpperCase() || 'U'}
@@ -647,12 +643,12 @@ export default function WallPage() {
          if (safeY < 0) safeY = 20;
          
          const isMe = String(contextMenu.item.senderId) === String(currentUserId);
-         const { hasText } = parseContent(contextMenu.item.content);
+         const { hasText, hasMedia } = parseContent(contextMenu.item.content);
          
          const showReply = contextMenu.type === 'comment';
          const showCopy = hasText;
-         const showEdit = isMe && contextMenu.type === 'post';
-         const showDelete = isMe;
+         const showEdit = isMe && !hasMedia && contextMenu.type === 'post';
+         const showDelete = (isMe && !hasMedia && contextMenu.type === 'post') || (isMe && contextMenu.type === 'comment');
 
          if (!showReply && !showCopy && !showEdit && !showDelete) return null;
 
