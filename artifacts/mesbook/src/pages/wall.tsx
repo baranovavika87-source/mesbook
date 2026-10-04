@@ -14,7 +14,6 @@ const getUserId = () => {
 
 const FAST_REACTIONS = ['❤️', '👍', '🔥', '😂', '😢'];
 
-// ИСПРАВЛЕНИЕ ФАТАЛЬНОЙ ОШИБКИ: Вернул все словари, из-за которых падала стена
 const translations = {
   ru: {
     wall: "Стена",
@@ -52,7 +51,6 @@ const translations = {
   }
 };
 
-// ИСПРАВЛЕНИЕ: Железобетонная защита от падений при склонении слов
 function declOfNum(n: number, text_forms: string[], lang: 'ru' | 'en') {
   if (!text_forms || text_forms.length < 3) return ''; 
   n = Math.abs(n || 0) % 100;
@@ -215,36 +213,8 @@ export default function WallPage() {
     } catch (e) {}
   };
 
+  // Механика реакций как в chat.tsx
   const toggleReaction = async (id: number, reaction: string, isComment = false) => {
-    setContextMenu(null);
-    
-    const updateReactions = (item: any) => {
-      const newR = { ...(item.reactions || {}) };
-      if (item.myReaction === reaction) {
-        if (newR[reaction]) newR[reaction].count = Math.max(0, newR[reaction].count - 1);
-        if (newR[reaction]?.count === 0) delete newR[reaction];
-        return { ...item, reactions: newR, myReaction: null };
-      } else {
-        if (item.myReaction && newR[item.myReaction]) {
-          newR[item.myReaction].count = Math.max(0, newR[item.myReaction].count - 1);
-          if (newR[item.myReaction].count === 0) delete newR[item.myReaction];
-        }
-        if (!newR[reaction]) newR[reaction] = { count: 0, users: [] };
-        newR[reaction].count++;
-        if (currentUser) {
-          const userObj = { id: currentUserId, name: currentUser.displayName, avatar: currentUser.avatarUrl };
-          newR[reaction].users = [userObj, ...newR[reaction].users.filter((u:any) => u.id !== currentUserId)];
-        }
-        return { ...item, reactions: newR, myReaction: reaction };
-      }
-    };
-
-    if (isComment) {
-      setThreadComments(prev => prev.map(c => c.id === id ? updateReactions(c) : c));
-    } else {
-      setPosts(prev => prev.map(p => p.id === id ? updateReactions(p) : p));
-    }
-
     try {
       const targetChatId = isComment && activeThread ? activeThread.chatId : posts.find(p => p.id === id)?.chatId;
       if (!targetChatId) return;
@@ -254,7 +224,14 @@ export default function WallPage() {
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
         body: JSON.stringify({ reaction }) 
       });
+      
+      if (isComment && activeThread) {
+        loadComments(activeThread.chatId, activeThread.id);
+      } else {
+        loadFeed(true);
+      }
     } catch (e) {}
+    setContextMenu(null);
   };
 
   const handleSendComment = async (e: React.FormEvent) => {
@@ -325,6 +302,7 @@ export default function WallPage() {
   const openGlobalMenu = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
     e.stopPropagation();
     e.preventDefault();
+    
     if (photoOpenedRef.current) { 
       photoOpenedRef.current = false; 
       return; 
@@ -342,6 +320,7 @@ export default function WallPage() {
     setContextMenu({ id: item.id, x: clientX, y: clientY, type, item });
   };
 
+  // Механика долгого нажатия: без pointer-events-none, с вибрацией
   const handleTouchStartPhoto = (e: React.TouchEvent | React.MouseEvent, url: string) => {
     e.stopPropagation();
     photoOpenedRef.current = false;
@@ -357,19 +336,6 @@ export default function WallPage() {
   const clearPhotoTimer = () => { 
     if (pressTimer.current) clearTimeout(pressTimer.current); 
   };
-
-  const handlePhotoClick = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
-    e.stopPropagation();
-    e.preventDefault();
-    clearPhotoTimer();
-    if (photoOpenedRef.current) { 
-      photoOpenedRef.current = false; 
-      return; 
-    }
-    openGlobalMenu(e, item, type);
-  }
-
-  const activeThreadContent = activeThread ? parseContent(activeThread.content) : null;
 
   return (
     <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in fade-in duration-300 ease-out" onClick={() => setContextMenu(null)}>
@@ -462,13 +428,19 @@ export default function WallPage() {
                                   src={url} 
                                   loading="lazy" 
                                   decoding="async" 
-                                  className="w-full h-auto max-h-[500px] object-cover pointer-events-none" 
+                                  className={`w-full h-auto max-h-[500px] object-cover cursor-pointer ${hasText ? 'rounded-t-[24px]' : 'rounded-[24px]'}`}
                                   style={{ WebkitTouchCallout: 'none', userSelect: 'none' }} 
                                   onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
                                   onMouseDown={(e) => handleTouchStartPhoto(e, url)} 
                                   onTouchEnd={clearPhotoTimer} 
-                                  onMouseUp={clearPhotoTimer} 
-                                  onClick={(e) => handlePhotoClick(e, post, 'post')}
+                                  onTouchMove={clearPhotoTimer}
+                                  onMouseUp={clearPhotoTimer}
+                                  onMouseLeave={clearPhotoTimer}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
+                                    openGlobalMenu(e, post, 'post');
+                                  }}
                                   onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
                                   onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
                                />
@@ -487,6 +459,7 @@ export default function WallPage() {
                       </div>
                     )}
 
+                    {/* ИСПРАВЛЕНИЕ: Только цифры на стене (без аватарок) */}
                     {pReactionsKeys.length > 0 && (
                       <div className="px-4 pb-3 flex flex-wrap gap-1.5 pt-1.5">
                          {pReactionsKeys.map(key => {
@@ -549,7 +522,6 @@ export default function WallPage() {
                <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
             ) : (
                threadComments.map((c) => {
-                 const isMe = String(c.senderId) === String(currentUserId);
                  const { text, quotedText, hasMedia, mediaUrls, hasText } = parseContent(c.content);
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
 
@@ -573,13 +545,19 @@ export default function WallPage() {
                          {hasMedia && (
                              <img 
                                src={mediaUrls[0]} 
-                               className={`max-h-[200px] w-auto object-cover pointer-events-none ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
+                               className={`max-h-[200px] w-auto object-cover cursor-pointer ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
                                style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
                                onTouchStart={(e) => handleTouchStartPhoto(e, mediaUrls[0])} 
                                onMouseDown={(e) => handleTouchStartPhoto(e, mediaUrls[0])}
                                onTouchEnd={clearPhotoTimer} 
+                               onTouchMove={clearPhotoTimer}
                                onMouseUp={clearPhotoTimer}
-                               onClick={(e) => handlePhotoClick(e, c, 'comment')}
+                               onMouseLeave={clearPhotoTimer}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
+                                 openGlobalMenu(e, c, 'comment');
+                               }}
                                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, c, 'comment'); }}
                              />
                          )}
@@ -662,13 +640,13 @@ export default function WallPage() {
          if (safeY < 0) safeY = 20;
          
          const isMe = String(contextMenu.item.senderId) === String(currentUserId);
-         const { hasText, hasMedia } = parseContent(contextMenu.item.content);
+         const { hasText } = parseContent(contextMenu.item.content);
          
          const showReply = contextMenu.type === 'comment';
          const showCopy = hasText;
-         const showEdit = isMe && !hasMedia && contextMenu.type === 'post';
+         const showEdit = isMe && contextMenu.type === 'post';
          
-         // ИСПРАВЛЕНИЕ УДАЛЕНИЯ: На стене можно удалить ВСЁ своё
+         // ИСПРАВЛЕНИЕ: Удалять можно свои посты ВСЕГДА
          const showDelete = isMe;
 
          if (!showReply && !showCopy && !showEdit && !showDelete) return null;
