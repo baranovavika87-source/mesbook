@@ -72,6 +72,7 @@ export default function WallPage() {
   
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
+  const commentsScrollRef = useRef<HTMLDivElement>(null);
   
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
   const photoOpenedRef = useRef(false);
@@ -126,15 +127,24 @@ export default function WallPage() {
     }
   }, [activeThread]);
 
-  // ЗАЩИТА ОТ ПАДЕНИЯ: Обработка undefined текста
+  useEffect(() => {
+    if (commentsScrollRef.current && threadComments.length > 0) {
+      commentsScrollRef.current.scrollTop = commentsScrollRef.current.scrollHeight;
+    }
+  }, [threadComments]);
+
+  // ЖЕЛЕЗОБЕТОННЫЙ ПАРСЕР ТЕКСТА
   const parseContent = (rawText: string) => {
     if (!rawText) return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
     const mediaUrls: string[] = [];
     const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
-    let match; let text = rawText;
+    let match; 
+    let text = String(rawText);
     
     while ((match = mediaRegex.exec(text)) !== null) {
-      if (match && match[1]) mediaUrls.push(match[1]);
+      if (match && match.length > 1) {
+        mediaUrls.push(match[1]);
+      }
     }
     text = text.replace(mediaRegex, '').trim();
     
@@ -146,10 +156,9 @@ export default function WallPage() {
         text = parts.slice(1).join('\n\n');
       }
     }
-
     const hasMedia = mediaUrls.length > 0;
     const hasText = !!text || !!quotedText;
-    const isVideo = hasMedia && mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
+    const isVideo = hasMedia && !!mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
     
     return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
   };
@@ -188,6 +197,51 @@ export default function WallPage() {
   };
 
   const toggleReaction = async (id: number, reaction: string, isComment = false) => {
+    setContextMenu(null);
+    
+    // Мгновенное оптимистичное обновление для плавности
+    if (isComment) {
+      setThreadComments(prev => prev.map(c => {
+        if (c.id === id) {
+           const newR = { ...(c.reactions || {}) };
+           if (c.myReaction === reaction) {
+              if (newR[reaction]) newR[reaction].count = Math.max(0, newR[reaction].count - 1);
+              if (newR[reaction]?.count === 0) delete newR[reaction];
+              return { ...c, reactions: newR, myReaction: null };
+           } else {
+              if (c.myReaction && newR[c.myReaction]) {
+                 newR[c.myReaction].count = Math.max(0, newR[c.myReaction].count - 1);
+                 if (newR[c.myReaction].count === 0) delete newR[c.myReaction];
+              }
+              if (!newR[reaction]) newR[reaction] = { count: 0, users: [] };
+              newR[reaction].count++;
+              return { ...c, reactions: newR, myReaction: reaction };
+           }
+        }
+        return c;
+      }));
+    } else {
+      setPosts(prev => prev.map(p => {
+        if (p.id === id) {
+           const newR = { ...(p.reactions || {}) };
+           if (p.myReaction === reaction) {
+              if (newR[reaction]) newR[reaction].count = Math.max(0, newR[reaction].count - 1);
+              if (newR[reaction]?.count === 0) delete newR[reaction];
+              return { ...p, reactions: newR, myReaction: null };
+           } else {
+              if (p.myReaction && newR[p.myReaction]) {
+                 newR[p.myReaction].count = Math.max(0, newR[p.myReaction].count - 1);
+                 if (newR[p.myReaction].count === 0) delete newR[p.myReaction];
+              }
+              if (!newR[reaction]) newR[reaction] = { count: 0, users: [] };
+              newR[reaction].count++;
+              return { ...p, reactions: newR, myReaction: reaction };
+           }
+        }
+        return p;
+      }));
+    }
+
     try {
       const targetChatId = isComment && activeThread ? activeThread.chatId : posts.find(p => p.id === id)?.chatId;
       if (!targetChatId) return;
@@ -197,11 +251,7 @@ export default function WallPage() {
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
         body: JSON.stringify({ reaction }) 
       });
-      
-      if (isComment) loadComments(activeThread.chatId, activeThread.id); 
-      else loadFeed(true);
     } catch (e) {}
-    setContextMenu(null);
   };
 
   const handleSendComment = async (e: React.FormEvent) => {
@@ -269,15 +319,10 @@ export default function WallPage() {
     }
   };
 
-  // Координаты для умного меню
   const openGlobalMenu = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
     e.stopPropagation();
     e.preventDefault();
-    
-    if (photoOpenedRef.current) { 
-      photoOpenedRef.current = false; 
-      return; 
-    }
+    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
     
     let clientX, clientY;
     if ('touches' in e && e.touches.length > 0) {
@@ -291,7 +336,6 @@ export default function WallPage() {
     setContextMenu({ id: item.id, x: clientX, y: clientY, type, item });
   };
 
-  // ИСПРАВЛЕНИЕ: Стабильное зажатие без прерываний
   const handleTouchStartPhoto = (e: React.TouchEvent | React.MouseEvent, url: string) => {
     e.stopPropagation();
     photoOpenedRef.current = false;
@@ -307,6 +351,16 @@ export default function WallPage() {
   const clearPhotoTimer = () => { 
     if (pressTimer.current) clearTimeout(pressTimer.current); 
   };
+
+  const handlePhotoClick = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (photoOpenedRef.current) { 
+      photoOpenedRef.current = false; 
+      return; 
+    }
+    openGlobalMenu(e, item, type);
+  }
 
   const activeThreadContent = activeThread ? parseContent(activeThread.content) : null;
 
@@ -372,8 +426,8 @@ export default function WallPage() {
           ) : (
             posts.map((post) => {
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
-              const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
               const pReactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
+              const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
               return (
                 <div key={post.id} className="w-full relative mb-5 z-10 animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out">
@@ -397,16 +451,15 @@ export default function WallPage() {
                            isVideo 
                              ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" onClick={(e) => e.stopPropagation()} />
                              : <img 
-                                  key={idx} 
-                                  src={url} 
-                                  loading="lazy" 
-                                  decoding="async" 
-                                  className="w-full h-auto max-h-[500px] object-cover pointer-events-none" 
+                                  key={idx} src={url} loading="lazy" decoding="async" 
+                                  className="w-full h-auto max-h-[500px] object-cover" 
                                   style={{ WebkitTouchCallout: 'none', userSelect: 'none' }} 
                                   onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
                                   onMouseDown={(e) => handleTouchStartPhoto(e, url)} 
                                   onTouchEnd={clearPhotoTimer} 
                                   onMouseUp={clearPhotoTimer} 
+                                  onClick={(e) => handlePhotoClick(e, post, 'post')}
+                                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
                                   onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
                                />
                         ))}
@@ -431,7 +484,7 @@ export default function WallPage() {
                            const count = typeof rData === 'number' ? rData : (rData?.count || 1);
                            
                            return (
-                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-black/5 dark:bg-white/10 border-black/20 dark:border-white/20 shadow-sm z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
                                <span className={`text-[13px] font-bold leading-none flex items-center justify-center mt-[1px] ${post.myReaction === key ? 'text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{count}</span>
                              </button>
@@ -467,7 +520,7 @@ export default function WallPage() {
             </div>
           </header>
           
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10">
+          <div ref={commentsScrollRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10">
             <div className="bg-white dark:bg-[#222224] p-4 rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none mb-2 border border-black/5 dark:border-white/5 flex flex-col">
               <span className="font-semibold text-[14px] text-[#86868b] dark:text-[#98989d] mb-1 block">{activeThread.channelName}</span>
               {activeThreadContent?.hasMedia && (
@@ -515,6 +568,8 @@ export default function WallPage() {
                                onMouseDown={(e) => handleTouchStartPhoto(e, mediaUrls[0])}
                                onTouchEnd={clearPhotoTimer} 
                                onMouseUp={clearPhotoTimer}
+                               onClick={(e) => handlePhotoClick(e, c, 'comment')}
+                               onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, c, 'comment'); }}
                              />
                          )}
                          {hasText && (
@@ -534,7 +589,7 @@ export default function WallPage() {
                              const firstUser = users.length > 0 ? users[0] : null;
 
                              return (
-                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-black/5 dark:bg-white/10 border-black/20 dark:border-white/20 shadow-sm z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                  {firstUser ? (
                                    <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                      {firstUser.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser.name?.charAt(0).toUpperCase() || 'U'}
@@ -576,19 +631,22 @@ export default function WallPage() {
                 onChange={e => setCommentContent(e.target.value)} 
                 placeholder={t.commentPlaceholder} 
               />
-              <button type="submit" disabled={!commentContent.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ChevronRight size={20} strokeWidth={2.5}/></button>
+              <button type="submit" disabled={!commentContent.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">
+                <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
+              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* ГЛОБАЛЬНОЕ МЕНЮ */}
+      {/* ГЛОБАЛЬНОЕ МЕНЮ ПО КООРДИНАТАМ */}
       {contextMenu && (() => {
          const menuWidth = 220; 
          const menuHeight = 250;
          let safeX = contextMenu.x; 
          let safeY = contextMenu.y;
          
+         // Умная логика отступов, чтобы ничего не обрезалось
          if (safeX + menuWidth > window.innerWidth) safeX = window.innerWidth - menuWidth - 10;
          if (safeY + menuHeight > window.innerHeight) safeY = safeY - menuHeight;
          if (safeY < 0) safeY = 20;
