@@ -80,7 +80,6 @@ export default function WallPage() {
   const [editingPost, setEditingPost] = useState<any>(null);
   const [editContent, setEditContent] = useState("");
 
-  const [menuPos, setMenuPos] = useState<{ x: number, y: number } | null>(null);
   const [activeContextMenu, setActiveContextMenu] = useState<number | null>(null);
   const [activeThread, setActiveThread] = useState<any>(null);
   const [threadComments, setThreadComments] = useState<any[]>([]);
@@ -188,15 +187,18 @@ export default function WallPage() {
     } catch (e) {}
   };
 
-  const toggleReaction = async (post: any, reaction: string) => {
+  const toggleReaction = async (postOrCommentId: number, reaction: string, isComment = false) => {
     try {
-      await fetch(`/api/chats/${post.chatId}/messages/${post.id}/reaction`, { 
+      // ИСПРАВЛЕНИЕ РЕАКЦИЙ: Правильно передаем ID и путь
+      const chatIdToUse = isComment ? activeThread.chatId : posts.find(p => p.id === postOrCommentId)?.chatId;
+      await fetch(`/api/chats/${chatIdToUse}/messages/${postOrCommentId}/reaction`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
         body: JSON.stringify({ reaction }) 
       });
     } catch (e) {}
-    closeMenus();
+    setActiveContextMenu(null);
+    setActiveCommentMenu(null);
   };
 
   const handleSendComment = async (e: React.FormEvent) => {
@@ -260,65 +262,20 @@ export default function WallPage() {
     } catch (e) { window.open(url, '_blank'); }
   };
 
-  const openMenu = (e: React.MouseEvent | React.TouchEvent, id: number, isComment = false) => {
-    e.stopPropagation();
-    e.preventDefault();
-    let clientX, clientY;
-    if ('touches' in e && e.touches.length > 0) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = (e as React.MouseEvent).clientX;
-      clientY = (e as React.MouseEvent).clientY;
-    }
-    setMenuPos({ x: clientX, y: clientY });
-    if (isComment) {
-       setActiveCommentMenu(id);
-       setActiveContextMenu(null);
-    } else {
-       setActiveContextMenu(id);
-       setActiveCommentMenu(null);
-    }
-  };
-
   const handleImageInteraction = (e: React.TouchEvent | React.MouseEvent, url: string) => {
     e.stopPropagation();
     pressTimer.current = setTimeout(() => {
       if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
       setFullScreenImage(url);
-      closeMenus();
     }, 400); 
   };
 
   const clearTimer = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
-  const closeMenus = () => { setActiveContextMenu(null); setActiveCommentMenu(null); setMenuPos(null); };
-
-  const renderFixedMenu = (menuContent: React.ReactNode) => {
-    if (!menuPos) return null;
-    const menuWidth = 220;
-    const menuHeight = 200;
-    let safeX = menuPos.x;
-    let safeY = menuPos.y;
-    if (safeX + menuWidth > window.innerWidth) safeX = window.innerWidth - menuWidth - 20;
-    if (safeY + menuHeight > window.innerHeight) safeY = window.innerHeight - menuHeight - 20;
-    
-    return (
-      <>
-        <div className="fixed inset-0 z-[110]" onClick={(e) => { e.stopPropagation(); closeMenus(); }} onContextMenu={(e) => { e.preventDefault(); closeMenus(); }} />
-        <div 
-          className="fixed z-[120] flex flex-col gap-2 animate-in zoom-in-[0.95] fade-in duration-200 ease-out" 
-          style={{ top: safeY, left: safeX }}
-        >
-           {menuContent}
-        </div>
-      </>
-    );
-  };
 
   const activeThreadContent = activeThread ? parseContent(activeThread.content) : null;
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in fade-in duration-300 ease-out" onClick={closeMenus}>
+    <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in fade-in duration-300 ease-out" onClick={() => setActiveContextMenu(null)}>
       
       {/* ЛАЙТБОКС */}
       {fullScreenImage && (
@@ -377,20 +334,21 @@ export default function WallPage() {
           </div>
         ) : (
           <div className="flex flex-col w-full max-w-full">
-            {posts.map((post) => {
+            {posts.map((post, index) => {
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
               const reactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
               const isMenuOpen = activeContextMenu === post.id;
               const isMe = String(post.senderId) === String(currentUserId);
               const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+              
+              const isLastPost = index >= posts.length - 2;
 
               return (
                 <div key={post.id} className={`w-full relative mb-5 z-10 animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out`}>
                   
                   <div 
                     className="w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col cursor-pointer"
-                    onClick={(e) => openMenu(e, post.id)}
-                    onContextMenu={(e) => openMenu(e, post.id)}
+                    onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : post.id); }}
                   >
                     <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#222224] flex justify-between items-center rounded-t-[24px]">
                        <Link href={`/chat/${post.chatId}`}>
@@ -431,7 +389,7 @@ export default function WallPage() {
                     {reactionsKeys.length > 0 && (
                       <div className="px-4 pb-3 flex flex-wrap gap-1.5 pt-1.5">
                          {reactionsKeys.map(key => (
-                           <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)]' : 'bg-[#f5f5f7] dark:bg-[#333336] text-[#86868b] dark:text-[#98989d] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                           <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)]' : 'bg-[#f5f5f7] dark:bg-[#333336] text-[#86868b] dark:text-[#98989d] border-black/5 dark:border-white/5 shadow-sm'}`}>
                              <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
                              <span className="text-[13px] font-bold leading-none flex items-center justify-center mt-[1px]">{post.reactions[key].count}</span>
                            </button>
@@ -450,28 +408,30 @@ export default function WallPage() {
                     </button>
                   </div>
 
-                  {/* МЕНЮ СТЕНЫ ПО КООРИДНАТАМ */}
-                  {isMenuOpen && renderFixedMenu(
+                  {/* МЕНЮ СТЕНЫ */}
+                  {isMenuOpen && (
                     <>
-                      <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
-                         {FAST_REACTIONS.map(emoji => (
-                           <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(post, emoji); closeMenus(); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${post.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
-                             {emoji}
-                           </button>
-                         ))}
-                      </div>
-                      <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
-                         {hasText && (
-                           <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                             <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
-                           </button>
-                         )}
-                         {/* Авторская панель удаления поста со стены */}
-                         {isMe && (
-                           <button onClick={(e) => { e.stopPropagation(); closeMenus(); deletePost(post); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
-                             <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
-                           </button>
-                         )}
+                      <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} />
+                      <div className={`absolute z-[70] flex flex-col gap-2 right-4 ${isLastPost ? 'bottom-12 mb-2' : 'top-14 mt-1'} min-w-[200px] items-end animate-in zoom-in-[0.97] fade-in duration-200 ease-out`}>
+                        <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
+                           {FAST_REACTIONS.map(emoji => (
+                             <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${post.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
+                               {emoji}
+                             </button>
+                           ))}
+                        </div>
+                        <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
+                           {hasText && (
+                             <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                               <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
+                             </button>
+                           )}
+                           {isMe && (
+                             <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); deletePost(post); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
+                               <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
+                             </button>
+                           )}
+                        </div>
                       </div>
                     </>
                   )}
@@ -484,7 +444,7 @@ export default function WallPage() {
 
       {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ СТЕНЫ */}
       {activeThread && (
-        <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={closeMenus}>
+        <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={() => setActiveCommentMenu(null)}>
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
             <div className="flex items-center gap-4">
               <button onClick={() => setActiveThread(null)} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
@@ -510,18 +470,18 @@ export default function WallPage() {
             {threadComments.length === 0 ? (
                <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
             ) : (
-               threadComments.map((c) => {
+               threadComments.map((c, index) => {
                  const isCommentMenuOpen = activeCommentMenu === c.id;
                  const isMyComment = String(c.senderId) === String(currentUserId);
                  const { text, quotedText, hasMedia, mediaUrls, hasText } = parseContent(c.content);
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
+                 const isLastComment = index >= threadComments.length - 2;
 
                  return (
                    <div key={c.id} className={`relative flex flex-col mb-2 z-10`}>
                      <div 
                         className="flex gap-3 items-start cursor-pointer" 
-                        onClick={(e) => openMenu(e, c.id, true)}
-                        onContextMenu={(e) => openMenu(e, c.id, true)}
+                        onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(isCommentMenuOpen ? null : c.id); }}
                      >
                        <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
                          {c.senderAvatar ? <img src={c.senderAvatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
@@ -554,7 +514,7 @@ export default function WallPage() {
                              const rData = c.reactions[key] || { count: 1, users: [] };
                              const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
                              return (
-                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c, key); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                  <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                    {firstUser?.avatar ? <img src={firstUser.avatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
                                  </div>
@@ -565,32 +525,35 @@ export default function WallPage() {
                         </div>
                      )}
 
-                     {/* МЕНЮ КОММЕНТАРИЯ ПО КООРДИНАТАМ */}
-                     {isCommentMenuOpen && renderFixedMenu(
-                       <>
-                         <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
-                           {FAST_REACTIONS.map(emoji => (
-                             <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(c, emoji); closeMenus(); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${c.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
-                               {emoji}
-                             </button>
-                           ))}
-                         </div>
-                         <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
-                            <button onClick={(e) => { e.stopPropagation(); setCommentReplyingTo(c); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                              <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
-                            </button>
-                            {hasText && (
-                              <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
-                              </button>
-                            )}
-                            {isMyComment && (
-                              <button onClick={(e) => { e.stopPropagation(); closeMenus(); deleteComment(c.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
-                                <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
-                              </button>
-                            )}
-                         </div>
-                       </>
+                     {/* Меню для комментариев */}
+                     {isCommentMenuOpen && (
+                        <>
+                          <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(null); }} />
+                          <div className={`absolute z-[70] flex flex-col gap-2 left-12 ${isLastComment ? 'bottom-full mb-1' : 'top-full mt-1'} min-w-[200px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out`}>
+                             <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
+                               {FAST_REACTIONS.map(emoji => (
+                                 <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, emoji, true); setActiveCommentMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${c.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
+                                   {emoji}
+                                 </button>
+                               ))}
+                             </div>
+                             <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
+                                <button onClick={(e) => { e.stopPropagation(); setCommentReplyingTo(c); setActiveCommentMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                  <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
+                                </button>
+                                {hasText && (
+                                  <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); setActiveCommentMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                    <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
+                                  </button>
+                                )}
+                                {isMyComment && (
+                                  <button onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(null); deleteComment(c.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
+                                    <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
+                                  </button>
+                                )}
+                             </div>
+                          </div>
+                        </>
                      )}
                    </div>
                  );
