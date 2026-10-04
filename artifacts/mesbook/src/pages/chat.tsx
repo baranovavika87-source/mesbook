@@ -614,7 +614,7 @@ export default function ChatPage() {
 
       {/* ПРОФИЛЬ */}
       {showProfile && chatInfo?.participant && (
-        <div className="fixed inset-0 z-50 bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-200 overflow-y-auto">
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
             <div className="flex items-center gap-6">
               <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
@@ -702,7 +702,7 @@ export default function ChatPage() {
 
               if (isGroupOrChannel) {
                 return (
-                  <div key={msg.id} className={`flex flex-col w-full mb-4 relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
+                  <div key={msg.id} className={`flex flex-col w-[90%] sm:w-[85%] mb-4 relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
                     {showDate && (
                       <div className="flex justify-center w-full my-4">
                         <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">
@@ -723,10 +723,11 @@ export default function ChatPage() {
                                  : <img key={idx} src={url} loading="lazy" decoding="async" onClick={(e) => { e.stopPropagation(); setFullScreenImage(url); }} className="w-full h-auto max-h-[400px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                             ))}
                             
+                            {/* ИСПРАВЛЕНИЕ: НИКАКИХ ГАЛОЧЕК В КАНАЛЕ */}
                             {!hasText && (
                               <div className="absolute bottom-2 right-2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
                                  {timeStr}
-                                 {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
+                                 {isMe && !isChannel && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/><Check size={11} strokeWidth={2.5}/></div>}
                               </div>
                             )}
                           </div>
@@ -742,7 +743,8 @@ export default function ChatPage() {
                                <span className="float-right inline-flex items-center gap-1 text-[11px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
                                  {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                  {timeStr}
-                                 {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/><Check size={12} strokeWidth={2.5}/></div>}
+                                 {/* ИСПРАВЛЕНИЕ: НИКАКИХ ГАЛОЧЕК В КАНАЛЕ */}
+                                 {isMe && !isChannel && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/><Check size={12} strokeWidth={2.5}/></div>}
                                </span>
                                <div className="clear-both"></div>
                              </div>
@@ -775,7 +777,7 @@ export default function ChatPage() {
                       {isMenuOpen && (
                         <>
                           <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} />
-                          <div className={`absolute z-[70] flex flex-col gap-2 ${isMe ? 'right-0 items-end' : 'left-0 items-start'} top-12 min-w-[200px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out`}>
+                          <div className={`absolute z-[70] flex flex-col gap-2 ${isMe ? 'right-0 items-end' : 'left-0 items-start'} top-12 min-w-[200px]`}>
                             <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
                                {FAST_REACTIONS.map(emoji => (
                                  <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
@@ -784,6 +786,7 @@ export default function ChatPage() {
                                ))}
                             </div>
 
+                            {/* Для подписчиков канала полного меню нет */}
                             {(!isChannel || isAdmin) && (
                               <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
                                  {(!isChannel) && (
