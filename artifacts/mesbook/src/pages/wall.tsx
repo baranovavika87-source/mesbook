@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Smile, Send, ArrowLeft, Download, Copy, Reply, Check, ChevronRight } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, Send, ArrowLeft, Download, Copy, Reply, Check, ChevronRight, Camera, Paperclip } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -33,7 +33,8 @@ const translations = {
     replyAction: "Ответить",
     copy: "Копировать",
     editAction: "Изменить",
-    deleteAction: "Удалить"
+    deleteAction: "Удалить",
+    openPhoto: "Открыть фото"
   },
   en: {
     wall: "Wall",
@@ -53,7 +54,8 @@ const translations = {
     replyAction: "Reply",
     copy: "Copy",
     editAction: "Edit",
-    deleteAction: "Delete"
+    deleteAction: "Delete",
+    openPhoto: "Open Photo"
   }
 };
 
@@ -82,8 +84,11 @@ export default function WallPage() {
   const [activeThread, setActiveThread] = useState<any>(null);
   const [threadComments, setThreadComments] = useState<any[]>([]);
   const [commentContent, setCommentContent] = useState('');
+  const [activeCommentMenu, setActiveCommentMenu] = useState<number | null>(null);
+  const [isCommentUploading, setIsCommentUploading] = useState(false);
   
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
 
   const activeThreadRef = useRef<any>(null);
   useEffect(() => {
@@ -142,7 +147,6 @@ export default function WallPage() {
     if (text.startsWith('> ')) {
       const parts = text.split('\n\n');
       quotedText = parts[0].replace('> ', '');
-      if (quotedText.startsWith('[MEDIA]')) quotedText = t.photo;
       text = parts.slice(1).join('\n\n');
     }
 
@@ -206,6 +210,36 @@ export default function WallPage() {
     } catch (error) {}
   };
 
+  const handleCommentFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeThread) return;
+    setIsCommentUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'mesogram-cloud'); 
+    try {
+      const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.secure_url) { 
+        await fetch(`/api/chats/${activeThread.chatId}/messages`, { 
+           method: 'POST', 
+           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
+           body: JSON.stringify({ content: `[MEDIA] ${data.secure_url}`, parentId: activeThread.id }) 
+        });
+      }
+    } catch (err: any) {} 
+    finally { 
+      setIsCommentUploading(false); 
+      if (commentFileInputRef.current) commentFileInputRef.current.value = ''; 
+    }
+  };
+
+  const deleteComment = async (commentId: number) => {
+    try {
+      await fetch(`/api/chats/${activeThread.chatId}/messages/${commentId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId } });
+    } catch (e) {}
+  };
+
   const downloadImage = async (url: string) => {
     try {
       const response = await fetch(url);
@@ -220,6 +254,8 @@ export default function WallPage() {
       window.URL.revokeObjectURL(objectUrl);
     } catch (e) { window.open(url, '_blank'); }
   };
+
+  const activeThreadContent = activeThread ? parseContent(activeThread.content) : null;
 
   return (
     <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in fade-in duration-300 ease-out" onClick={() => setActiveContextMenu(null)}>
@@ -294,10 +330,10 @@ export default function WallPage() {
               const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
               return (
-                <div key={post.id} className={`flex flex-col w-full mb-5 relative ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out`}>
+                <div key={post.id} className={`w-full relative mb-5 ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out`}>
                   
                   <div 
-                    className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative cursor-pointer`}
+                    className="w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden cursor-pointer"
                     onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : post.id); }}
                   >
                     <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#222224] flex justify-between items-center">
@@ -314,7 +350,7 @@ export default function WallPage() {
                         {mediaUrls.map((url, idx) => (
                            isVideo 
                              ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" />
-                             : <img key={idx} src={url} loading="lazy" decoding="async" onClick={(e) => { e.stopPropagation(); setFullScreenImage(url); }} className="w-full h-auto max-h-[500px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
+                             : <img key={idx} src={url} loading="lazy" decoding="async" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : post.id); }} className="w-full h-auto max-h-[500px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                         ))}
                       </div>
                     )}
@@ -341,15 +377,14 @@ export default function WallPage() {
                       </div>
                     )}
 
-                    {/* ИСПРАВЛЕНИЕ: ТОНЕНЬКАЯ ПОЛОСКА КОММЕНТАРИЕВ */}
-                    <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04]">
-                      <div className="flex gap-2 items-center">
-                        <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                        <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+                    <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3.5 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
+                      <div className="flex gap-2.5 items-center">
+                        <MessageCircle size={18} className="text-[#86868b] dark:text-[#98989d]" />
+                        <span className="text-[14px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
                           {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
                         </span>
                       </div>
-                      <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
+                      <ChevronRight size={18} className="text-[#86868b] dark:text-[#98989d]" />
                     </button>
                   </div>
 
@@ -368,6 +403,11 @@ export default function WallPage() {
                         {/* Меню только для автора */}
                         {isMe && (
                           <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
+                             {hasMedia && (
+                               <button onClick={(e) => { e.stopPropagation(); setFullScreenImage(mediaUrls[0]); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                 <Camera size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.openPhoto}
+                               </button>
+                             )}
                              <button onClick={(e) => { e.stopPropagation(); startEditingPost(post); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
                                <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
                              </button>
@@ -382,13 +422,16 @@ export default function WallPage() {
                 </div>
               );
             })}
+            
+            {/* ИСПРАВЛЕНИЕ ОБРЕЗАНИЯ МЕНЮ */}
+            <div className="h-32 shrink-0"></div>
           </div>
         )}
       </main>
 
       {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ СТЕНЫ */}
       {activeThread && (
-        <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out">
+        <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={() => setActiveCommentMenu(null)}>
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
             <div className="flex items-center gap-4">
               <button onClick={() => setActiveThread(null)} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
@@ -397,30 +440,74 @@ export default function WallPage() {
           </header>
           
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            <div className="bg-white dark:bg-[#222224] p-4 rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none mb-2 border border-black/5 dark:border-white/5">
+            <div className="bg-white dark:bg-[#222224] p-4 rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none mb-2 border border-black/5 dark:border-white/5 flex flex-col">
               <span className="font-semibold text-[14px] text-[#86868b] dark:text-[#98989d] mb-1 block">{activeThread.channelName}</span>
-              <p className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap">{parseContent(activeThread.content).text}</p>
+              {/* НОВОЕ: Отображение фото оригинального поста */}
+              {activeThreadContent?.hasMedia && (
+                <div className="flex gap-2 overflow-x-auto my-2">
+                  {activeThreadContent.mediaUrls.map(url => (
+                    <img key={url} src={url} className="h-[80px] w-auto rounded-[8px] object-cover border border-black/5 dark:border-white/5" />
+                  ))}
+                </div>
+              )}
+              {activeThreadContent?.hasText && (
+                <p className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap">{activeThreadContent.text}</p>
+              )}
             </div>
             
             {threadComments.length === 0 ? (
                <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
             ) : (
-               threadComments.map(c => (
-                 <div key={c.id} className="flex gap-3 items-start">
-                   <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
-                     {c.senderAvatar ? <img src={c.senderAvatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
+               threadComments.map(c => {
+                 const isCommentMenuOpen = activeCommentMenu === c.id;
+                 const isMyComment = String(c.senderId) === String(currentUserId);
+                 return (
+                   <div key={c.id} className="relative flex flex-col mb-2">
+                     <div className="flex gap-3 items-start cursor-pointer" onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(isCommentMenuOpen ? null : c.id); }}>
+                       <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
+                         {c.senderAvatar ? <img src={c.senderAvatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
+                       </div>
+                       <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
+                         <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
+                         {parseContent(c.content).hasMedia ? (
+                             <img src={parseContent(c.content).mediaUrls[0]} className="max-h-[200px] w-auto rounded-[8px] object-cover" />
+                         ) : (
+                             <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{c.content}</span>
+                         )}
+                         <span className="text-[11px] text-[#86868b] dark:text-[#98989d] mt-1.5 text-right">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                       </div>
+                     </div>
+                     {/* Меню для комментариев */}
+                     {isCommentMenuOpen && (
+                        <>
+                          <div className="absolute z-[70] flex flex-col gap-2 left-12 top-full mt-1 min-w-[160px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out">
+                             <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
+                                {parseContent(c.content).hasText && (
+                                  <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(c.content).text); setActiveCommentMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                    <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
+                                  </button>
+                                )}
+                                {isMyComment && (
+                                  <button onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(null); deleteComment(c.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
+                                    <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
+                                  </button>
+                                )}
+                             </div>
+                          </div>
+                        </>
+                     )}
                    </div>
-                   <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
-                     <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
-                     <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{c.content}</span>
-                     <span className="text-[11px] text-[#86868b] dark:text-[#98989d] mt-1.5 text-right">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                   </div>
-                 </div>
-               ))
+                 );
+               })
             )}
+            <div className="h-10 shrink-0"></div>
           </div>
           
           <form onSubmit={handleSendComment} className="p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl border-t border-black/5 dark:border-white/5 flex items-center gap-2 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+            <input type="file" accept="image/*,video/*" className="hidden" ref={commentFileInputRef} onChange={handleCommentFileUpload} />
+            <button type="button" onClick={() => commentFileInputRef.current?.click()} disabled={isCommentUploading} className="w-[42px] h-[42px] shrink-0 flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors disabled:opacity-50">
+              {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
+            </button>
             <input 
               className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px]" 
               value={commentContent} 
@@ -428,23 +515,24 @@ export default function WallPage() {
               placeholder={t.commentPlaceholder} 
             />
             <button type="submit" disabled={!commentContent.trim()} className="w-[42px] h-[42px] rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">
-              <Send size={18} className="ml-1" />
+              <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
             </button>
           </form>
         </div>
       )}
 
-      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-2 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-5 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+      {/* НИЖНЯЯ ПАНЕЛЬ СТЕНЫ */}
+      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         <Link href="/">
           <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
-            <MessageSquare size={24} className="mb-1" strokeWidth={1.5} />
-            <span className="text-[10px] font-semibold tracking-wide">{t.chats}</span>
+            <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
+            <span className="text-[11px] font-semibold tracking-wide">{t.chats}</span>
           </a>
         </Link>
         <Link href="/wall">
           <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95">
-            <Users size={24} className="mb-1" fill="currentColor" strokeWidth={1.5} />
-            <span className="text-[10px] font-semibold tracking-wide">{t.wall}</span>
+            <Users size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
+            <span className="text-[11px] font-semibold tracking-wide">{t.wall}</span>
           </a>
         </Link>
       </nav>
