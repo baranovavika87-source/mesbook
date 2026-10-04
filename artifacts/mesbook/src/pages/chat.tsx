@@ -6,10 +6,7 @@ import { io } from 'socket.io-client';
 let socket: any = null;
 
 const getUserId = () => {
-  try {
-    const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
-    return u.id || u.userId || u._id || 1;
-  } catch (e) { return 1; }
+  try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
 };
 
 const FAST_REACTIONS = ['❤️️', '👍', '🔥', '😂', '😢'];
@@ -109,22 +106,17 @@ const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
   if (!timestamp) return lang === 'ru' ? 'недавно' : 'recently';
   const date = new Date(timestamp);
   const now = new Date();
-  
   const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-  
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
 
   const timeStr = date.toLocaleTimeString(lang === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' });
-  
   if (isToday) return lang === 'ru' ? `сегодня в ${timeStr}` : `today at ${timeStr}`;
   if (isYesterday) return lang === 'ru' ? `вчера в ${timeStr}` : `yesterday at ${timeStr}`;
-  
   const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
   let dateStr = date.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', options);
   if (lang === 'ru') dateStr = dateStr.replace('.', '');
-  
   return lang === 'ru' ? `${dateStr} в ${timeStr}` : `${dateStr} at ${timeStr}`;
 };
 
@@ -154,8 +146,10 @@ export default function ChatPage() {
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [editingMsg, setEditingMsg] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
-  
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  
+  // Глобальное меню
+  const [contextMenu, setContextMenu] = useState<{ id: number, x: number, y: number, type: 'message' | 'comment', item: any } | null>(null);
   
   const [activeThread, setActiveThread] = useState<any>(null);
   const [threadComments, setThreadComments] = useState<any[]>([]);
@@ -180,19 +174,15 @@ export default function ChatPage() {
   const [editChatAvatar, setEditChatAvatar] = useState('');
   const [isSavingChat, setIsSavingChat] = useState(false);
   
-  // Глобальное меню по координатам
-  const [contextMenu, setContextMenu] = useState<{ id: number, x: number, y: number, type: 'message' | 'comment', item: any } | null>(null);
-
   const editAvatarRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const commentsScrollRef = useRef<HTMLDivElement>(null);
-  const hasScrolledToBottom = useRef(false);
-
-  const pressTimer = useRef<NodeJS.Timeout | null>(null);
+  
   const photoOpenedRef = useRef(false);
+  const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const [chatInfo, setChatInfo] = useState<any>(() => {
     if (isSavedChat) return { participant: { displayName: t.saved, isSaved: true } };
@@ -207,9 +197,7 @@ export default function ChatPage() {
   const isChannel = chatInfo?.participant?.isChannel;
 
   useEffect(() => {
-    const sendPing = async () => {
-      try { await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
-    };
+    const sendPing = async () => { try { await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {} };
     sendPing();
     const interval = setInterval(sendPing, 10000);
     return () => clearInterval(interval);
@@ -217,26 +205,18 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!socket) socket = io(window.location.origin, { path: '/socket.io' });
-    
     if (!isSavedChat) {
       socket.emit('join', String(chatId));
-      const handleUpdate = (updatedChatId: number) => { 
-        if (Number(updatedChatId) === Number(chatId)) loadData(); 
-      };
+      const handleUpdate = (updatedChatId: number) => { if (Number(updatedChatId) === Number(chatId)) loadData(); };
       const handleTyping = (data: any) => {
         if (Number(data.chatId) === Number(chatId) && data.name !== chatInfo?.participant?.displayName) {
           setTypingUsers(prev => prev.includes(data.name) ? prev : [...prev, data.name]);
           setTimeout(() => setTypingUsers(prev => prev.filter(n => n !== data.name)), 3000);
         }
       };
-
       socket.on('chat_update', handleUpdate);
       socket.on('typing', handleTyping);
-
-      return () => {
-        socket.off('chat_update', handleUpdate);
-        socket.off('typing', handleTyping);
-      };
+      return () => { socket.off('chat_update', handleUpdate); socket.off('typing', handleTyping); };
     }
   }, [chatId]);
 
@@ -249,8 +229,11 @@ export default function ChatPage() {
 
   const loadData = async () => {
     if (isSavedChat) {
-      setIsLoadingRole(false);
-      return;
+      try {
+        const saved = JSON.parse(localStorage.getItem('mesbook_saved_messages_' + currentUserId) || '[]');
+        setMessages(saved.map((m: any) => ({...m, isSending: false})));
+      } catch(e) {}
+      setIsLoadingRole(false); return;
     }
     
     if (isGroupOrChannel) {
@@ -258,36 +241,18 @@ export default function ChatPage() {
         const roleRes = await fetch(`/api/chats/${chatId}/is_member`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
         if (roleRes.ok) {
            const roleData = await roleRes.json();
-           setIsMember(roleData.isMember);
-           setIsAdmin(roleData.role === 'admin');
-           setMembersCount(roleData.membersCount || 1);
-           setOnlineCount(roleData.onlineCount || 1);
+           setIsMember(roleData.isMember); setIsAdmin(roleData.role === 'admin');
+           setMembersCount(roleData.membersCount || 1); setOnlineCount(roleData.onlineCount || 1);
         }
       } catch (e) {}
     }
     setIsLoadingRole(false);
-
     try { await fetch('/api/chats/' + chatId + '/read', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
-    
-    try {
-      const infoRes = await fetch('/api/chats', { headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' } });
-      if (infoRes.ok) {
-        const data = await infoRes.json();
-        const currentChat = data.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId));
-        if (currentChat) setChatInfo(currentChat);
-      }
-    } catch (e) {}
-    
     try {
       const msgRes = await fetch('/api/chats/' + chatId + '/messages', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
       if (msgRes.ok) {
         const data = await msgRes.json();
-        const serverMsgs = Array.isArray(data.messages) ? data.messages : [];
-        setMessages((prev: any) => {
-          const sendingMsgs = prev.filter((m: any) => m.isSending);
-          const filteredSending = sendingMsgs.filter((sm: any) => !serverMsgs.find((dm: any) => dm.content === sm.content));
-          return [...serverMsgs, ...filteredSending].sort((a: any, b: any) => a.id - b.id);
-        });
+        setMessages(Array.isArray(data.messages) ? data.messages : []);
       }
     } catch (e) {}
     
@@ -299,24 +264,11 @@ export default function ChatPage() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, [chatId, activeThread]);
-
-  useEffect(() => {
-    if (scrollRef.current && !hasScrolledToBottom.current && messages.length > 0) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      hasScrolledToBottom.current = true;
-    }
-  }, [messages]);
-
-  useEffect(() => {
-    if (commentsScrollRef.current && threadComments.length > 0) {
-      commentsScrollRef.current.scrollTop = commentsScrollRef.current.scrollHeight;
-    }
-  }, [threadComments]);
+  useEffect(() => { loadData(); }, [chatId, activeThread]);
 
   const forceScrollToBottom = () => { setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 10); };
+  
+  useEffect(() => { forceScrollToBottom(); }, [messages]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -324,49 +276,22 @@ export default function ChatPage() {
 
     if (editingMsg) {
       const newTextContent = content.trim();
-      const tempId = editingMsg.id;
       let finalEditedContent = newTextContent;
       if (editingMsg.content.startsWith('> ')) {
         const parts = editingMsg.content.split('\n\n');
         finalEditedContent = `${parts[0]}\n\n${newTextContent}`;
       }
-      
-      if (isSavedChat) {
-        setMessages((prev: any) => {
-          const updated = prev.map((m: any) => m.id === tempId ? { ...m, content: finalEditedContent, isEdited: true } : m);
-          localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
-          return updated;
-        });
-        setContent('');
-        setEditingMsg(null);
-        setTimeout(() => inputRef.current?.focus(), 10);
-        return;
-      }
-
-      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, content: finalEditedContent, isEdited: true } : m));
-      setContent('');
-      setEditingMsg(null);
-      setTimeout(() => inputRef.current?.focus(), 10);
-
-      try {
-        await fetch(`/api/chats/${chatId}/messages/${tempId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalEditedContent }) });
-        loadData();
-      } catch(e) {}
+      setContent(''); setEditingMsg(null);
+      try { await fetch(`/api/chats/${chatId}/messages/${editingMsg.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalEditedContent }) }); loadData(); } catch(e) {}
       return;
     }
 
     const tempContent = content.trim();
     const finalContent = replyingTo ? `> ${replyingTo.content.replace(/^> .*\n\n/, '')}\n\n${tempContent}` : tempContent;
-    setContent('');
-    setReplyingTo(null);
+    setContent(''); setReplyingTo(null);
     
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, 10);
-    
-    const tempMsg = { id: Date.now(), content: finalContent, isSending: !isSavedChat, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
+    // Одна галочка при отправке
+    const tempMsg = { id: Date.now(), content: finalContent, isSending: true, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
     if (isSavedChat) {
       setMessages((prev: any) => { const u = [...prev, { ...tempMsg, isSending: false }]; localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(u)); return u; });
       forceScrollToBottom(); return;
@@ -374,9 +299,9 @@ export default function ChatPage() {
     setMessages((prev: any) => [...prev, tempMsg]);
     forceScrollToBottom();
     try {
-      const res = await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalContent }) });
-      if (res.ok) loadData(); else setMessages((prev: any) => prev.filter((m: any) => m.id !== tempMsg.id));
-    } catch (error) { setMessages((prev: any) => prev.filter((m: any) => m.id !== tempMsg.id)); }
+      await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalContent }) });
+      loadData();
+    } catch (error) {}
   };
 
   const handleSendComment = async (e: React.FormEvent) => {
@@ -384,39 +309,18 @@ export default function ChatPage() {
     if (!commentContent.trim() || !activeThread) return;
     const tempContent = commentContent.trim();
     const finalContent = commentReplyingTo ? `> ${commentReplyingTo.content.replace(/^> .*\n\n/, '')}\n\n${tempContent}` : tempContent;
-    
-    setCommentContent('');
-    setCommentReplyingTo(null);
-    
+    setCommentContent(''); setCommentReplyingTo(null);
     try {
-      await fetch('/api/chats/' + chatId + '/messages', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
-        body: JSON.stringify({ content: finalContent, parentId: activeThread.id }) 
-      });
+      await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalContent, parentId: activeThread.id }) });
       loadData();
     } catch (error) {}
-  };
-
-  const startEditing = (msg: any) => {
-    setEditingMsg(msg);
-    if (msg.content.startsWith('> ')) { setContent(msg.content.split('\n\n').slice(1).join('\n\n')); } 
-    else { setContent(msg.content); }
-    setReplyingTo(null);
-    setTimeout(() => inputRef.current?.focus(), 10);
-  };
-
-  const joinChat = async () => {
-    try { await fetch(`/api/chats/${chatId}/join`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); setIsMember(true); loadData(); } catch (e) {}
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', 'mesogram-cloud'); 
+    const formData = new FormData(); formData.append('file', file); formData.append('upload_preset', 'mesogram-cloud'); 
     try {
       const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
       const data = await res.json();
@@ -432,45 +336,58 @@ export default function ChatPage() {
     const file = e.target.files?.[0];
     if (!file || !activeThread) return;
     setIsCommentUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', 'mesogram-cloud'); 
+    const formData = new FormData(); formData.append('file', file); formData.append('upload_preset', 'mesogram-cloud'); 
     try {
       const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (data.secure_url) { 
-        await fetch(`/api/chats/${chatId}/messages`, { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
-          body: JSON.stringify({ content: `[MEDIA] ${data.secure_url}`, parentId: activeThread.id }) 
-        });
+        await fetch(`/api/chats/${chatId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: `[MEDIA] ${data.secure_url}`, parentId: activeThread.id }) });
         loadData();
       }
     } catch (err: any) {} 
     finally { setIsCommentUploading(false); if (commentFileInputRef.current) commentFileInputRef.current.value = ''; }
   };
 
-  const handleDelete = async (msgId: number) => {
-    if (isSavedChat) {
-      const updated = messages.filter((m: any) => m.id !== msgId);
-      setMessages(updated);
-      localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
-      return;
-    }
-    try { await fetch('/api/chats/' + chatId + '/messages/' + msgId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId } }); loadData(); } catch (e) {}
-  };
-
   const toggleReaction = async (msgId: number, reaction: string, isComment = false) => {
     try {
       const targetChatId = isComment && activeThread ? activeThread.chatId : chatId;
-      await fetch(`/api/chats/${targetChatId}/messages/${msgId}/reaction`, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
-        body: JSON.stringify({ reaction }) 
-      });
+      await fetch(`/api/chats/${targetChatId}/messages/${msgId}/reaction`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ reaction }) });
       loadData();
     } catch (e) {}
     setContextMenu(null);
+  };
+
+  const deleteMessage = async (msgId: number) => {
+    try { await fetch('/api/chats/' + chatId + '/messages/' + msgId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId } }); loadData(); } catch (e) {}
+  };
+
+  const openGlobalMenu = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'message' | 'comment') => {
+    e.stopPropagation(); e.preventDefault();
+    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
+    let clientX, clientY;
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
+    } else {
+      clientX = (e as React.MouseEvent).clientX; clientY = (e as React.MouseEvent).clientY;
+    }
+    setContextMenu({ id: item.id, x: clientX, y: clientY, type, item });
+  };
+
+  const handleTouchStartPhoto = (e: React.TouchEvent | React.MouseEvent, url: string) => {
+    e.stopPropagation();
+    photoOpenedRef.current = false;
+    pressTimer.current = setTimeout(() => {
+      photoOpenedRef.current = true;
+      if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
+      setFullScreenImage(url);
+      setContextMenu(null);
+    }, 400); 
+  };
+  
+  const clearPhotoTimer = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
+
+  const joinChat = async () => {
+    try { await fetch(`/api/chats/${chatId}/join`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); setIsMember(true); loadData(); } catch (e) {}
   };
 
   const downloadImage = async (url: string) => {
@@ -479,13 +396,18 @@ export default function ChatPage() {
       const blob = await response.blob();
       const objectUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = `mesogram_photo_${Date.now()}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      link.href = objectUrl; link.download = `mesogram_photo_${Date.now()}.jpg`;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
       window.URL.revokeObjectURL(objectUrl);
     } catch (e) { window.open(url, '_blank'); }
+  };
+
+  const startEditing = (msg: any) => {
+    setEditingMsg(msg);
+    if (msg.content.startsWith('> ')) { setContent(msg.content.split('\n\n').slice(1).join('\n\n')); } 
+    else { setContent(msg.content); }
+    setReplyingTo(null);
+    setTimeout(() => inputRef.current?.focus(), 10);
   };
 
   const handleEditChatClick = () => {
@@ -519,72 +441,37 @@ export default function ChatPage() {
     setIsSavingChat(false);
   };
 
-  const openGlobalMenu = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'message' | 'comment') => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
-    
-    let clientX, clientY;
-    if ('touches' in e && e.touches.length > 0) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = (e as React.MouseEvent).clientX;
-      clientY = (e as React.MouseEvent).clientY;
-    }
-    setContextMenu({ id: item.id, x: clientX, y: clientY, type, item });
-  };
-
-  const handleTouchStartPhoto = (e: React.TouchEvent | React.MouseEvent, url: string) => {
-    e.stopPropagation();
-    photoOpenedRef.current = false;
-    pressTimer.current = setTimeout(() => {
-      photoOpenedRef.current = true;
-      if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
-      setFullScreenImage(url);
-      setContextMenu(null);
-    }, 400); 
-  };
-
-  const clearPhotoTimer = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
-
   const parseContent = (rawText: string) => {
     const mediaUrls: string[] = [];
     const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
-    let match;
-    let text = rawText;
+    let match; let text = rawText;
     while ((match = mediaRegex.exec(text)) !== null) mediaUrls.push(match[1]);
     text = text.replace(mediaRegex, '').trim();
-    
     let quotedText = null;
     if (text.startsWith('> ')) {
       const parts = text.split('\n\n');
       quotedText = parts[0].replace('> ', '');
       text = parts.slice(1).join('\n\n');
     }
-
     const hasMedia = mediaUrls.length > 0;
     const hasText = !!text || !!quotedText;
     const isVideo = hasMedia && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
-    
     return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
   };
 
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 30000) : false; 
-  
-  let subtitleText = "";
-  let subtitleColor = "text-[#86868b] dark:text-[#98989d]"; 
+  let subtitleText = ""; let subtitleColor = "text-[#86868b] dark:text-[#98989d]"; 
 
   if (typingUsers.length > 0) {
-    if (typingUsers.length === 1) { subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping; } 
-    else { subtitleText = `${typingUsers.join(', ')} ${t.areTyping}`; }
+    if (typingUsers.length === 1) subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping; 
+    else subtitleText = `${typingUsers.join(', ')} ${t.areTyping}`;
   } else if (!isSavedChat) {
     if (isGroupOrChannel) {
-      if (membersCount === null) { subtitleText = isChannel ? t.channel : t.group; } 
+      if (membersCount === null) subtitleText = isChannel ? t.channel : t.group; 
       else {
-        if (isChannel) { subtitleText = `${membersCount} ${declOfNum(membersCount, t.subs, lang)}`; } 
-        else { subtitleText = `${membersCount} ${declOfNum(membersCount, t.members, lang)}, ${onlineCount || 1} ${t.onlineCount}`; }
+        if (isChannel) subtitleText = `${membersCount} ${declOfNum(membersCount, t.subs, lang)}`; 
+        else subtitleText = `${membersCount} ${declOfNum(membersCount, t.members, lang)}, ${onlineCount || 1} ${t.onlineCount}`;
       }
     } else {
       subtitleColor = isOnline ? 'text-[#1d1d1f] dark:text-[#f5f5f7] font-medium' : 'text-[#86868b] dark:text-[#98989d]';
@@ -593,7 +480,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={() => setContextMenu(null)}>
+    <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={() => setContextMenu(null)}>
       
       {/* ЛАЙТБОКС */}
       {fullScreenImage && (
@@ -603,7 +490,7 @@ export default function ChatPage() {
             <button onClick={() => downloadImage(fullScreenImage)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><Download size={24} /></button>
           </div>
           <div className="flex-1 flex items-center justify-center p-2 overflow-hidden touch-pinch-zoom">
-            <img src={fullScreenImage} alt="Fullscreen Media" className="max-w-full max-h-full object-contain select-none" />
+            <img src={fullScreenImage} alt="Media" className="max-w-full max-h-full object-contain select-none" />
           </div>
         </div>
       )}
@@ -659,7 +546,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ШАПКА ЧАТА */}
       <header className="px-3 pt-10 pb-3 border-b border-black/5 dark:border-white/5 flex items-center gap-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl relative z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
         <Link href="/"><a className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
         <div className="flex items-center gap-3.5 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
@@ -676,143 +562,51 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* ОСНОВНОЕ ОКНО СООБЩЕНИЙ */}
+      {/* ОКНО СООБЩЕНИЙ */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 pb-4 relative" onClick={() => setContextMenu(null)}>
         <div className="flex flex-col w-full max-w-full">
           {(() => {
             let lastDateStr = '';
-            
             return messages.map((msg: any) => {
               const isMe = String(msg.senderId) === String(currentUserId);
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(msg.content);
-              
               const dateObj = new Date(msg.createdAt);
               const dateLocale = lang === 'ru' ? 'ru-RU' : 'en-US';
               const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString(dateLocale, { day: 'numeric', month: 'long' });
               const showDate = currentDateStr !== '' && currentDateStr !== lastDateStr;
               if (showDate) lastDateStr = currentDateStr;
 
-              const reactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+              const mReactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
 
-              if (isGroupOrChannel) {
-                return (
-                  <div key={msg.id} className={`flex flex-col w-[90%] sm:w-[85%] mb-4 relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
-                    {showDate && (
-                      <div className="flex justify-center w-full my-4">
-                        <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">
-                          {currentDateStr}
-                        </span>
-                      </div>
-                    )}
-                    <div className={`flex flex-col w-[90%] sm:w-[85%] relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
-                      <div 
-                        className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative cursor-pointer`}
-                        onClick={(e) => openGlobalMenu(e, msg, 'message')}
-                        onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
-                      >
-                        {hasMedia && (
-                          <div className={`relative w-full overflow-hidden flex justify-center bg-[#f5f5f7] dark:bg-[#161618] ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
-                            {mediaUrls.map((url, idx) => (
-                               isVideo 
-                                 ? <video key={idx} src={url} controls className="w-full h-auto max-h-[400px] object-cover" />
-                                 : <img 
-                                      key={idx} src={url} loading="lazy" decoding="async" 
-                                      className="w-full h-auto max-h-[400px] object-cover pointer-events-none" 
-                                      onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
-                                      onMouseDown={(e) => handleTouchStartPhoto(e, url)}
-                                      onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                                      onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
-                                   />
-                            ))}
-                            
-                            {!hasText && (
-                              <div className="absolute bottom-2 right-2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
-                                 {timeStr}
-                                 {isMe && !isChannel && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{(!msg.isSending && (msg.read === true || msg.read === 1)) && <Check size={11} strokeWidth={2.5}/>}</div>}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        
-                        {hasText && (
-                          <div className="px-4 pt-3 pb-2.5">
-                             {quotedText && (
-                               <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
-                             )}
-                             <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
-                               {text}
-                               <span className="float-right inline-flex items-center gap-1 text-[11px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
-                                 {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
-                                 {timeStr}
-                                 {isMe && !isChannel && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{(!msg.isSending && (msg.read === true || msg.read === 1)) && <Check size={12} strokeWidth={2.5}/>}</div>}
-                               </span>
-                               <div className="clear-both"></div>
-                             </div>
-                          </div>
-                        )}
-
-                        {reactionsKeys.length > 0 && (
-                          <div className="px-4 pb-3 flex flex-wrap gap-1.5 pt-1.5">
-                             {reactionsKeys.map(key => (
-                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)]' : 'bg-[#f5f5f7] dark:bg-[#333336] text-[#86868b] dark:text-[#98989d] border-black/5 dark:border-white/5 shadow-sm'}`}>
-                                 <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
-                                 <span className="text-[13px] font-bold leading-none flex items-center justify-center mt-[1px]">{msg.reactions[key].count}</span>
-                               </button>
-                             ))}
-                          </div>
-                        )}
-
-                        <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); setThreadComments([]); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-b-[24px]">
-                          <div className="flex gap-2 items-center">
-                            <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                            <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-                              {msg.commentsCount > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount, t.commentsCount, lang)}` : t.comments}
-                            </span>
-                          </div>
-                          <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              // ЛИЧНЫЕ ЧАТЫ
               return (
                 <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
                   {showDate && (
-                    <div className="flex justify-center my-4 w-full">
+                    <div className="flex justify-center w-full my-4">
                       <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">{currentDateStr}</span>
                     </div>
                   )}
-                  
                   <div className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} relative`}>
-                    
                     <div 
-                      className={`shadow-[0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-none relative flex flex-col min-w-[60px] cursor-pointer ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`}
+                      className={`relative flex flex-col min-w-[60px] cursor-pointer ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`}
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
                       {hasMedia && (
-                        <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''} ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`}>
+                        <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`}>
                           {mediaUrls.map((url, idx) => (
-                             isVideo 
-                               ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} />
-                               : <img 
-                                    key={idx} src={url} loading="lazy" decoding="async" 
-                                    className={`w-full h-auto max-h-[400px] object-cover pointer-events-none ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} 
-                                    onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
-                                    onMouseDown={(e) => handleTouchStartPhoto(e, url)}
-                                    onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                                    onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
-                                 />
+                             <img 
+                                key={idx} src={url} loading="lazy" decoding="async" 
+                                className={`w-full h-auto max-h-[400px] object-cover pointer-events-none ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} 
+                                onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
+                                onMouseDown={(e) => handleTouchStartPhoto(e, url)}
+                                onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
+                             />
                           ))}
-                          
                           {!hasText && (
-                            <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
+                            <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
                                {timeStr}
-                               {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{(!msg.isSending && (msg.read === true || msg.read === 1)) && <Check size={11} strokeWidth={2.5}/>}</div>}
+                               {isMe && !isChannel && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{(!msg.isSending && (msg.read === true || msg.read === 1)) && <Check size={11} strokeWidth={2.5}/>}</div>}
                             </div>
                           )}
                         </div>
@@ -820,34 +614,28 @@ export default function ChatPage() {
                       
                       {hasText && (
                         <div className="px-3.5 pt-2 pb-2.5">
-                           {quotedText && (
-                             <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/10 dark:border-white/10'}`}>{quotedText}</div>
-                           )}
+                           {quotedText && <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate`}>{quotedText}</div>}
                            <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap">
                              {text}
-                             <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
+                             <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5">
                                {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                {timeStr}
-                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{(!msg.isSending && (msg.read === true || msg.read === 1)) && <Check size={12} strokeWidth={2.5}/>}</div>}
+                               {isMe && !isChannel && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{(!msg.isSending && (msg.read === true || msg.read === 1)) && <Check size={12} strokeWidth={2.5}/>}</div>}
                              </span>
                              <div className="clear-both"></div>
                            </div>
                         </div>
                       )}
                     </div>
-                    
-                    {reactionsKeys.length > 0 && (
+                    {mReactionsKeys.length > 0 && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                        {reactionsKeys.map(key => {
-                           const rData = msg.reactions[key] || { count: 1, users: [] };
-                           const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
-                           
+                        {mReactionsKeys.map(key => {
+                           const rData = msg.reactions[key];
+                           const count = typeof rData === 'number' ? rData : (rData?.count || 1);
                            return (
                              <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2.5 rounded-full border transition-transform active:scale-95 ${msg.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
-                               <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
-                                 {firstUser?.avatar ? <img src={firstUser.avatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
-                               </div>
-                               <span className="text-[13px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                               <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                               <span className="text-[13px] font-bold leading-none flex items-center justify-center mt-[1px]">{count}</span>
                              </button>
                            );
                         })}
@@ -861,7 +649,7 @@ export default function ChatPage() {
         </div>
       </main>
 
-      {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ ЧАТОВ (группы/каналы) */}
+      {/* МОДАЛКА КОММЕНТАРИЕВ */}
       {activeThread && (
         <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={() => setContextMenu(null)}>
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
@@ -871,7 +659,7 @@ export default function ChatPage() {
             </div>
           </header>
           
-          <div ref={commentsScrollRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10">
             <div className="bg-white dark:bg-[#222224] p-4 rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none mb-2 border border-black/5 dark:border-white/5 flex flex-col">
               <span className="font-semibold text-[14px] text-[#86868b] dark:text-[#98989d] mb-1 block">{activeThread.senderName || t.companion}</span>
               {parseContent(activeThread.content).hasMedia && (
@@ -905,9 +693,7 @@ export default function ChatPage() {
                        </div>
                        <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
                          <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
-                         {quotedText && (
-                           <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
-                         )}
+                         {quotedText && <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>}
                          {hasMedia && (
                              <img 
                                src={mediaUrls[0]} 
@@ -917,24 +703,21 @@ export default function ChatPage() {
                                onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
                              />
                          )}
-                         {hasText && (
-                             <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{text}</span>
-                         )}
+                         {hasText && <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{text}</span>}
                          <span className="text-[11px] text-[#86868b] dark:text-[#98989d] mt-1.5 text-right">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                        </div>
                      </div>
 
+                     {/* Реакции под комментарием */}
                      {cReactionsKeys.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1 justify-start pl-12">
                           {cReactionsKeys.map(key => {
-                             const rData = c.reactions[key] || { count: 1, users: [] };
-                             const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
+                             const rData = c.reactions[key];
+                             const count = typeof rData === 'number' ? rData : (rData?.count || 1);
                              return (
-                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className="flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border bg-[#f5f5f7] dark:bg-[#333336] shadow-sm">
-                                 <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
-                                   {firstUser?.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
-                                 </div>
-                                 <span className="text-[13px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                                 <span className="text-[13px] leading-none flex items-center justify-center mt-[1px] pl-1">{key}</span>
+                                 <span className="text-[11px] font-bold leading-none flex items-center justify-center mt-[1px] pl-1">{count}</span>
                                </button>
                              );
                           })}
@@ -947,7 +730,7 @@ export default function ChatPage() {
           </div>
           
           <div className="bg-white/80 dark:bg-[#222224]/80 border-t border-black/5 dark:border-white/5 relative z-10 flex flex-col backdrop-blur-xl">
-            {commentReplyingTo && (
+             {commentReplyingTo && (
               <div className="flex items-center justify-between mb-1 mt-3 mx-4 px-4 py-2.5 bg-[#f5f5f7] dark:bg-[#161618] rounded-[14px] border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7]">
                 <div className="flex flex-col mr-4">
                   <span className="text-[11px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] uppercase">{t.replyAction}</span>
@@ -955,10 +738,10 @@ export default function ChatPage() {
                 </div>
                 <button type="button" onClick={() => setCommentReplyingTo(null)} className="p-1.5 flex-shrink-0 text-[#86868b]"><X size={16} /></button>
               </div>
-            )}
+             )}
             <form onSubmit={handleSendComment} className="p-3 flex items-center gap-2 pb-6">
               <input type="file" accept="image/*,video/*" className="hidden" ref={commentFileInputRef} onChange={handleCommentFileUpload} />
-              <button type="button" onClick={() => commentFileInputRef.current?.click()} disabled={isCommentUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors disabled:opacity-50">
+              <button type="button" onClick={() => commentFileInputRef.current?.click()} disabled={isCommentUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50">
                 {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
               </button>
               <input 
@@ -1015,6 +798,8 @@ export default function ChatPage() {
       {contextMenu && (() => {
          const menuWidth = 220; const menuHeight = 250;
          let safeX = contextMenu.x; let safeY = contextMenu.y;
+         
+         // Умная логика отступов, чтобы ничего не обрезалось
          if (safeX + menuWidth > window.innerWidth) safeX = window.innerWidth - menuWidth - 10;
          if (safeY + menuHeight > window.innerHeight) safeY = safeY - menuHeight;
          if (safeY < 0) safeY = 20;
