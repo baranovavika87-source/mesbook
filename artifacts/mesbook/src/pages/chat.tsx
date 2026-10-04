@@ -106,22 +106,17 @@ const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
   if (!timestamp) return lang === 'ru' ? 'недавно' : 'recently';
   const date = new Date(timestamp);
   const now = new Date();
-  
   const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-  
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
 
   const timeStr = date.toLocaleTimeString(lang === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' });
-  
   if (isToday) return lang === 'ru' ? `сегодня в ${timeStr}` : `today at ${timeStr}`;
   if (isYesterday) return lang === 'ru' ? `вчера в ${timeStr}` : `yesterday at ${timeStr}`;
-  
   const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
   let dateStr = date.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', options);
   if (lang === 'ru') dateStr = dateStr.replace('.', '');
-  
   return lang === 'ru' ? `${dateStr} в ${timeStr}` : `${dateStr} at ${timeStr}`;
 };
 
@@ -153,12 +148,13 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   
+  const [menuPos, setMenuPos] = useState<{ x: number, y: number } | null>(null);
   const [activeContextMenu, setActiveContextMenu] = useState<number | null>(null);
+  const [activeCommentMenu, setActiveCommentMenu] = useState<number | null>(null);
   
   const [activeThread, setActiveThread] = useState<any>(null);
   const [threadComments, setThreadComments] = useState<any[]>([]);
   const [commentContent, setCommentContent] = useState('');
-  const [activeCommentMenu, setActiveCommentMenu] = useState<number | null>(null);
   const [isCommentUploading, setIsCommentUploading] = useState(false);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
   const [commentReplyingTo, setCommentReplyingTo] = useState<any>(null);
@@ -186,7 +182,9 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const commentsScrollRef = useRef<HTMLDivElement>(null);
   const hasScrolledToBottom = useRef(false);
-  const pressTimer = useRef<NodeJS.Timeout | null>(null);
+  
+  const photoOpenedRef = useRef(false);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const [chatInfo, setChatInfo] = useState<any>(() => {
     if (isSavedChat) return { participant: { displayName: t.saved, isSaved: true } };
@@ -211,40 +209,16 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!socket) socket = io(window.location.origin, { path: '/socket.io' });
-    
     if (!isSavedChat) {
       socket.emit('join', String(chatId));
       const handleUpdate = (updatedChatId: number) => { if (Number(updatedChatId) === Number(chatId)) loadData(); };
-      const handleTyping = (data: any) => {
-        if (Number(data.chatId) === Number(chatId) && data.name !== chatInfo?.participant?.displayName) {
-          setTypingUsers(prev => prev.includes(data.name) ? prev : [...prev, data.name]);
-          setTimeout(() => setTypingUsers(prev => prev.filter(n => n !== data.name)), 3000);
-        }
-      };
-
       socket.on('chat_update', handleUpdate);
-      socket.on('typing', handleTyping);
-
-      return () => {
-        socket.off('chat_update', handleUpdate);
-        socket.off('typing', handleTyping);
-      };
+      return () => { socket.off('chat_update', handleUpdate); };
     }
   }, [chatId]);
 
-  useEffect(() => {
-    if (!isSavedChat && messages.length > 0) {
-      const confirmedMsgs = messages.filter(m => !m.isSending);
-      localStorage.setItem('mesbook_messages_cache_' + currentUserId + '_' + chatId, JSON.stringify(confirmedMsgs));
-    }
-  }, [messages, chatId, currentUserId, isSavedChat]);
-
   const loadData = async () => {
-    if (isSavedChat) {
-      setIsLoadingRole(false);
-      return;
-    }
-    
+    if (isSavedChat) { setIsLoadingRole(false); return; }
     if (isGroupOrChannel) {
       try {
         const roleRes = await fetch(`/api/chats/${chatId}/is_member`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
@@ -260,15 +234,6 @@ export default function ChatPage() {
     setIsLoadingRole(false);
 
     try { await fetch('/api/chats/' + chatId + '/read', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
-    
-    try {
-      const infoRes = await fetch('/api/chats', { headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' } });
-      if (infoRes.ok) {
-        const data = await infoRes.json();
-        const currentChat = data.find((c: any) => String(c.id) === String(chatId) || String(c.participant?.id) === String(chatId));
-        if (currentChat) setChatInfo(currentChat);
-      }
-    } catch (e) {}
     
     try {
       const msgRes = await fetch('/api/chats/' + chatId + '/messages', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
@@ -291,9 +256,7 @@ export default function ChatPage() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, [chatId, activeThread]);
+  useEffect(() => { loadData(); }, [chatId, activeThread]);
 
   useEffect(() => {
     if (scrollRef.current && !hasScrolledToBottom.current && messages.length > 0) {
@@ -301,12 +264,6 @@ export default function ChatPage() {
       hasScrolledToBottom.current = true;
     }
   }, [messages]);
-  
-  useEffect(() => {
-    if (commentsScrollRef.current && threadComments.length > 0) {
-      commentsScrollRef.current.scrollTop = commentsScrollRef.current.scrollHeight;
-    }
-  }, [threadComments]);
 
   const forceScrollToBottom = () => { setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 10); };
 
@@ -322,24 +279,8 @@ export default function ChatPage() {
         const parts = editingMsg.content.split('\n\n');
         finalEditedContent = `${parts[0]}\n\n${newTextContent}`;
       }
-      
-      if (isSavedChat) {
-        setMessages((prev: any) => {
-          const updated = prev.map((m: any) => m.id === tempId ? { ...m, content: finalEditedContent, isEdited: true } : m);
-          localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
-          return updated;
-        });
-        setContent('');
-        setEditingMsg(null);
-        setTimeout(() => inputRef.current?.focus(), 10);
-        return;
-      }
-
       setMessages(prev => prev.map(m => m.id === tempId ? { ...m, content: finalEditedContent, isEdited: true } : m));
-      setContent('');
-      setEditingMsg(null);
-      setTimeout(() => inputRef.current?.focus(), 10);
-
+      setContent(''); setEditingMsg(null);
       try {
         await fetch(`/api/chats/${chatId}/messages/${tempId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalEditedContent }) });
         loadData();
@@ -349,21 +290,9 @@ export default function ChatPage() {
 
     const tempContent = content.trim();
     const finalContent = replyingTo ? `> ${replyingTo.content}\n\n${tempContent}` : tempContent;
-    setContent('');
-    setReplyingTo(null);
+    setContent(''); setReplyingTo(null);
     
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, 10);
-    
-    // ИСПРАВЛЕНИЕ ОДНОЙ ГАЛОЧКИ: при отправке read всегда false 
     const tempMsg = { id: Date.now(), content: finalContent, isSending: !isSavedChat, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
-    if (isSavedChat) {
-      setMessages((prev: any) => { const u = [...prev, { ...tempMsg, isSending: false }]; localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(u)); return u; });
-      forceScrollToBottom(); return;
-    }
     setMessages((prev: any) => [...prev, tempMsg]);
     forceScrollToBottom();
     try {
@@ -375,60 +304,13 @@ export default function ChatPage() {
   const handleSendComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentContent.trim() || !activeThread) return;
-    
     const tempContent = commentContent.trim();
     const finalContent = commentReplyingTo ? `> ${commentReplyingTo.content}\n\n${tempContent}` : tempContent;
-    
-    setCommentContent('');
-    setCommentReplyingTo(null);
+    setCommentContent(''); setCommentReplyingTo(null);
     try {
       await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalContent, parentId: activeThread.id }) });
       loadData();
     } catch (error) {}
-  };
-
-  const handleCommentFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !activeThread) return;
-    setIsCommentUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', 'mesogram-cloud'); 
-    try {
-      const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.secure_url) { 
-        await fetch(`/api/chats/${chatId}/messages`, { 
-           method: 'POST', 
-           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
-           body: JSON.stringify({ content: `[MEDIA] ${data.secure_url}`, parentId: activeThread.id }) 
-        });
-        loadData();
-      }
-    } catch (err: any) {} 
-    finally { 
-      setIsCommentUploading(false); 
-      if (commentFileInputRef.current) commentFileInputRef.current.value = ''; 
-    }
-  };
-
-  const deleteComment = async (commentId: number) => {
-    try {
-      await fetch(`/api/chats/${activeThread.chatId}/messages/${commentId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId } });
-      loadData();
-    } catch (e) {}
-  };
-
-  const startEditing = (msg: any) => {
-    setEditingMsg(msg);
-    if (msg.content.startsWith('> ')) { setContent(msg.content.split('\n\n').slice(1).join('\n\n')); } 
-    else { setContent(msg.content); }
-    setReplyingTo(null);
-    setTimeout(() => inputRef.current?.focus(), 10);
-  };
-
-  const joinChat = async () => {
-    try { await fetch(`/api/chats/${chatId}/join`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); setIsMember(true); loadData(); } catch (e) {}
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -450,93 +332,108 @@ export default function ChatPage() {
   };
 
   const handleDelete = async (msgId: number) => {
-    if (isSavedChat) {
-      const updated = messages.filter((m: any) => m.id !== msgId);
-      setMessages(updated);
-      localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(updated));
-      return;
-    }
     try { await fetch('/api/chats/' + chatId + '/messages/' + msgId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId } }); loadData(); } catch (e) {}
   };
 
-  const toggleReaction = async (msgId: number, reaction: string) => {
+  const toggleReaction = async (msgId: number, reaction: string, isComment = false) => {
     try {
-      await fetch(`/api/chats/${chatId}/messages/${msgId}/reaction`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ reaction }) });
+      const targetChatId = isComment && activeThread ? activeThread.chatId : chatId;
+      await fetch(`/api/chats/${targetChatId}/messages/${msgId}/reaction`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ reaction }) });
       loadData();
     } catch (e) {}
+    closeMenus();
   };
 
-  const downloadImage = async (url: string) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const objectUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = `mesogram_photo_${Date.now()}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(objectUrl);
-    } catch (e) { window.open(url, '_blank'); }
-  };
-
-  const handleEditChatClick = () => {
-    setEditChatName(chatInfo?.participant?.displayName || '');
-    setEditChatDesc(chatInfo?.participant?.description || chatInfo?.participant?.bio || '');
-    setEditChatAvatar(chatInfo?.participant?.avatarUrl || '');
-    setIsEditingChat(true);
-  };
-
-  const handleEditAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsSavingChat(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', 'mesogram-cloud'); 
-    try {
-      const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.secure_url) setEditChatAvatar(data.secure_url);
-    } catch (err) {}
-    setIsSavingChat(false);
-  };
-
-  const handleSaveChatSettings = async () => {
-    setIsSavingChat(true);
-    try {
-      const res = await fetch(`/api/chats/${chatId}`, { method: 'PATCH', headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: editChatName, description: editChatDesc, avatarUrl: editChatAvatar }) });
-      if (res.ok) { setIsEditingChat(false); loadData(); }
-    } catch(e) {}
-    setIsSavingChat(false);
-  };
-
-  const handleImageInteraction = (e: React.TouchEvent | React.MouseEvent, url: string) => {
+  // --- ЛОГИКА МЕНЮ И КЛИКОВ ПО КООРДИНАТАМ ---
+  const openMenu = (e: React.MouseEvent | React.TouchEvent, id: number, isComment = false) => {
     e.stopPropagation();
-    pressTimer.current = setTimeout(() => {
+    e.preventDefault();
+    let clientX, clientY;
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = (e as React.MouseEvent).clientX;
+      clientY = (e as React.MouseEvent).clientY;
+    }
+    setMenuPos({ x: clientX, y: clientY });
+    if (isComment) { setActiveCommentMenu(id); setActiveContextMenu(null); } 
+    else { setActiveContextMenu(id); setActiveCommentMenu(null); }
+  };
+
+  const handleTouchStartPhoto = (e: React.TouchEvent | React.MouseEvent, url: string) => {
+    e.stopPropagation();
+    photoOpenedRef.current = false;
+    longPressTimer.current = setTimeout(() => {
+      photoOpenedRef.current = true;
       if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
       setFullScreenImage(url);
+      closeMenus();
     }, 400); 
   };
 
-  const clearTimer = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
-  
+  const clearPhotoTimer = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); };
+
+  const handleMessageClick = (e: React.MouseEvent | React.TouchEvent, id: number, isComment = false) => {
+    e.stopPropagation();
+    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
+    openMenu(e, id, isComment);
+  };
+
+  const closeMenus = () => { setActiveContextMenu(null); setActiveCommentMenu(null); setMenuPos(null); };
+
+  const renderFixedMenu = (menuContent: React.ReactNode) => {
+    if (!menuPos) return null;
+    const menuWidth = 220;
+    const menuHeight = 220; 
+    let safeX = menuPos.x;
+    let safeY = menuPos.y;
+    
+    if (safeX + menuWidth > window.innerWidth) safeX = window.innerWidth - menuWidth - 10;
+    if (safeY + menuHeight > window.innerHeight) safeY = safeY - menuHeight;
+    if (safeY < 0) safeY = 10;
+    
+    return (
+      <>
+        <div className="fixed inset-0 z-[110]" onClick={(e) => { e.stopPropagation(); closeMenus(); }} onContextMenu={(e) => { e.preventDefault(); closeMenus(); }} />
+        <div className="fixed z-[120] flex flex-col gap-2 animate-in zoom-in-[0.95] fade-in duration-200 ease-out" style={{ top: safeY, left: safeX }}>
+           {menuContent}
+        </div>
+      </>
+    );
+  };
+
+  const parseContent = (rawText: string) => {
+    const mediaUrls: string[] = [];
+    const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
+    let match; let text = rawText;
+    while ((match = mediaRegex.exec(text)) !== null) mediaUrls.push(match[1]);
+    text = text.replace(mediaRegex, '').trim();
+    let quotedText = null;
+    if (text.startsWith('> ')) {
+      const parts = text.split('\n\n');
+      quotedText = parts[0].replace('> ', '');
+      text = parts.slice(1).join('\n\n');
+    }
+    const hasMedia = mediaUrls.length > 0;
+    const hasText = !!text || !!quotedText;
+    const isVideo = hasMedia && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
+    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
+  };
+
   const lastSeen = chatInfo?.participant?.lastSeen;
   const isOnline = lastSeen ? (Date.now() - lastSeen < 30000) : false; 
-  
-  let subtitleText = "";
-  let subtitleColor = "text-[#86868b] dark:text-[#98989d]"; 
+  let subtitleText = ""; let subtitleColor = "text-[#86868b] dark:text-[#98989d]"; 
 
   if (typingUsers.length > 0) {
-    if (typingUsers.length === 1) { subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping; } 
-    else { subtitleText = `${typingUsers.join(', ')} ${t.areTyping}`; }
+    if (typingUsers.length === 1) subtitleText = isGroupOrChannel ? `${typingUsers[0]} ${t.isTyping}` : t.isTyping; 
+    else subtitleText = `${typingUsers.join(', ')} ${t.areTyping}`;
   } else if (!isSavedChat) {
     if (isGroupOrChannel) {
-      if (membersCount === null) { subtitleText = isChannel ? t.channel : t.group; } 
+      if (membersCount === null) subtitleText = isChannel ? t.channel : t.group; 
       else {
-        if (isChannel) { subtitleText = `${membersCount} ${declOfNum(membersCount, t.subs, lang)}`; } 
-        else { subtitleText = `${membersCount} ${declOfNum(membersCount, t.members, lang)}, ${onlineCount || 1} ${t.onlineCount}`; }
+        if (isChannel) subtitleText = `${membersCount} ${declOfNum(membersCount, t.subs, lang)}`; 
+        else subtitleText = `${membersCount} ${declOfNum(membersCount, t.members, lang)}, ${onlineCount || 1} ${t.onlineCount}`;
       }
     } else {
       subtitleColor = isOnline ? 'text-[#1d1d1f] dark:text-[#f5f5f7] font-medium' : 'text-[#86868b] dark:text-[#98989d]';
@@ -544,35 +441,12 @@ export default function ChatPage() {
     }
   }
 
-  const parseContent = (rawText: string) => {
-    const mediaUrls: string[] = [];
-    const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
-    let match;
-    let text = rawText;
-    while ((match = mediaRegex.exec(text)) !== null) mediaUrls.push(match[1]);
-    text = text.replace(mediaRegex, '').trim();
-    
-    let quotedText = null;
-    if (text.startsWith('> ')) {
-      const parts = text.split('\n\n');
-      quotedText = parts[0].replace('> ', '');
-      if (quotedText.startsWith('[MEDIA]')) quotedText = t.photo;
-      text = parts.slice(1).join('\n\n');
-    }
-
-    const hasMedia = mediaUrls.length > 0;
-    const hasText = !!text || !!quotedText;
-    const isVideo = hasMedia && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
-    
-    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
-  };
-
   return (
-    <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={() => setActiveContextMenu(null)}>
+    <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={closeMenus}>
       
       {/* ЛАЙТБОКС */}
       {fullScreenImage && (
-        <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in duration-200 ease-out">
+        <div className="fixed inset-0 z-[200] bg-black flex flex-col animate-in fade-in duration-200 ease-out">
           <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-10">
             <button onClick={() => setFullScreenImage(null)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><X size={24} /></button>
             <button onClick={() => downloadImage(fullScreenImage)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><Download size={24} /></button>
@@ -585,7 +459,7 @@ export default function ChatPage() {
 
       {/* МОДАЛКА КОММЕНТАРИЕВ */}
       {activeThread && (
-        <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={() => setActiveCommentMenu(null)}>
+        <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={closeMenus}>
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
             <div className="flex items-center gap-4">
               <button onClick={() => setActiveThread(null)} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
@@ -611,31 +485,34 @@ export default function ChatPage() {
             {threadComments.length === 0 ? (
                <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
             ) : (
-               threadComments.map((c, index) => {
+               threadComments.map((c) => {
                  const isCommentMenuOpen = activeCommentMenu === c.id;
                  const isMyComment = String(c.senderId) === String(currentUserId);
                  const { text, quotedText, hasMedia, mediaUrls, hasText } = parseContent(c.content);
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
-                 const isLastComment = index === threadComments.length - 1;
 
                  return (
                    <div key={c.id} className={`relative flex flex-col mb-2 ${isCommentMenuOpen ? 'z-[100]' : 'z-10'}`}>
                      <div 
                         className="flex gap-3 items-start cursor-pointer" 
-                        onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(isCommentMenuOpen ? null : c.id); }}
+                        onClick={(e) => handleMessageClick(e, c.id, true)}
+                        onContextMenu={(e) => { e.preventDefault(); openMenu(e, c.id, true); }}
                      >
                        <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
                          {c.senderAvatar ? <img src={c.senderAvatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
                        </div>
                        <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
                          <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
-                         
                          {quotedText && (
                            <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
                          )}
-
                          {hasMedia && (
-                             <img src={mediaUrls[0]} onClick={(e) => { e.stopPropagation(); setFullScreenImage(mediaUrls[0]); }} className={`max-h-[200px] w-auto object-cover cursor-pointer ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} />
+                             <img 
+                               src={mediaUrls[0]} 
+                               className={`max-h-[200px] w-auto object-cover ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
+                               onTouchStart={(e) => handleTouchStartPhoto(e, mediaUrls[0])} onMouseDown={(e) => handleTouchStartPhoto(e, mediaUrls[0])}
+                               onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
+                             />
                          )}
                          {hasText && (
                              <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{text}</span>
@@ -644,14 +521,13 @@ export default function ChatPage() {
                        </div>
                      </div>
 
-                     {/* Реакции под комментарием */}
                      {cReactionsKeys.length > 0 && (
                         <div className={`flex flex-wrap gap-1 mt-1 justify-start pl-12`}>
                           {cReactionsKeys.map(key => {
                              const rData = c.reactions[key] || { count: 1, users: [] };
                              const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
                              return (
-                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                  <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                    {firstUser?.avatar ? <img src={firstUser.avatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
                                  </div>
@@ -662,35 +538,32 @@ export default function ChatPage() {
                         </div>
                      )}
 
-                     {/* Меню для комментариев */}
-                     {isCommentMenuOpen && (
-                        <>
-                          <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(null); }} />
-                          <div className={`absolute z-[70] flex flex-col gap-2 left-12 ${isLastComment ? 'bottom-full mb-1' : 'top-full mt-1'} min-w-[200px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out`}>
-                             <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
-                               {FAST_REACTIONS.map(emoji => (
-                                 <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, emoji); setActiveCommentMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${c.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
-                                   {emoji}
-                                 </button>
-                               ))}
-                             </div>
-                             <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
-                                <button onClick={(e) => { e.stopPropagation(); setCommentReplyingTo(c); setActiveCommentMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                  <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
-                                </button>
-                                {hasText && (
-                                  <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); setActiveCommentMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                    <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
-                                  </button>
-                                )}
-                                {isMyComment && (
-                                  <button onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(null); deleteComment(c.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
-                                    <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
-                                  </button>
-                                )}
-                             </div>
-                          </div>
-                        </>
+                     {/* МЕНЮ КОММЕНТАРИЯ (По координатам) */}
+                     {isCommentMenuOpen && renderFixedMenu(
+                       <>
+                         <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
+                           {FAST_REACTIONS.map(emoji => (
+                             <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, emoji, true); closeMenus(); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${c.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
+                               {emoji}
+                             </button>
+                           ))}
+                         </div>
+                         <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
+                            <button onClick={(e) => { e.stopPropagation(); setCommentReplyingTo(c); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5 last:border-0">
+                              <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
+                            </button>
+                            {hasText && (
+                              <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5 last:border-0">
+                                <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
+                              </button>
+                            )}
+                            {isMyComment && (
+                              <button onClick={(e) => { e.stopPropagation(); closeMenus(); deleteComment(c.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5 last:border-0">
+                                <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
+                              </button>
+                            )}
+                         </div>
+                       </>
                      )}
                    </div>
                  );
@@ -731,57 +604,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ПРОФИЛЬ */}
-      {showProfile && chatInfo?.participant && (
-        <div className="fixed inset-0 z-[150] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out overflow-y-auto">
-          <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-            <div className="flex items-center gap-6">
-              <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
-              <h1 className="text-[20px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.info}</h1>
-            </div>
-            {isAdmin && !isEditingChat && (
-              <button onClick={handleEditChatClick} className="p-1 text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform"><Edit3 size={24} /></button>
-            )}
-            {isEditingChat && (
-              <button onClick={handleSaveChatSettings} disabled={isSavingChat} className="p-1 text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform">
-                {isSavingChat ? <Loader2 size={24} className="animate-spin" /> : <Check size={26} strokeWidth={2.5} />}
-              </button>
-            )}
-          </header>
-          
-          {isEditingChat ? (
-            <div className="px-4 pt-8 w-full max-w-lg mx-auto flex flex-col gap-5">
-              <div className="flex justify-center mb-4">
-                <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-white dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 relative cursor-pointer" onClick={() => editAvatarRef.current?.click()}>
-                  {editChatAvatar && editChatAvatar.length > 5 ? <img src={editChatAvatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <Camera size={36} className="text-[#86868b] dark:text-[#98989d]" />}
-                  {isSavingChat && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
-                </div>
-                <input type="file" accept="image/*" className="hidden" ref={editAvatarRef} onChange={handleEditAvatarUpload} />
-              </div>
-              <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden border border-black/5 dark:border-white/5">
-                <div className="px-5 py-3 border-b border-black/5 dark:border-white/5">
-                  <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mt-1">{t.name}</label>
-                  <input type="text" value={editChatName} onChange={e => setEditChatName(e.target.value)} className="w-full bg-transparent py-1.5 text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
-                </div>
-                <div className="px-5 py-4">
-                  <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mb-2">{t.desc}</label>
-                  <textarea rows={4} value={editChatDesc} onChange={e => setEditChatDesc(e.target.value)} className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none" />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center pt-8 pb-4">
-              <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 mb-4">
-                {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? <img src={chatInfo.participant.avatarUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <span className="text-[40px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>}
-              </div>
-              <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 text-center px-4 tracking-tight">{chatInfo.participant.displayName}</h2>
-              {chatInfo.participant.username && <p className="text-[15px] text-[#86868b] dark:text-[#98989d]">{chatInfo.participant.username}</p>}
-              <p className={`mt-1.5 text-[13px] font-medium ${subtitleColor}`}>{subtitleText}</p>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ШАПКА ЧАТА */}
       <header className="px-3 pt-10 pb-3 border-b border-black/5 dark:border-white/5 flex items-center gap-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl relative z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
         <Link href="/"><a className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
@@ -800,12 +622,12 @@ export default function ChatPage() {
       </header>
 
       {/* ОСНОВНОЕ ОКНО СООБЩЕНИЙ */}
-      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 pb-12 relative" onClick={() => setActiveContextMenu(null)}>
+      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 pb-12 relative" onClick={closeMenus}>
         <div className="flex flex-col w-full max-w-full">
           {(() => {
             let lastDateStr = '';
             
-            return messages.map((msg: any, index) => {
+            return messages.map((msg: any) => {
               const isMe = String(msg.senderId) === String(currentUserId);
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(msg.content);
               
@@ -818,12 +640,10 @@ export default function ChatPage() {
               const reactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
               const isMenuOpen = activeContextMenu === msg.id;
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-              
-              const isLastMessage = index >= messages.length - 2;
 
               if (isGroupOrChannel) {
                 return (
-                  <div key={msg.id} className={`flex flex-col w-[90%] sm:w-[85%] mb-4 relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
+                  <div key={msg.id} className={`flex flex-col w-[90%] sm:w-[85%] mb-4 relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
                     {showDate && (
                       <div className="flex justify-center w-full my-4">
                         <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">
@@ -834,7 +654,8 @@ export default function ChatPage() {
                     <div className={`flex flex-col w-[90%] sm:w-[85%] relative ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
                       <div 
                         className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative cursor-pointer`}
-                        onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : msg.id); }}
+                        onClick={(e) => handleMessageClick(e, msg.id)}
+                        onContextMenu={(e) => { e.preventDefault(); openMenu(e, msg.id); }}
                       >
                         {hasMedia && (
                           <div className={`relative w-full overflow-hidden flex justify-center bg-[#f5f5f7] dark:bg-[#161618] ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
@@ -843,9 +664,9 @@ export default function ChatPage() {
                                  ? <video key={idx} src={url} controls className="w-full h-auto max-h-[400px] object-cover" />
                                  : <img 
                                       key={idx} src={url} loading="lazy" decoding="async" 
-                                      className="w-full h-auto max-h-[400px] object-cover pointer-events-none" 
-                                      onTouchStart={(e) => handleImageInteraction(e, url)} onMouseDown={(e) => handleImageInteraction(e, url)}
-                                      onTouchEnd={clearTimer} onTouchMove={clearTimer} onMouseUp={clearTimer} onMouseLeave={clearTimer}
+                                      className="w-full h-auto max-h-[400px] object-cover" 
+                                      onTouchStart={(e) => handleTouchStartPhoto(e, url)} onMouseDown={(e) => handleTouchStartPhoto(e, url)}
+                                      onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
                                       onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
                                    />
                             ))}
@@ -853,7 +674,7 @@ export default function ChatPage() {
                             {!hasText && (
                               <div className="absolute bottom-2 right-2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
                                  {timeStr}
-                                 {isMe && !isChannel && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{(!msg.isSending && (msg.read === true || msg.read === 1)) && <Check size={11} strokeWidth={2.5}/>}</div>}
+                                 {isMe && !isChannel && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{msg.read === true && <Check size={11} strokeWidth={2.5}/>}</div>}
                               </div>
                             )}
                           </div>
@@ -869,7 +690,7 @@ export default function ChatPage() {
                                <span className="float-right inline-flex items-center gap-1 text-[11px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
                                  {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                  {timeStr}
-                                 {isMe && !isChannel && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{(!msg.isSending && (msg.read === true || msg.read === 1)) && <Check size={12} strokeWidth={2.5}/>}</div>}
+                                 {isMe && !isChannel && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{msg.read === true && <Check size={12} strokeWidth={2.5}/>}</div>}
                                </span>
                                <div className="clear-both"></div>
                              </div>
@@ -887,7 +708,7 @@ export default function ChatPage() {
                           </div>
                         )}
 
-                        <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); setThreadComments([]); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-b-[24px]">
+                        <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); setThreadComments([]); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04]">
                           <div className="flex gap-2 items-center">
                             <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
                             <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
@@ -898,47 +719,44 @@ export default function ChatPage() {
                         </button>
                       </div>
 
-                      {/* МЕНЮ ВНЕ КАРТОЧКИ */}
-                      {isMenuOpen && (
+                      {/* МЕНЮ СООБЩЕНИЯ ГРУППЫ */}
+                      {isMenuOpen && renderFixedMenu(
                         <>
-                          <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} />
-                          <div className={`absolute z-[70] flex flex-col gap-2 ${isMe ? 'right-0 items-end' : 'left-0 items-start'} ${isLastMessage ? 'bottom-full mb-1' : 'top-full mt-1'} min-w-[200px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out`}>
-                            <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
-                               {FAST_REACTIONS.map(emoji => (
-                                 <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
-                                   {emoji}
-                                 </button>
-                               ))}
-                            </div>
-
-                            {(!isChannel || isAdmin) && (
-                              <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
-                                 {(!isChannel) && (
-                                   <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                     <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
-                                   </button>
-                                 )}
-                                 
-                                 {hasText && (
-                                   <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                     <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
-                                   </button>
-                                 )}
-
-                                 {isMe && hasText && (
-                                   <button onClick={(e) => { e.stopPropagation(); startEditing(msg); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                     <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
-                                   </button>
-                                 )}
-
-                                 {(isMe || isAdmin) && (
-                                   <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
-                                     <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
-                                   </button>
-                                 )}
-                              </div>
-                            )}
+                          <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
+                             {FAST_REACTIONS.map(emoji => (
+                               <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); closeMenus(); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
+                                 {emoji}
+                               </button>
+                             ))}
                           </div>
+
+                          {(!isChannel || isAdmin) && (
+                            <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
+                               {(!isChannel) && (
+                                 <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5 last:border-0">
+                                   <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
+                                 </button>
+                               )}
+                               
+                               {hasText && (
+                                 <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5 last:border-0">
+                                   <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
+                                 </button>
+                               )}
+
+                               {isMe && hasText && (
+                                 <button onClick={(e) => { e.stopPropagation(); startEditing(msg); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5 last:border-0">
+                                   <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
+                                 </button>
+                               )}
+
+                               {(isMe || isAdmin) && (
+                                 <button onClick={(e) => { e.stopPropagation(); closeMenus(); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5 last:border-0">
+                                   <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
+                                 </button>
+                               )}
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -948,7 +766,7 @@ export default function ChatPage() {
 
               // ЛИЧНЫЕ ЧАТЫ
               return (
-                <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
+                <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
                   {showDate && (
                     <div className="flex justify-center my-4 w-full">
                       <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">{currentDateStr}</span>
@@ -959,7 +777,8 @@ export default function ChatPage() {
                     
                     <div 
                       className={`shadow-[0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-none relative flex flex-col min-w-[60px] cursor-pointer ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`}
-                      onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : msg.id); }}
+                      onClick={(e) => handleMessageClick(e, msg.id)}
+                      onContextMenu={(e) => { e.preventDefault(); openMenu(e, msg.id); }}
                     >
                       {hasMedia && (
                         <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''} ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`}>
@@ -968,9 +787,9 @@ export default function ChatPage() {
                                ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} />
                                : <img 
                                     key={idx} src={url} loading="lazy" decoding="async" 
-                                    className={`w-full h-auto max-h-[400px] object-cover pointer-events-none ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} 
-                                    onTouchStart={(e) => handleImageInteraction(e, url)} onMouseDown={(e) => handleImageInteraction(e, url)}
-                                    onTouchEnd={clearTimer} onTouchMove={clearTimer} onMouseUp={clearTimer} onMouseLeave={clearTimer}
+                                    className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} 
+                                    onTouchStart={(e) => handleTouchStartPhoto(e, url)} onMouseDown={(e) => handleTouchStartPhoto(e, url)}
+                                    onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
                                     onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
                                  />
                           ))}
@@ -978,7 +797,8 @@ export default function ChatPage() {
                           {!hasText && (
                             <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
                                {timeStr}
-                               {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{(!msg.isSending && (msg.read === true || msg.read === 1)) && <Check size={11} strokeWidth={2.5}/>}</div>}
+                               {/* ИСПРАВЛЕНИЕ: ТОЛЬКО 1 ГАЛОЧКА ПРИ ОТПРАВКЕ */}
+                               {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{msg.read === true && <Check size={11} strokeWidth={2.5}/>}</div>}
                             </div>
                           )}
                         </div>
@@ -994,7 +814,8 @@ export default function ChatPage() {
                              <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
                                {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                {timeStr}
-                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{(!msg.isSending && (msg.read === true || msg.read === 1)) && <Check size={12} strokeWidth={2.5}/>}</div>}
+                               {/* ИСПРАВЛЕНИЕ: ТОЛЬКО 1 ГАЛОЧКА ПРИ ОТПРАВКЕ */}
+                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{msg.read === true && <Check size={12} strokeWidth={2.5}/>}</div>}
                              </span>
                              <div className="clear-both"></div>
                            </div>
@@ -1020,41 +841,38 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    {/* МЕНЮ ВНЕ ПУЗЫРЯ */}
-                    {isMenuOpen && (
+                    {/* МЕНЮ ЛИЧНОГО ЧАТА (По координатам) */}
+                    {isMenuOpen && renderFixedMenu(
                       <>
-                        <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); }} />
-                        <div className={`absolute z-[70] flex flex-col gap-2 ${isMe ? 'right-0 items-end' : 'left-0 items-start'} ${isLastMessage ? 'bottom-full mb-1' : 'top-full mt-1'} min-w-[200px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out`}>
-                          <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
-                             {FAST_REACTIONS.map(emoji => (
-                               <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); setActiveContextMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
-                                 {emoji}
-                               </button>
-                             ))}
-                          </div>
-                          <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
-                             <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                               <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
+                        <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
+                           {FAST_REACTIONS.map(emoji => (
+                             <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); closeMenus(); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${msg.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
+                               {emoji}
                              </button>
-                             
-                             {hasText && (
-                               <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                 <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
-                               </button>
-                             )}
+                           ))}
+                        </div>
+                        <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
+                           <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5 last:border-0">
+                             <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
+                           </button>
+                           
+                           {hasText && (
+                             <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5 last:border-0">
+                               <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
+                             </button>
+                           )}
 
-                             {isMe && hasText && (
-                               <button onClick={(e) => { e.stopPropagation(); startEditing(msg); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                 <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
-                               </button>
-                             )}
+                           {isMe && hasText && (
+                             <button onClick={(e) => { e.stopPropagation(); startEditing(msg); closeMenus(); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5 last:border-0">
+                               <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
+                             </button>
+                           )}
 
-                             {(isMe || isAdmin) && (
-                               <button onClick={(e) => { e.stopPropagation(); setActiveContextMenu(null); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left">
-                                 <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
-                               </button>
-                             )}
-                          </div>
+                           {(isMe || isAdmin) && (
+                             <button onClick={(e) => { e.stopPropagation(); closeMenus(); handleDelete(msg.id); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5 last:border-0">
+                               <Trash2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.deleteAction}
+                             </button>
+                           )}
                         </div>
                       </>
                     )}
