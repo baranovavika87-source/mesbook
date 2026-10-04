@@ -330,11 +330,22 @@ export default function WallPage() {
               const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
               return (
-                <div key={post.id} className={`w-full relative mb-5 ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out`}>
+                <div key={post.id} className={`flex flex-col w-full mb-5 relative ${isMenuOpen ? 'z-[100]' : 'z-10'} animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out`}>
                   
                   <div 
-                    className="w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden cursor-pointer"
-                    onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : post.id); }}
+                    className={`w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden relative cursor-pointer`}
+                    onClick={(e) => { 
+                       e.stopPropagation(); 
+                       if (hasMedia && !hasText && !isMenuOpen) {
+                          setFullScreenImage(mediaUrls[0]);
+                       } else {
+                          setActiveContextMenu(isMenuOpen ? null : post.id); 
+                       }
+                    }}
+                    onContextMenu={(e) => {
+                       e.preventDefault();
+                       setActiveContextMenu(post.id);
+                    }}
                   >
                     <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#222224] flex justify-between items-center">
                        <Link href={`/chat/${post.chatId}`}>
@@ -350,7 +361,7 @@ export default function WallPage() {
                         {mediaUrls.map((url, idx) => (
                            isVideo 
                              ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" />
-                             : <img key={idx} src={url} loading="lazy" decoding="async" onClick={(e) => { e.stopPropagation(); setActiveContextMenu(isMenuOpen ? null : post.id); }} className="w-full h-auto max-h-[500px] object-cover cursor-pointer" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
+                             : <img key={idx} src={url} loading="lazy" decoding="async" className="w-full h-auto max-h-[500px] object-cover pointer-events-none" onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} />
                         ))}
                       </div>
                     )}
@@ -377,14 +388,14 @@ export default function WallPage() {
                       </div>
                     )}
 
-                    <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-4 py-3.5 bg-[#f5f5f7]/50 dark:bg-black/10 border-t border-black/5 dark:border-white/5 transition-colors active:bg-black/[0.02] dark:active:bg-white/[0.02]">
-                      <div className="flex gap-2.5 items-center">
-                        <MessageCircle size={18} className="text-[#86868b] dark:text-[#98989d]" />
-                        <span className="text-[14px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+                    <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); setThreadComments([]); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04]">
+                      <div className="flex gap-2 items-center">
+                        <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
+                        <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
                           {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
                         </span>
                       </div>
-                      <ChevronRight size={18} className="text-[#86868b] dark:text-[#98989d]" />
+                      <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
                     </button>
                   </div>
 
@@ -403,11 +414,6 @@ export default function WallPage() {
                         {/* Меню только для автора */}
                         {isMe && (
                           <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
-                             {hasMedia && (
-                               <button onClick={(e) => { e.stopPropagation(); setFullScreenImage(mediaUrls[0]); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
-                                 <Camera size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.openPhoto}
-                               </button>
-                             )}
                              <button onClick={(e) => { e.stopPropagation(); startEditingPost(post); setActiveContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
                                <Edit2 size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.editAction}
                              </button>
@@ -422,8 +428,6 @@ export default function WallPage() {
                 </div>
               );
             })}
-            
-            {/* ИСПРАВЛЕНИЕ ОБРЕЗАНИЯ МЕНЮ */}
             <div className="h-32 shrink-0"></div>
           </div>
         )}
@@ -445,7 +449,7 @@ export default function WallPage() {
               {/* НОВОЕ: Отображение фото оригинального поста */}
               {activeThreadContent?.hasMedia && (
                 <div className="flex gap-2 overflow-x-auto my-2">
-                  {activeThreadContent.mediaUrls.map(url => (
+                  {activeThreadContent.mediaUrls.map((url: string) => (
                     <img key={url} src={url} className="h-[80px] w-auto rounded-[8px] object-cover border border-black/5 dark:border-white/5" />
                   ))}
                 </div>
@@ -461,29 +465,68 @@ export default function WallPage() {
                threadComments.map(c => {
                  const isCommentMenuOpen = activeCommentMenu === c.id;
                  const isMyComment = String(c.senderId) === String(currentUserId);
+                 const { text, quotedText, hasMedia, mediaUrls, hasText } = parseContent(c.content);
+                 const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
+
                  return (
-                   <div key={c.id} className="relative flex flex-col mb-2">
+                   <div key={c.id} className={`relative flex flex-col mb-2 ${isCommentMenuOpen ? 'z-[100]' : 'z-10'}`}>
                      <div className="flex gap-3 items-start cursor-pointer" onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(isCommentMenuOpen ? null : c.id); }}>
                        <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
                          {c.senderAvatar ? <img src={c.senderAvatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : c.senderName.charAt(0).toUpperCase()}
                        </div>
                        <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
                          <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
-                         {parseContent(c.content).hasMedia ? (
-                             <img src={parseContent(c.content).mediaUrls[0]} className="max-h-[200px] w-auto rounded-[8px] object-cover" />
-                         ) : (
-                             <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{c.content}</span>
+                         
+                         {quotedText && (
+                           <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
+                         )}
+
+                         {hasMedia && (
+                             <img src={mediaUrls[0]} onClick={(e) => { e.stopPropagation(); setFullScreenImage(mediaUrls[0]); }} className={`max-h-[200px] w-auto object-cover cursor-pointer ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} />
+                         )}
+                         {hasText && (
+                             <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{text}</span>
                          )}
                          <span className="text-[11px] text-[#86868b] dark:text-[#98989d] mt-1.5 text-right">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                        </div>
                      </div>
+
+                     {/* Реакции под комментарием */}
+                     {cReactionsKeys.length > 0 && (
+                        <div className={`flex flex-wrap gap-1 mt-1 justify-start pl-12`}>
+                          {cReactionsKeys.map(key => {
+                             const rData = c.reactions[key] || { count: 1, users: [] };
+                             const firstUser = rData.users && rData.users.length > 0 ? rData.users[0] : null;
+                             return (
+                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-[0_2px_10px_rgba(0,0,0,0.1)] z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                                 <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
+                                   {firstUser?.avatar ? <img src={firstUser.avatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : firstUser?.name?.charAt(0).toUpperCase() || 'U'}
+                                 </div>
+                                 <span className="text-[13px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                               </button>
+                             );
+                          })}
+                        </div>
+                     )}
+
                      {/* Меню для комментариев */}
                      {isCommentMenuOpen && (
                         <>
-                          <div className="absolute z-[70] flex flex-col gap-2 left-12 top-full mt-1 min-w-[160px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out">
+                          <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setActiveCommentMenu(null); }} />
+                          <div className="absolute z-[70] flex flex-col gap-2 left-12 top-full mt-1 min-w-[200px] animate-in zoom-in-[0.97] fade-in duration-200 ease-out">
+                             <div className="flex gap-1.5 p-2 bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-full shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
+                               {FAST_REACTIONS.map(emoji => (
+                                 <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, emoji); setActiveCommentMenu(null); }} className={`w-8 h-8 flex items-center justify-center text-[20px] rounded-full transition-transform hover:scale-125 active:scale-95 ${c.myReaction === emoji ? 'bg-black/5 dark:bg-white/10' : ''}`}>
+                                   {emoji}
+                                 </button>
+                               ))}
+                             </div>
                              <div className="flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl rounded-[20px] shadow-[0_4px_25px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 overflow-hidden w-full">
-                                {parseContent(c.content).hasText && (
-                                  <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(c.content).text); setActiveCommentMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                <button onClick={(e) => { e.stopPropagation(); setCommentReplyingTo(c); setActiveCommentMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
+                                  <Reply size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.replyAction}
+                                </button>
+                                {hasText && (
+                                  <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); setActiveCommentMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left border-b border-black/5 dark:border-white/5">
                                     <Copy size={18} className="text-[#86868b] dark:text-[#98989d]" /> {t.copy}
                                   </button>
                                 )}
@@ -500,24 +543,39 @@ export default function WallPage() {
                  );
                })
             )}
-            <div className="h-10 shrink-0"></div>
+            <div className="h-32 shrink-0"></div>
           </div>
           
-          <form onSubmit={handleSendComment} className="p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl border-t border-black/5 dark:border-white/5 flex items-center gap-2 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
-            <input type="file" accept="image/*,video/*" className="hidden" ref={commentFileInputRef} onChange={handleCommentFileUpload} />
-            <button type="button" onClick={() => commentFileInputRef.current?.click()} disabled={isCommentUploading} className="w-[42px] h-[42px] shrink-0 flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors disabled:opacity-50">
-              {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
-            </button>
-            <input 
-              className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px]" 
-              value={commentContent} 
-              onChange={e => setCommentContent(e.target.value)} 
-              placeholder={t.commentPlaceholder} 
-            />
-            <button type="submit" disabled={!commentContent.trim()} className="w-[42px] h-[42px] rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">
-              <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
-            </button>
-          </form>
+          <div className="bg-white/80 dark:bg-[#222224]/80 border-t border-black/5 dark:border-white/5 relative z-10 flex flex-col backdrop-blur-xl shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+            {commentReplyingTo && (
+              <div className="flex items-center justify-between mb-1 mt-3 mx-4 px-4 py-2.5 bg-[#f5f5f7] dark:bg-[#161618] rounded-[14px] border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] animate-in fade-in duration-200">
+                <div className="flex flex-col overflow-hidden mr-4">
+                  <span className="text-[11px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] uppercase tracking-wider mb-0.5">
+                    {t.reply}
+                  </span>
+                  <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate">
+                    {commentReplyingTo.content.startsWith('[MEDIA]') ? t.photo : commentReplyingTo.content.replace(/^> .*\n\n/, '')}
+                  </span>
+                </div>
+                <button type="button" onClick={() => setCommentReplyingTo(null)} className="p-1.5 flex-shrink-0 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] rounded-full transition-colors"><X size={16} /></button>
+              </div>
+            )}
+            <form onSubmit={handleSendComment} className="p-3 flex items-center gap-2 pb-6">
+              <input type="file" accept="image/*,video/*" className="hidden" ref={commentFileInputRef} onChange={handleCommentFileUpload} />
+              <button type="button" onClick={() => commentFileInputRef.current?.click()} disabled={isCommentUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors disabled:opacity-50">
+                {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
+              </button>
+              <input 
+                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
+                value={commentContent} 
+                onChange={e => setCommentContent(e.target.value)} 
+                placeholder={t.commentPlaceholder} 
+              />
+              <button type="submit" disabled={!commentContent.trim()} className="w-[38px] h-[38px] flex-shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">
+                <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
+              </button>
+            </form>
+          </div>
         </div>
       )}
 
