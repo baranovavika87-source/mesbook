@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send, Copy, Reply, Mic, Video, Square, Play } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send, Copy, Reply, Mic, Video, Square, Play, RefreshCw, SendHorizonal, ArrowUp } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -49,7 +49,8 @@ const translations = {
     replyAction: "Ответить",
     copy: "Копировать",
     editAction: "Изменить",
-    deleteAction: "Удалить"
+    deleteAction: "Удалить",
+    cancel: "ОТМЕНА"
   },
   en: {
     saved: "Saved Messages",
@@ -88,7 +89,8 @@ const translations = {
     replyAction: "Reply",
     copy: "Copy",
     editAction: "Edit",
-    deleteAction: "Delete"
+    deleteAction: "Delete",
+    cancel: "CANCEL"
   }
 };
 
@@ -120,7 +122,8 @@ const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
   return lang === 'ru' ? `${dateStr} в ${timeStr}` : `${dateStr} at ${timeStr}`;
 };
 
-const isMsgRead = (msg: any) => {
+const isMsgRead = (msg: any, isSavedChat: boolean) => {
+  if (isSavedChat) return true; // ИСПРАВЛЕНИЕ 3: В избранном всегда 2 галочки
   if (!msg) return false;
   return msg.read === true || msg.read === 1 || msg.read === '1' || 
          msg.isRead === true || msg.isRead === 1 || msg.isRead === '1' || 
@@ -130,10 +133,10 @@ const isMsgRead = (msg: any) => {
 const formatTime = (sec: number) => {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
-  return `${m}:${s < 10 ? '0' : ''}${s}`;
+  return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s},0`; // Формат как в ТГ 00:00,0
 };
 
-// КАСТОМНЫЙ ПЛЕЕР ГОЛОСОВЫХ СООБЩЕНИЙ
+// КАСТОМНЫЙ ПЛЕЕР ГОЛОСОВЫХ СООБЩЕНИЙ (С ТОНКИМИ ПОЛОСКАМИ)
 const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved }: any) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -175,17 +178,18 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved }: any) => {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const bars = [2, 4, 3, 5, 6, 7, 4, 5, 3, 2, 4, 6, 5, 3, 2, 4, 2, 3];
+  // Более частые и тонкие полоски как в ТГ
+  const bars = [2, 4, 3, 5, 7, 8, 6, 4, 5, 3, 2, 4, 6, 5, 7, 8, 6, 4, 2, 3, 5, 4, 2];
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2 w-[240px]">
-      <button onClick={togglePlay} className={`w-11 h-11 shrink-0 rounded-full flex items-center justify-center ${isMe ? 'bg-white dark:bg-[#161618] text-[#1d1d1f] dark:text-[#f5f5f7]' : 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]'}`}>
-         {isPlaying ? <Square size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-1" />}
+    <div className="flex items-center gap-3 px-3 py-2 w-[260px]">
+      <button onClick={togglePlay} className={`w-11 h-11 shrink-0 rounded-full flex items-center justify-center transition-transform active:scale-95 ${isMe ? 'bg-white dark:bg-[#161618] text-[#1d1d1f] dark:text-[#f5f5f7]' : 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]'}`}>
+         {isPlaying ? <Square size={16} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-1" />}
       </button>
       <div className="flex-1 flex flex-col justify-center">
          <div className="flex items-end gap-[2px] h-6 w-full opacity-80 mt-1">
             {bars.map((h, i) => (
-               <div key={i} className={`flex-1 rounded-full ${isMe ? 'bg-current' : 'bg-current'}`} style={{ height: `${(h/7)*100}%`, opacity: progress > (i/bars.length)*100 ? 1 : 0.4 }}></div>
+               <div key={i} className={`w-[2.5px] rounded-full ${isMe ? 'bg-white/90 dark:bg-black/90' : 'bg-black/80 dark:bg-white/80'}`} style={{ height: `${(h/8)*100}%`, opacity: progress > (i/bars.length)*100 ? 1 : 0.4 }}></div>
             ))}
          </div>
          <div className="flex justify-between items-center text-[11px] mt-1.5 opacity-70 font-medium">
@@ -259,7 +263,11 @@ export default function ChatPage() {
   const [isAnimatingIcon, setIsAnimatingIcon] = useState(false);
   const [recordingType, setRecordingType] = useState<'voice' | 'video' | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
   
+  const [expandedVideoMsgId, setExpandedVideoMsgId] = useState<number | null>(null); // Для увеличения кружочка
+  const [uploadingMsgId, setUploadingMsgId] = useState<number | null>(null); // Для спиннера загрузки
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -399,9 +407,17 @@ export default function ChatPage() {
   }, [threadComments]);
 
   // ФУНКЦИИ ЗАПИСИ И ОТПРАВКИ
-  const startRecording = async (type: 'voice' | 'video') => {
+  const initCamera = async (mode: 'user' | 'environment') => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: mode } });
+      if (videoStreamRef.current) videoStreamRef.current.srcObject = stream;
+      return stream;
+    } catch(e) { return null; }
+  };
+
+  const startRecording = async (type: 'voice' | 'video', mode: 'user' | 'environment' = 'user') => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' ? { facingMode: mode } : false });
       if (type === 'video' && videoStreamRef.current) {
          videoStreamRef.current.srcObject = stream;
       }
@@ -413,7 +429,14 @@ export default function ChatPage() {
         const blob = new Blob(chunksRef.current, { type: type === 'video' ? 'video/webm' : 'audio/webm' });
         stream.getTracks().forEach(t => t.stop());
         
-        setIsUploading(true);
+        // Показываем спиннер загрузки
+        const tempId = Date.now();
+        setUploadingMsgId(tempId);
+        
+        const tempMsg = { id: tempId, content: type === 'video' ? '[VIDEO_NOTE] loading' : '[VOICE] loading', isSending: true, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
+        setMessages((prev: any) => [...prev, tempMsg]);
+        forceScrollToBottom();
+
         const formData = new FormData();
         formData.append('file', blob, type === 'video' ? 'video.webm' : 'voice.webm');
         formData.append('upload_preset', 'mesogram-cloud');
@@ -424,10 +447,14 @@ export default function ChatPage() {
           const data = await res.json();
           if (data.secure_url) {
              const tag = type === 'video' ? '[VIDEO_NOTE]' : '[VOICE]';
+             // Удаляем временное сообщение и шлем настоящее
+             setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
              sendDirectMessage(`${tag} ${data.secure_url}`);
           }
-        } catch(e) {}
-        setIsUploading(false);
+        } catch(e) {
+           setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
+        }
+        setUploadingMsgId(null);
       };
       
       recorder.start();
@@ -453,11 +480,20 @@ export default function ChatPage() {
     setRecordingType(null);
   };
 
+  const toggleCamera = async () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+       const newMode = cameraFacingMode === 'user' ? 'environment' : 'user';
+       setCameraFacingMode(newMode);
+       mediaRecorderRef.current.stop(); // Останавливаем старую
+       setTimeout(() => startRecording('video', newMode), 100); // Запускаем с новой камерой
+    }
+  };
+
   // ЛОГИКА ТАПА И УДЕРЖАНИЯ КНОПКИ МИКРОФОНА/КАМЕРЫ
   const handleRecordTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     e.preventDefault();
     holdTimerRef.current = setTimeout(() => {
-       startRecording(recordMode);
+       startRecording(recordMode, cameraFacingMode);
        holdTimerRef.current = null;
     }, 300);
   };
@@ -467,7 +503,7 @@ export default function ChatPage() {
     if (holdTimerRef.current) {
         clearTimeout(holdTimerRef.current);
         holdTimerRef.current = null;
-        // Это был быстрый тап - переключаем режим с анимацией
+        // Быстрый тап - переключаем режим с анимацией
         setIsAnimatingIcon(true);
         setTimeout(() => {
             setRecordMode(p => p === 'voice' ? 'video' : 'voice');
@@ -750,9 +786,9 @@ export default function ChatPage() {
       
       {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ */}
       {recordingType === 'video' && (
-         <div className="fixed bottom-24 right-4 w-36 h-36 rounded-full overflow-hidden border-4 border-white dark:border-[#222224] shadow-2xl z-[100] animate-in zoom-in duration-200">
-           <video ref={videoStreamRef} autoPlay muted playsInline className="w-full h-full object-cover transform scale-x-[-1]" />
-           <div className="absolute top-2 right-2 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-white" />
+         <div className="fixed bottom-24 right-4 w-40 h-40 rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200">
+           <video ref={videoStreamRef} autoPlay muted playsInline className={`w-full h-full object-cover transform ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
+           <div className="absolute top-2 left-1/2 -translate-x-1/2 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-white" />
          </div>
       )}
 
@@ -861,6 +897,7 @@ export default function ChatPage() {
 
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
               const mReactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
+              const isMsgUploading = msg.id === uploadingMsgId; // Флаг спиннера
 
               // КАНАЛЫ
               if (isChannel) {
@@ -878,56 +915,73 @@ export default function ChatPage() {
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
-                      {videoNoteUrl && (
-                        <div className="p-3 flex justify-center">
-                           <div className="relative inline-block m-2 w-[220px] h-[220px]">
-                              <video src={videoNoteUrl} autoPlay loop muted playsInline className={`w-full h-full rounded-full object-cover border-4 border-black/5 dark:border-white/5 shadow-sm`} onClick={e => e.stopPropagation()} />
-                              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
-                                 {timeStr}
-                              </div>
-                           </div>
-                        </div>
-                      )}
+                      {isMsgUploading ? (
+                         <div className="p-4 flex items-center justify-center text-[#86868b]">
+                            <Loader2 size={24} className="animate-spin mr-2" /> <span>Загрузка...</span>
+                         </div>
+                      ) : (
+                        <>
+                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК БЕЗ ФОНА, УВЕЛИЧИВАЕТСЯ ПРИ КЛИКЕ */}
+                          {videoNoteUrl && (
+                            <div className="p-3 flex justify-center">
+                               <div className="relative inline-block w-[240px] h-[240px] rounded-full" onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedVideoMsgId(expandedVideoMsgId === msg.id ? null : msg.id);
+                               }}>
+                                  <video 
+                                    src={videoNoteUrl} autoPlay loop muted playsInline 
+                                    className={`w-full h-full rounded-full object-cover shadow-md transition-transform duration-300 ease-out ${expandedVideoMsgId === msg.id ? 'scale-150 z-50 fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-2xl' : 'scale-100 z-10'}`} 
+                                  />
+                                  {expandedVideoMsgId !== msg.id && (
+                                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
+                                        {timeStr}
+                                     </div>
+                                  )}
+                               </div>
+                            </div>
+                          )}
 
-                      {voiceUrl && (
-                        <div className="relative">
-                           <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg)} isSaved={isSavedChat} />
-                        </div>
-                      )}
+                          {voiceUrl && (
+                            <div className="relative">
+                               <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} />
+                            </div>
+                          )}
 
-                      {hasMedia && (
-                        <div className={`relative w-full flex justify-center bg-[#f5f5f7] dark:bg-[#161618] ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
-                          {mediaUrls.map((url, idx) => (
-                             isVideo 
-                               ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" onClick={(e) => e.stopPropagation()} />
-                               : <img 
-                                    key={idx} src={url} loading="lazy" decoding="async" 
-                                    className="w-full h-auto max-h-[500px] object-cover rounded-t-[24px]" 
-                                    style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                                    onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
-                                    onMouseDown={(e) => handleTouchStartPhoto(e, url)}
-                                    onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                                    onClick={(e) => handlePhotoClick(e, msg, 'message')}
-                                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
-                                    onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
-                                 />
-                          ))}
-                        </div>
-                      )}
-                      
-                      {hasText && (
-                        <div className="px-5 pt-3.5 pb-2.5">
-                           {quotedText && <div className="mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>}
-                           <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
-                             {text}
-                             {(!voiceUrl && !videoNoteUrl) && (
-                               <span className="float-right inline-flex items-center gap-1 text-[11px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
-                                 {timeStr}
-                               </span>
-                             )}
-                             <div className="clear-both"></div>
-                           </div>
-                        </div>
+                          {hasMedia && (
+                            <div className={`relative w-full flex justify-center bg-[#f5f5f7] dark:bg-[#161618] ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
+                              {mediaUrls.map((url, idx) => (
+                                 isVideo 
+                                   ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" onClick={(e) => e.stopPropagation()} />
+                                   : <img 
+                                        key={idx} src={url} loading="lazy" decoding="async" 
+                                        className="w-full h-auto max-h-[500px] object-cover rounded-t-[24px]" 
+                                        style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+                                        onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
+                                        onMouseDown={(e) => handleTouchStartPhoto(e, url)}
+                                        onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
+                                        onClick={(e) => handlePhotoClick(e, msg, 'message')}
+                                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
+                                        onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
+                                     />
+                              ))}
+                            </div>
+                          )}
+                          
+                          {hasText && (
+                            <div className="px-5 pt-3.5 pb-2.5">
+                               {quotedText && <div className="mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>}
+                               <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
+                                 {text}
+                                 {(!voiceUrl && !videoNoteUrl) && (
+                                   <span className="float-right inline-flex items-center gap-1 text-[11px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
+                                     {timeStr}
+                                   </span>
+                                 )}
+                                 <div className="clear-both"></div>
+                               </div>
+                            </div>
+                          )}
+                        </>
                       )}
 
                       {mReactionsKeys.length > 0 && (
@@ -982,75 +1036,103 @@ export default function ChatPage() {
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
-                      {/* КРУЖОЧКИ (ВИДЕО) */}
-                      {videoNoteUrl && (
-                        <div className="p-1 flex justify-center">
-                           <div className="relative inline-block w-[220px] h-[220px]">
-                              <video src={videoNoteUrl} autoPlay loop muted playsInline className={`w-full h-full rounded-full object-cover border-4 ${isMe ? 'border-white/20 dark:border-black/20' : 'border-black/5 dark:border-white/5'} shadow-sm`} onClick={e => e.stopPropagation()} />
-                              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
-                                 {timeStr}
-                                 {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={10} strokeWidth={3}/>{(isMsgRead(msg) || isSavedChat) ? <Check size={10} strokeWidth={3}/> : null}</div>}
-                              </div>
-                           </div>
-                        </div>
-                      )}
-                      
-                      {/* ГОЛОСОВЫЕ */}
-                      {voiceUrl && (
-                        <div className={`${hasText ? 'pb-1' : ''}`}>
-                           <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg)} isSaved={isSavedChat} />
-                        </div>
-                      )}
-
-                      {/* МЕДИА */}
-                      {hasMedia && (
-                        <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''} ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`}>
-                          {mediaUrls.map((url, idx) => (
-                             isVideo 
-                               ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} onClick={(e) => e.stopPropagation()} />
-                               : <img 
-                                    key={idx} src={url} loading="lazy" decoding="async" 
-                                    className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} 
-                                    style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                                    onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
-                                    onMouseDown={(e) => handleTouchStartPhoto(e, url)}
-                                    onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                                    onClick={(e) => handlePhotoClick(e, msg, 'message')}
-                                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
-                                    onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
-                                 />
-                          ))}
-                          
-                          {(!hasText && !voiceUrl && !videoNoteUrl) && (
-                            <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
-                               {timeStr}
-                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5}/>{(isMsgRead(msg) || isSavedChat) ? <Check size={11} strokeWidth={2.5}/> : null}</div>}
+                      {isMsgUploading ? (
+                         <div className="px-4 py-3 flex items-center justify-center opacity-80">
+                            <Loader2 size={20} className="animate-spin mr-2" /> <span>Загрузка...</span>
+                         </div>
+                      ) : (
+                        <>
+                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК БЕЗ ФОНА, УВЕЛИЧИВАЕТСЯ ПРИ КЛИКЕ */}
+                          {videoNoteUrl && (
+                            <div className="p-1.5 flex justify-center">
+                               <div className={`relative inline-block w-[220px] h-[220px] rounded-full`} onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedVideoMsgId(expandedVideoMsgId === msg.id ? null : msg.id);
+                               }}>
+                                  <video 
+                                    src={videoNoteUrl} autoPlay loop muted playsInline 
+                                    className={`w-full h-full rounded-full object-cover shadow-sm transition-transform duration-300 ease-out ${expandedVideoMsgId === msg.id ? 'scale-[1.6] z-50 fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-2xl' : 'scale-100 z-10'}`} 
+                                  />
+                                  {expandedVideoMsgId !== msg.id && (
+                                     <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2.5 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
+                                        {timeStr}
+                                        {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={10} strokeWidth={3}/>{(isMsgRead(msg, isSavedChat)) ? <Check size={10} strokeWidth={3}/> : null}</div>}
+                                     </div>
+                                  )}
+                               </div>
                             </div>
                           )}
-                        </div>
-                      )}
-                      
-                      {/* ТЕКСТ */}
-                      {hasText && (
-                        <div className="px-3.5 pt-2 pb-2.5">
-                           {quotedText && (
-                             <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/10 dark:border-white/10'}`}>{quotedText}</div>
-                           )}
-                           <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap">
-                             {text}
-                             
-                             {(!voiceUrl && !videoNoteUrl) && (
-                               <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
-                                 {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
-                                 {timeStr}
-                                 {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{(isMsgRead(msg) || isSavedChat) ? <Check size={12} strokeWidth={2.5}/> : null}</div>}
-                               </span>
-                             )}
-                             <div className="clear-both"></div>
-                           </div>
-                        </div>
+                          
+                          {/* ГОЛОСОВЫЕ */}
+                          {voiceUrl && (
+                            <div className={`${hasText ? 'pb-1' : ''}`}>
+                               <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} />
+                            </div>
+                          )}
+
+                          {/* МЕДИА */}
+                          {hasMedia && (
+                            <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''} ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`}>
+                              {mediaUrls.map((url, idx) => (
+                                 isVideo 
+                                   ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} onClick={(e) => e.stopPropagation()} />
+                                   : <img 
+                                        key={idx} src={url} loading="lazy" decoding="async" 
+                                        className={`w-full h-auto max-h-[400px] object-cover ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`} 
+                                        style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+                                        onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
+                                        onMouseDown={(e) => handleTouchStartPhoto(e, url)}
+                                        onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
+                                        onClick={(e) => handlePhotoClick(e, msg, 'message')}
+                                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
+                                        onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
+                                     />
+                              ))}
+                              
+                              {(!hasText && !voiceUrl && !videoNoteUrl) && (
+                                <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
+                                   {timeStr}
+                                   {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5}/>{(isMsgRead(msg, isSavedChat)) ? <Check size={11} strokeWidth={2.5}/> : null}</div>}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* ТЕКСТ */}
+                          {hasText && (
+                            <div className="px-3.5 pt-2 pb-2.5">
+                               {quotedText && (
+                                 <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/10 dark:border-white/10'}`}>{quotedText}</div>
+                               )}
+                               <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap">
+                                 {text}
+                                 
+                                 {(!voiceUrl && !videoNoteUrl) && (
+                                   <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
+                                     {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
+                                     {timeStr}
+                                     {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{(isMsgRead(msg, isSavedChat)) ? <Check size={12} strokeWidth={2.5}/> : null}</div>}
+                                   </span>
+                                 )}
+                                 <div className="clear-both"></div>
+                               </div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
+                    
+                    {isGroup && (
+                       <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }} className="w-full flex items-center justify-between px-3 py-2 mt-1 border border-black/5 dark:border-white/5 bg-white dark:bg-[#222224] transition-colors hover:bg-black/5 dark:hover:bg-white/5 rounded-[16px]">
+                          <div className="flex gap-2 items-center">
+                            <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
+                            <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+                              {(msg.commentsCount || 0) > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount || 0, t.commentsCount, lang)}` : t.comments}
+                            </span>
+                          </div>
+                          <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
+                        </button>
+                    )}
                     
                     {mReactionsKeys.length > 0 && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -1082,7 +1164,7 @@ export default function ChatPage() {
         </div>
       </main>
 
-      {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ ЧАТОВ (группы/каналы) */}
+      {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ КАНАЛОВ */}
       {activeThread && (
         <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={() => setContextMenu(null)}>
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
@@ -1221,7 +1303,7 @@ export default function ChatPage() {
                 placeholder={t.commentPlaceholder} 
               />
               <button type="submit" disabled={!commentContent.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">
-                <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
+                <ArrowUp size={20} strokeWidth={2.5} />
               </button>
             </form>
           </div>
@@ -1246,20 +1328,30 @@ export default function ChatPage() {
           {(!isGroupOrChannel || isMember) && !(isChannel && !isAdmin) ? (
             recordingType ? (
                <div className="p-3 flex items-center justify-between pb-6 bg-[#f5f5f7] dark:bg-[#161618]">
-                 <button onClick={() => stopRecording(true)} className="text-red-500 p-2 active:scale-95"><Trash2 size={24} /></button>
-                 <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
-                    <span className="font-mono text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-semibold">{formatTime(recordingTime)}</span>
+                 <div className="flex items-center gap-3">
+                   <button onClick={() => stopRecording(true)} className="text-red-500 p-2 active:scale-95"><Trash2 size={24} /></button>
+                   {/* КНОПКА ПЕРЕВОРОТА КАМЕРЫ ДЛЯ КРУЖОЧКОВ */}
+                   {recordingType === 'video' && (
+                     <button onClick={toggleCamera} className="text-[#86868b] p-2 active:scale-95"><RefreshCw size={22} /></button>
+                   )}
                  </div>
-                 <button onClick={() => stopRecording(false)} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center active:scale-95 transition-transform"><Send size={18} className="ml-0.5" /></button>
+                 
+                 <div className="flex flex-col items-center flex-1">
+                    <span className="text-[#86868b] text-[11px] font-medium tracking-wide mb-1">{t.cancel}</span>
+                    <div className="flex items-center gap-2">
+                       <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
+                       <span className="font-mono text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-semibold">{formatTime(recordingTime)}</span>
+                    </div>
+                 </div>
+                 <button onClick={() => stopRecording(false)} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center active:scale-95 transition-transform"><ArrowUp size={20} strokeWidth={2.5} /></button>
                </div>
             ) : (
               <form onSubmit={handleSend} className="p-3 flex items-center gap-2 pb-6">
                 <input type="file" accept="image/*,video/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50">{isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}</button>
-                <input ref={inputRef} className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px]" value={content} onChange={(e) => { setContent(e.target.value); if (Date.now() - lastTypingTime.current > 2000) { lastTypingTime.current = Date.now(); socket?.emit('typing', { chatId, name: currentUser?.displayName }); } }} placeholder={t.messagePlaceholder} />
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors">{isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}</button>
+                <input ref={inputRef} className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-[20px] px-4 py-2 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px]" value={content} onChange={(e) => { setContent(e.target.value); if (Date.now() - lastTypingTime.current > 2000) { lastTypingTime.current = Date.now(); socket?.emit('typing', { chatId, name: currentUser?.displayName }); } }} placeholder={t.messagePlaceholder} />
                 
-                {/* ИСПРАВЛЕНИЕ 1: КНОПКА МИКРОФОНА/КАМЕРЫ/ОТПРАВИТЬ С АНИМАЦИЕЙ */}
+                {/* ИСПРАВЛЕНИЕ: КНОПКА МИКРОФОНА/КАМЕРЫ/ОТПРАВИТЬ С АНИМАЦИЕЙ */}
                 {!content.trim() ? (
                   <button
                      type="button"
@@ -1268,15 +1360,16 @@ export default function ChatPage() {
                      onTouchStart={handleRecordTouchStart}
                      onTouchEnd={handleRecordTouchEnd}
                      onMouseLeave={handleRecordTouchEnd}
-                     className="w-[38px] h-[38px] shrink-0 rounded-full flex items-center justify-center text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer select-none"
+                     className="w-[38px] h-[38px] shrink-0 rounded-full flex items-center justify-center text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer select-none relative"
                      style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
                   >
-                     <div className={`transition-transform duration-150 ${isAnimatingIcon ? 'scale-0' : 'scale-100'}`}>
-                        {recordMode === 'voice' ? <Mic size={22} /> : <Camera size={22} />}
+                     <div className={`transition-transform duration-150 absolute inset-0 flex items-center justify-center ${isAnimatingIcon ? 'scale-0' : 'scale-100'}`}>
+                        {recordMode === 'voice' ? <Mic size={24} strokeWidth={1.5} /> : <Camera size={24} strokeWidth={1.5} />}
                      </div>
                   </button>
                 ) : (
-                  <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" /></button>
+                  // ИСПРАВЛЕНИЕ: КНОПКА ОТПРАВИТЬ (СТРЕЛОЧКА ВВЕРХ)
+                  <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ArrowUp size={20} strokeWidth={2.5} /></button>
                 )}
               </form>
             )
