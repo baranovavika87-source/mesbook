@@ -136,29 +136,31 @@ const formatMsTime = (ms: number) => {
   return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s},${milliseconds < 10 ? '0' : ''}${milliseconds}`;
 };
 
-// ПЛЕЕР ГОЛОСОВЫХ С ИСПРАВЛЕНИЕМ ДЛИТЕЛЬНОСТИ
-const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved }: any) => {
+// ИСПРАВЛЕНИЕ: ПЛЕЕР С ЖЕСТКО ЗАДАННОЙ ДЛИТЕЛЬНОСТЬЮ
+const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration }: any) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(fixedDuration || 0);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     
     const updateProgress = () => {
-       if (audio.duration && isFinite(audio.duration)) {
-           setProgress((audio.currentTime / audio.duration) * 100);
+       const currentDur = fixedDuration || audio.duration;
+       if (currentDur && isFinite(currentDur)) {
+           setProgress((audio.currentTime / currentDur) * 100);
        }
     };
     
     const onEnd = () => { setIsPlaying(false); setProgress(0); };
     
-    // ИСПРАВЛЕНИЕ: Обход бага Chrome с Infinity duration
     const onLoadedMetadata = () => {
+      if (fixedDuration) return; // Используем точную длину из сообщения, игнорируем браузер
+      
       if (audio.duration === Infinity) {
-        audio.currentTime = 1e10; // Прыгаем в конец, чтобы браузер вычислил длину
+        audio.currentTime = 1e10; 
         audio.addEventListener('seeked', function onLoadSeek() {
           audio.currentTime = 0;
           setDuration(audio.duration);
@@ -178,7 +180,7 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved }: any) => {
       audio.removeEventListener('ended', onEnd);
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
     };
-  }, []);
+  }, [fixedDuration]);
 
   const togglePlay = (e: any) => {
     e.stopPropagation();
@@ -210,7 +212,7 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved }: any) => {
             ))}
          </div>
          <div className="flex justify-between items-center text-[11px] mt-1.5 opacity-70 font-medium">
-            <span>{formatAudioTime(isPlaying ? audioRef.current?.currentTime || 0 : duration)}</span>
+            <span>{formatAudioTime(isPlaying ? audioRef.current?.currentTime || 0 : (fixedDuration || duration))}</span>
             <div className="flex items-center gap-1">
                <span>{timeStr}</span>
                {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5} />{(readStatus || isSaved) && <Check size={11} strokeWidth={2.5} />}</div>}
@@ -423,7 +425,7 @@ export default function ChatPage() {
     }
   }, [threadComments]);
 
-  // ФУНКЦИИ ЗАПИСИ И ИСПРАВЛЕНИЯ ПУСТОГО КРУЖОЧКА
+  // ФУНКЦИИ ЗАПИСИ
   const animateTimer = () => {
     setRecordingMs(Date.now() - startTimeRef.current);
     requestRef.current = requestAnimationFrame(animateTimer);
@@ -433,7 +435,6 @@ export default function ChatPage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' ? { facingMode: mode } : false });
       
-      // ИСПРАВЛЕНИЕ: Сначала монтируем кружок, потом кидаем туда стрим
       setRecordingType(type);
       
       setTimeout(() => {
@@ -444,12 +445,23 @@ export default function ChatPage() {
          }
       }, 50);
 
-      const recorder = new MediaRecorder(stream);
+      // ИСПРАВЛЕНИЕ: Выбираем правильный MimeType для устройств (Особенно Android)
+      let options: any = {};
+      if (type === 'voice') {
+         if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) options = { mimeType: 'audio/webm;codecs=opus' };
+         else if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' };
+      } else {
+         if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) options = { mimeType: 'video/webm;codecs=vp8,opus' };
+         else if (MediaRecorder.isTypeSupported('video/mp4')) options = { mimeType: 'video/mp4' };
+      }
+
+      const recorder = new MediaRecorder(stream, options);
       chunksRef.current = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       
       recorder.onstop = async () => {
-        // ИСПРАВЛЕНИЕ: Идеальное считывание MimeType, чтобы Android не обрезал звук
+        // ИСПРАВЛЕНИЕ: Высчитываем реальную длительность и сохраняем ее!
+        const realDuration = (Date.now() - startTimeRef.current) / 1000;
         const mimeType = recorder.mimeType || (type === 'video' ? 'video/webm' : 'audio/webm');
         const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
         const blob = new Blob(chunksRef.current, { type: mimeType });
@@ -466,7 +478,7 @@ export default function ChatPage() {
         const formData = new FormData();
         formData.append('file', blob, type === 'video' ? `video.${ext}` : `voice.${ext}`);
         formData.append('upload_preset', 'mesogram-cloud');
-        formData.append('resource_type', 'auto'); 
+        formData.append('resource_type', type === 'video' ? 'video' : 'auto'); 
         
         try {
           const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
@@ -474,7 +486,8 @@ export default function ChatPage() {
           if (data.secure_url) {
              const tag = type === 'video' ? '[VIDEO_NOTE]' : '[VOICE]';
              setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
-             sendDirectMessage(`${tag} ${data.secure_url}`);
+             // Сохраняем длительность прямо в сообщении
+             sendDirectMessage(`${tag} ${data.secure_url} D:${realDuration.toFixed(1)}`);
           }
         } catch(e) {
            setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
@@ -752,18 +765,28 @@ export default function ChatPage() {
     setIsSavingChat(false);
   };
 
+  // ИСПРАВЛЕНИЕ: ЧТЕНИЕ ТОЧНОЙ ДЛИТЕЛЬНОСТИ ИЗ ТЕКСТА
   const parseContent = (rawText: any) => {
-    if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false, voiceUrl: null, videoNoteUrl: null };
+    if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false, voiceUrl: null, videoNoteUrl: null, fixedDuration: null };
     
     let text = rawText;
     let voiceUrl = null;
     let videoNoteUrl = null;
+    let fixedDuration = null;
 
-    const voiceMatch = /\[VOICE\]\s*(https?:\/\/[^\s]+)/.exec(text);
-    if (voiceMatch) { voiceUrl = voiceMatch[1]; text = text.replace(voiceMatch[0], '').trim(); }
+    const voiceMatch = /\[VOICE\]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/.exec(text);
+    if (voiceMatch) { 
+      voiceUrl = voiceMatch[1]; 
+      fixedDuration = voiceMatch[2] ? parseFloat(voiceMatch[2]) : null;
+      text = text.replace(voiceMatch[0], '').trim(); 
+    }
 
-    const videoNoteMatch = /\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)/.exec(text);
-    if (videoNoteMatch) { videoNoteUrl = videoNoteMatch[1]; text = text.replace(videoNoteMatch[0], '').trim(); }
+    const videoNoteMatch = /\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/.exec(text);
+    if (videoNoteMatch) { 
+      videoNoteUrl = videoNoteMatch[1]; 
+      if (!fixedDuration) fixedDuration = videoNoteMatch[2] ? parseFloat(videoNoteMatch[2]) : null;
+      text = text.replace(videoNoteMatch[0], '').trim(); 
+    }
 
     const mediaUrls: string[] = [];
     const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
@@ -787,7 +810,7 @@ export default function ChatPage() {
     const hasText = !!text || !!quotedText;
     const isVideo = hasMedia && !!mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
     
-    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl };
+    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration };
   };
 
   const lastSeen = chatInfo?.participant?.lastSeen;
@@ -813,7 +836,7 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={() => setContextMenu(null)}>
       
-      {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ ПО ЦЕНТРУ */}
+      {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ */}
       {recordingType === 'video' && (
          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[240px] h-[240px] rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200">
            <video ref={videoStreamRef} autoPlay muted playsInline className={`w-full h-full object-cover transform ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
@@ -916,7 +939,7 @@ export default function ChatPage() {
             let lastDateStr = '';
             return messages.map((msg: any) => {
               const isMe = String(msg.senderId) === String(currentUserId);
-              const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl } = parseContent(msg.content);
+              const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration } = parseContent(msg.content);
               const dateObj = new Date(msg.createdAt);
               const dateLocale = lang === 'ru' ? 'ru-RU' : 'en-US';
               const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString(dateLocale, { day: 'numeric', month: 'long' });
@@ -971,7 +994,7 @@ export default function ChatPage() {
 
                           {voiceUrl && (
                             <div className="relative">
-                               <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} />
+                               <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} fixedDuration={fixedDuration} />
                             </div>
                           )}
 
@@ -1093,7 +1116,7 @@ export default function ChatPage() {
                           
                           {voiceUrl && (
                             <div className={`${hasText ? 'pb-1' : ''}`}>
-                               <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} />
+                               <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} fixedDuration={fixedDuration} />
                             </div>
                           )}
 
@@ -1146,18 +1169,6 @@ export default function ChatPage() {
                         </>
                       )}
                     </div>
-                    
-                    {isGroup && (
-                       <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }} className="w-full flex items-center justify-between px-3 py-2 mt-1 border border-black/5 dark:border-white/5 bg-white dark:bg-[#222224] transition-colors hover:bg-black/5 dark:hover:bg-white/5 rounded-[16px]">
-                          <div className="flex gap-2 items-center">
-                            <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                            <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-                              {(msg.commentsCount || 0) > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount || 0, t.commentsCount, lang)}` : t.comments}
-                            </span>
-                          </div>
-                          <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                        </button>
-                    )}
                     
                     {mReactionsKeys.length > 0 && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -1219,7 +1230,7 @@ export default function ChatPage() {
             ) : (
                threadComments.map((c) => {
                  const isMe = String(c.senderId) === String(currentUserId);
-                 const { text, quotedText, hasMedia, mediaUrls, hasText, voiceUrl, videoNoteUrl } = parseContent(c.content);
+                 const { text, quotedText, hasMedia, mediaUrls, hasText, voiceUrl, videoNoteUrl, fixedDuration } = parseContent(c.content);
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
                  const timeStr = new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
@@ -1256,7 +1267,7 @@ export default function ChatPage() {
                          
                          {voiceUrl && (
                            <div className={`${hasText ? 'pb-1' : ''}`}>
-                              <VoicePlayer url={voiceUrl} isMe={false} timeStr={timeStr} readStatus={true} isSaved={false} />
+                              <VoicePlayer url={voiceUrl} isMe={false} timeStr={timeStr} readStatus={true} isSaved={false} fixedDuration={fixedDuration} />
                            </div>
                          )}
 
