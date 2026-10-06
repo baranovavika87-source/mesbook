@@ -377,7 +377,9 @@ export default function ChatsPage() {
     return 0;
   });
 
-  const renderChatCard = (chat: any) => {
+  // ИСПРАВЛЕНИЕ: Добавлен красивый разделитель с отступом (index и arr.length используются для определения последнего элемента)
+  const renderChatCard = (chat: any, index: number, arr: any[]) => {
+    const isLast = index === arr.length - 1;
     const participant = chat.participant || {};
     const isSaved = participant.isSaved || String(chat.id) === 'saved';
     const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 15000) : false;
@@ -401,27 +403,30 @@ export default function ChatsPage() {
 
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
-        <a className="flex items-center px-4 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors border-b border-black/5 dark:border-white/5 last:border-0 bg-white dark:bg-[#222224]">
-          <div className="relative w-[52px] h-[52px] shrink-0">
-            <div className={`w-full h-full rounded-full flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 ${isSaved ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
-              {isSaved ? (
-                <Bookmark size={24} fill="currentColor" />
-              ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
-                <img 
-                  src={participant.avatarUrl} 
-                  alt="Avatar" 
-                  className="w-full h-full object-cover" 
-                  onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
-                />
-              ) : (
-                <span className="text-[20px] font-medium">{participant.displayName?.charAt(0) || "U"}</span>
+        <a className="flex items-stretch pl-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-[#222224]">
+          <div className="py-3 flex items-center shrink-0">
+            <div className="relative w-[52px] h-[52px]">
+              <div className={`w-full h-full rounded-full flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 ${isSaved ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
+                {isSaved ? (
+                  <Bookmark size={24} fill="currentColor" />
+                ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
+                  <img 
+                    src={participant.avatarUrl} 
+                    alt="Avatar" 
+                    className="w-full h-full object-cover" 
+                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+                  />
+                ) : (
+                  <span className="text-[20px] font-medium">{participant.displayName?.charAt(0) || "U"}</span>
+                )}
+              </div>
+              {isOnline && !participant.isGroup && !participant.isChannel && !isSaved && (
+                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>
               )}
             </div>
-            {isOnline && !participant.isGroup && !participant.isChannel && !isSaved && (
-              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>
-            )}
           </div>
-          <div className="ml-3.5 flex-1 overflow-hidden">
+          
+          <div className={`ml-3.5 pr-4 py-3 flex-1 overflow-hidden flex flex-col justify-center ${isLast ? '' : 'border-b border-black/10 dark:border-white/[0.12]'}`}>
             <div className="flex justify-between items-baseline mb-0.5">
               <h3 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] truncate pr-2 tracking-tight">
                 {isSaved ? t.saved : (participant.displayName || t.companion)}
@@ -459,17 +464,18 @@ export default function ChatsPage() {
     );
   };
 
-  const renderGlobalUserCard = (user: any) => {
+  const renderGlobalUserCard = (user: any, index: number, arr: any[]) => {
+    const isLast = index === arr.length - 1;
     const isOnline = user.lastSeen ? (Date.now() - user.lastSeen < 15000) : false;
     
     return (
       <Link key={user.id} href={'/chat/' + user.id}>
         <a 
           onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
-          className="flex items-center justify-between px-4 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors border-b border-black/5 dark:border-white/5 last:border-0 bg-white dark:bg-[#222224]"
+          className="flex items-stretch pl-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-[#222224]"
         >
-          <div className="flex items-center gap-3.5">
-            <div className="relative w-[52px] h-[52px] shrink-0">
+          <div className="py-3 flex items-center shrink-0">
+            <div className="relative w-[52px] h-[52px]">
               <div className="w-full h-full rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5">
                 {user.avatarUrl && user.avatarUrl.length > 5 ? (
                   <img 
@@ -486,6 +492,9 @@ export default function ChatsPage() {
                 <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>
               )}
             </div>
+          </div>
+          
+          <div className={`ml-3.5 pr-4 py-3 flex-1 flex items-center justify-between ${isLast ? '' : 'border-b border-black/10 dark:border-white/[0.12]'}`}>
             <span className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] tracking-tight">{user.displayName}</span>
           </div>
         </a>
@@ -687,7 +696,8 @@ export default function ChatsPage() {
                 )}
               </button>
               
-              <h1 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] uppercase tracking-widest">
+              {/* ИСПРАВЛЕНИЕ: Новый стильный логотип MESO */}
+              <h1 className="text-[24px] font-black uppercase tracking-[0.2em] bg-gradient-to-r from-gray-900 to-gray-500 dark:from-white dark:to-gray-400 bg-clip-text text-transparent drop-shadow-sm ml-2">
                 MESO
               </h1>
               
@@ -701,7 +711,7 @@ export default function ChatsPage() {
           </header>
 
           <main className="flex-1 overflow-y-auto px-4 pb-6">
-            <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden flex flex-col border border-black/5 dark:border-white/5">
+            <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-none flex flex-col border border-black/5 dark:border-white/5">
               {filteredChats.map(renderChatCard)}
             </div>
 
