@@ -128,7 +128,6 @@ const isMsgRead = (msg: any, isSavedChat: boolean) => {
          msg.status === 'read' || msg.viewed === true;
 };
 
-// ИСПРАВЛЕНИЕ: Форматер миллисекунд для плавной записи
 const formatMsTime = (ms: number) => {
   const totalSeconds = Math.floor(ms / 1000);
   const m = Math.floor(totalSeconds / 60);
@@ -137,6 +136,7 @@ const formatMsTime = (ms: number) => {
   return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s},${milliseconds < 10 ? '0' : ''}${milliseconds}`;
 };
 
+// ПЛЕЕР ГОЛОСОВЫХ С ИСПРАВЛЕНИЕМ ДЛИТЕЛЬНОСТИ
 const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved }: any) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -146,15 +146,33 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved }: any) => {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    
     const updateProgress = () => {
-       setProgress((audio.currentTime / audio.duration) * 100);
+       if (audio.duration && isFinite(audio.duration)) {
+           setProgress((audio.currentTime / audio.duration) * 100);
+       }
     };
+    
     const onEnd = () => { setIsPlaying(false); setProgress(0); };
-    const onLoadedMetadata = () => setDuration(audio.duration);
+    
+    // ИСПРАВЛЕНИЕ: Обход бага Chrome с Infinity duration
+    const onLoadedMetadata = () => {
+      if (audio.duration === Infinity) {
+        audio.currentTime = 1e10; // Прыгаем в конец, чтобы браузер вычислил длину
+        audio.addEventListener('seeked', function onLoadSeek() {
+          audio.currentTime = 0;
+          setDuration(audio.duration);
+          audio.removeEventListener('seeked', onLoadSeek);
+        });
+      } else {
+        setDuration(audio.duration);
+      }
+    };
     
     audio.addEventListener('timeupdate', updateProgress);
     audio.addEventListener('ended', onEnd);
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    
     return () => {
       audio.removeEventListener('timeupdate', updateProgress);
       audio.removeEventListener('ended', onEnd);
@@ -257,7 +275,6 @@ export default function ChatPage() {
   const [editChatAvatar, setEditChatAvatar] = useState('');
   const [isSavingChat, setIsSavingChat] = useState(false);
   
-  // МЕДИА РЕКОРДЕР И КНОПКА
   const [recordMode, setRecordMode] = useState<'voice' | 'video'>('voice');
   const [isAnimatingIcon, setIsAnimatingIcon] = useState(false);
   const [recordingType, setRecordingType] = useState<'voice' | 'video' | null>(null);
@@ -406,7 +423,7 @@ export default function ChatPage() {
     }
   }, [threadComments]);
 
-  // ФУНКЦИИ ЗАПИСИ
+  // ФУНКЦИИ ЗАПИСИ И ИСПРАВЛЕНИЯ ПУСТОГО КРУЖОЧКА
   const animateTimer = () => {
     setRecordingMs(Date.now() - startTimeRef.current);
     requestRef.current = requestAnimationFrame(animateTimer);
@@ -415,15 +432,28 @@ export default function ChatPage() {
   const startRecording = async (type: 'voice' | 'video', mode: 'user' | 'environment' = 'user') => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' ? { facingMode: mode } : false });
-      if (type === 'video' && videoStreamRef.current) {
-         videoStreamRef.current.srcObject = stream;
-      }
+      
+      // ИСПРАВЛЕНИЕ: Сначала монтируем кружок, потом кидаем туда стрим
+      setRecordingType(type);
+      
+      setTimeout(() => {
+         if (type === 'video' && videoStreamRef.current) {
+            videoStreamRef.current.srcObject = stream;
+            videoStreamRef.current.muted = true;
+            videoStreamRef.current.play().catch(() => {});
+         }
+      }, 50);
+
       const recorder = new MediaRecorder(stream);
       chunksRef.current = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       
       recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: type === 'video' ? 'video/webm' : 'audio/webm' });
+        // ИСПРАВЛЕНИЕ: Идеальное считывание MimeType, чтобы Android не обрезал звук
+        const mimeType = recorder.mimeType || (type === 'video' ? 'video/webm' : 'audio/webm');
+        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        
         stream.getTracks().forEach(t => t.stop());
         
         const tempId = Date.now();
@@ -434,7 +464,7 @@ export default function ChatPage() {
         forceScrollToBottom();
 
         const formData = new FormData();
-        formData.append('file', blob, type === 'video' ? 'video.webm' : 'voice.webm');
+        formData.append('file', blob, type === 'video' ? `video.${ext}` : `voice.${ext}`);
         formData.append('upload_preset', 'mesogram-cloud');
         formData.append('resource_type', 'auto'); 
         
@@ -454,12 +484,12 @@ export default function ChatPage() {
       
       recorder.start();
       mediaRecorderRef.current = recorder;
-      setRecordingType(type);
       
       startTimeRef.current = Date.now();
       requestRef.current = requestAnimationFrame(animateTimer);
     } catch(e) { 
       alert('Необходим доступ к микрофону и/или камере'); 
+      setRecordingType(null);
     }
   };
 
@@ -472,11 +502,12 @@ export default function ChatPage() {
          };
       }
       mediaRecorderRef.current.stop();
+    } else if (cancel && mediaRecorderRef.current?.stream) {
+       mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
     }
     setRecordingType(null);
   };
 
-  // ИСПРАВЛЕНИЕ: Бесшовный переворот камеры
   const toggleCamera = async () => {
     const newMode = cameraFacingMode === 'user' ? 'environment' : 'user';
     setCameraFacingMode(newMode);
@@ -486,9 +517,7 @@ export default function ChatPage() {
         if (track && track.applyConstraints) {
             await track.applyConstraints({ facingMode: newMode });
         }
-    } catch (e) {
-        // Fallback handled safely without crashing
-    }
+    } catch (e) {}
   };
 
   const handleRecordTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
@@ -784,11 +813,10 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={() => setContextMenu(null)}>
       
-      {/* ИСПРАВЛЕНИЕ: ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ ПО ЦЕНТРУ */}
+      {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ ПО ЦЕНТРУ */}
       {recordingType === 'video' && (
-         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200">
+         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[240px] h-[240px] rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200">
            <video ref={videoStreamRef} autoPlay muted playsInline className={`w-full h-full object-cover transform ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
-           <div className="absolute top-4 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full animate-pulse shadow-sm" />
          </div>
       )}
 
@@ -916,12 +944,11 @@ export default function ChatPage() {
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
                       {isMsgUploading ? (
-                         <div className="p-4 flex items-center justify-center text-[#86868b]">
+                         <div className="p-4 flex items-center justify-center text-[#86868b] dark:text-[#98989d]">
                             <Loader2 size={24} className="animate-spin mr-2" /> <span>Загрузка...</span>
                          </div>
                       ) : (
                         <>
-                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК */}
                           {videoNoteUrl && (
                             <div className="p-3 flex justify-center">
                                <div className={`relative inline-block w-[240px] h-[240px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
@@ -1043,7 +1070,6 @@ export default function ChatPage() {
                          </div>
                       ) : (
                         <>
-                          {/* ИСПРАВЛЕНИЕ: КРУЖОЧКИ И УВЕЛИЧЕНИЕ КАК В ТГ */}
                           {videoNoteUrl && (
                             <div className="p-1.5 flex justify-center">
                                <div className={`relative inline-block w-[220px] h-[220px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
@@ -1065,14 +1091,12 @@ export default function ChatPage() {
                             </div>
                           )}
                           
-                          {/* ГОЛОСОВЫЕ */}
                           {voiceUrl && (
                             <div className={`${hasText ? 'pb-1' : ''}`}>
                                <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} />
                             </div>
                           )}
 
-                          {/* МЕДИА */}
                           {hasMedia && (
                             <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''} ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`}>
                               {mediaUrls.map((url, idx) => (
@@ -1100,7 +1124,6 @@ export default function ChatPage() {
                             </div>
                           )}
                           
-                          {/* ТЕКСТ */}
                           {hasText && (
                             <div className="px-3.5 pt-2 pb-2.5">
                                {quotedText && (
@@ -1305,7 +1328,7 @@ export default function ChatPage() {
                 {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
               </button>
               <input 
-                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-[20px] px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
+                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
                 value={commentContent} 
                 onChange={e => setCommentContent(e.target.value)} 
                 placeholder={t.commentPlaceholder} 
