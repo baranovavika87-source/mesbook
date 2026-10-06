@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send, Copy, Reply } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send, Copy, Reply, Mic, Video, Square } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -120,12 +120,17 @@ const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
   return lang === 'ru' ? `${dateStr} в ${timeStr}` : `${dateStr} at ${timeStr}`;
 };
 
-// ИСПРАВЛЕНИЕ 1: Универсальный чекер прочитанности
 const isMsgRead = (msg: any) => {
   if (!msg) return false;
   return msg.read === true || msg.read === 1 || msg.read === '1' || 
          msg.isRead === true || msg.isRead === 1 || msg.isRead === '1' || 
          msg.status === 'read' || msg.viewed === true;
+};
+
+const formatTime = (sec: number) => {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
 };
 
 export default function ChatPage() {
@@ -181,6 +186,14 @@ export default function ChatPage() {
   const [editChatAvatar, setEditChatAvatar] = useState('');
   const [isSavingChat, setIsSavingChat] = useState(false);
   
+  // МЕДИА РЕКОРДЕР
+  const [recordingType, setRecordingType] = useState<'voice' | 'video' | null>(null);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const videoStreamRef = useRef<HTMLVideoElement>(null);
+
   const editAvatarRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
@@ -217,7 +230,6 @@ export default function ChatPage() {
     if (!isSavedChat) {
       socket.emit('join', String(chatId));
       
-      // ИСПРАВЛЕНИЕ 1: Неубиваемый обработчик вебсокетов (теперь он точно не пропустит галочки)
       const handleUpdate = (data?: any) => { 
         let idToCheck = null;
         if (typeof data === 'object' && data !== null) {
@@ -314,6 +326,76 @@ export default function ChatPage() {
     }
   }, [threadComments]);
 
+  // ФУНКЦИИ ЗАПИСИ И ОТПРАВКИ
+  const startRecording = async (type: 'voice' | 'video') => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
+      if (type === 'video' && videoStreamRef.current) {
+         videoStreamRef.current.srcObject = stream;
+      }
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: type === 'video' ? 'video/webm' : 'audio/webm' });
+        stream.getTracks().forEach(t => t.stop());
+        
+        // Отправка в Cloudinary
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.append('file', blob, type === 'video' ? 'video.webm' : 'voice.webm');
+        formData.append('upload_preset', 'mesogram-cloud');
+        formData.append('resource_type', 'auto'); 
+        
+        try {
+          const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (data.secure_url) {
+             const tag = type === 'video' ? '[VIDEO_NOTE]' : '[VOICE]';
+             sendDirectMessage(`${tag} ${data.secure_url}`);
+          }
+        } catch(e) {}
+        setIsUploading(false);
+      };
+      
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setRecordingType(type);
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => setRecordingTime(p => p + 1), 1000);
+    } catch(e) { 
+      alert('Необходим доступ к микрофону и/или камере'); 
+    }
+  };
+
+  const stopRecording = (cancel: boolean = false) => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      if (cancel) {
+         mediaRecorderRef.current.onstop = () => {
+           mediaRecorderRef.current?.stream.getTracks().forEach(t => t.stop());
+         };
+      }
+      mediaRecorderRef.current.stop();
+    }
+    setRecordingType(null);
+  };
+
+  const sendDirectMessage = async (msgContent: string) => {
+    const tempMsg = { id: Date.now(), content: msgContent, isSending: true, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
+    if (isSavedChat) {
+      setMessages((prev: any) => { const u = [...prev, { ...tempMsg, isSending: false }]; localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(u)); return u; });
+      forceScrollToBottom(); return;
+    }
+    setMessages((prev: any) => [...prev, tempMsg]);
+    forceScrollToBottom();
+    try {
+      await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: msgContent }) });
+      loadData(); 
+    } catch (error) {}
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
@@ -333,18 +415,7 @@ export default function ChatPage() {
     const tempContent = content.trim();
     const finalContent = replyingTo ? `> ${replyingTo.content.replace(/^> .*\n\n/, '')}\n\n${tempContent}` : tempContent;
     setContent(''); setReplyingTo(null);
-    
-    const tempMsg = { id: Date.now(), content: finalContent, isSending: true, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
-    if (isSavedChat) {
-      setMessages((prev: any) => { const u = [...prev, { ...tempMsg, isSending: false }]; localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(u)); return u; });
-      forceScrollToBottom(); return;
-    }
-    setMessages((prev: any) => [...prev, tempMsg]);
-    forceScrollToBottom();
-    try {
-      await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalContent }) });
-      loadData(); 
-    } catch (error) {}
+    sendDirectMessage(finalContent);
   };
 
   const handleSendComment = async (e: React.FormEvent) => {
@@ -369,8 +440,7 @@ export default function ChatPage() {
       const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (data.secure_url) { 
-        await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: `[MEDIA] ${data.secure_url}` }) });
-        loadData();
+        sendDirectMessage(`[MEDIA] ${data.secure_url}`);
       }
     } catch (err: any) {} 
     finally { setIsUploading(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
@@ -522,17 +592,32 @@ export default function ChatPage() {
     setIsSavingChat(false);
   };
 
+  // ОБНОВЛЕННЫЙ ПАРСЕР ДЛЯ ГОЛОСА И ВИДЕОКРУЖКОВ
   const parseContent = (rawText: any) => {
-    if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false };
+    if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false, voiceUrl: null, videoNoteUrl: null };
+    
+    let text = rawText;
+    let voiceUrl = null;
+    let videoNoteUrl = null;
+
+    // Парсинг голоса
+    const voiceMatch = /\[VOICE\]\s*(https?:\/\/[^\s]+)/.exec(text);
+    if (voiceMatch) { voiceUrl = voiceMatch[1]; text = text.replace(voiceMatch[0], '').trim(); }
+
+    // Парсинг кружочков
+    const videoNoteMatch = /\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)/.exec(text);
+    if (videoNoteMatch) { videoNoteUrl = videoNoteMatch[1]; text = text.replace(videoNoteMatch[0], '').trim(); }
+
     const mediaUrls: string[] = [];
     const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
-    let match; let text = rawText;
+    let match;
     try {
       while ((match = mediaRegex.exec(text)) !== null) {
         if (match && match[1]) mediaUrls.push(match[1]);
       }
       text = text.replace(mediaRegex, '').trim();
     } catch(e) {}
+    
     let quotedText = null;
     try {
       if (text.startsWith('> ')) {
@@ -540,10 +625,12 @@ export default function ChatPage() {
         if (parts.length > 0) { quotedText = parts[0].replace('> ', ''); text = parts.slice(1).join('\n\n'); }
       }
     } catch(e) {}
+    
     const hasMedia = mediaUrls.length > 0;
     const hasText = !!text || !!quotedText;
     const isVideo = hasMedia && !!mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
-    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
+    
+    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl };
   };
 
   const lastSeen = chatInfo?.participant?.lastSeen;
@@ -569,6 +656,14 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={() => setContextMenu(null)}>
       
+      {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ */}
+      {recordingType === 'video' && (
+         <div className="fixed bottom-24 right-4 w-36 h-36 rounded-full overflow-hidden border-4 border-white dark:border-[#222224] shadow-2xl z-[100] animate-in zoom-in duration-200">
+           <video ref={videoStreamRef} autoPlay muted playsInline className="w-full h-full object-cover transform scale-x-[-1]" />
+           <div className="absolute top-2 right-2 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-white" />
+         </div>
+      )}
+
       {/* ЛАЙТБОКС */}
       {fullScreenImage && (
         <div className="fixed inset-0 z-[200] bg-black flex flex-col animate-in fade-in duration-200 ease-out">
@@ -629,7 +724,6 @@ export default function ChatPage() {
               {chatInfo.participant.username && <p className="text-[15px] text-[#86868b] dark:text-[#98989d]">{chatInfo.participant.username}</p>}
               <p className={`mt-1.5 text-[13px] font-medium ${subtitleColor}`}>{subtitleText}</p>
               
-              {/* ИСПРАВЛЕНИЕ 3: Описание в профиле */}
               {(chatInfo.participant.description || chatInfo.participant.bio) && (
                 <div className="mt-4 px-6 w-full text-center">
                   <p className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap bg-white dark:bg-[#222224] p-4 rounded-[16px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
@@ -666,7 +760,7 @@ export default function ChatPage() {
             let lastDateStr = '';
             return messages.map((msg: any) => {
               const isMe = String(msg.senderId) === String(currentUserId);
-              const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(msg.content);
+              const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl } = parseContent(msg.content);
               const dateObj = new Date(msg.createdAt);
               const dateLocale = lang === 'ru' ? 'ru-RU' : 'en-US';
               const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString(dateLocale, { day: 'numeric', month: 'long' });
@@ -676,6 +770,7 @@ export default function ChatPage() {
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
               const mReactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
 
+              // КАНАЛЫ
               if (isChannel) {
                 return (
                   <div key={msg.id} className="w-full relative mb-5 z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out">
@@ -691,6 +786,17 @@ export default function ChatPage() {
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
+                      {videoNoteUrl && (
+                        <div className="p-3 flex justify-center">
+                           <video src={videoNoteUrl} controls className="w-56 h-56 rounded-full object-cover shadow-lg border border-black/5 dark:border-white/5" onClick={e => e.stopPropagation()} />
+                        </div>
+                      )}
+                      {voiceUrl && (
+                        <div className="p-4">
+                           <audio src={voiceUrl} controls className="w-full h-10 outline-none" onClick={e => e.stopPropagation()} />
+                        </div>
+                      )}
+
                       {hasMedia && (
                         <div className={`relative w-full flex justify-center bg-[#f5f5f7] dark:bg-[#161618] ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
                           {mediaUrls.map((url, idx) => (
@@ -776,6 +882,18 @@ export default function ChatPage() {
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
+                      {videoNoteUrl && (
+                        <div className="p-1 flex justify-center">
+                           <video src={videoNoteUrl} controls className={`w-48 h-48 rounded-full object-cover shadow-md ${hasText ? 'mb-1' : ''}`} onClick={e => e.stopPropagation()} />
+                        </div>
+                      )}
+                      
+                      {voiceUrl && (
+                        <div className={`px-2 py-2 ${hasText ? 'pb-1' : ''}`}>
+                           <audio src={voiceUrl} controls className={`h-10 outline-none w-[220px] ${isMe ? 'invert sepia saturate-0 hue-rotate-180 brightness-200' : ''}`} onClick={e => e.stopPropagation()} />
+                        </div>
+                      )}
+
                       {hasMedia && (
                         <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''} ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`}>
                           {mediaUrls.map((url, idx) => (
@@ -794,36 +912,34 @@ export default function ChatPage() {
                                  />
                           ))}
                           
-                          {!hasText && (
+                          {(!hasText && !voiceUrl && !videoNoteUrl) && (
                             <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
                                {timeStr}
-                               {/* ИСПРАВЛЕНИЕ: ВОЗВРАЩЕНЫ ЧЕСТНЫЕ 2 ГАЛОЧКИ ДЛЯ ПРОЧИТАННЫХ */}
                                {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{isMsgRead(msg) ? <Check size={11} strokeWidth={2.5}/> : null}</div>}
                             </div>
                           )}
                         </div>
                       )}
                       
-                      {hasText && (
+                      {(hasText || voiceUrl || videoNoteUrl) && (
                         <div className="px-3.5 pt-2 pb-2.5">
                            {quotedText && (
                              <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/10 dark:border-white/10'}`}>{quotedText}</div>
                            )}
-                           <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap">
-                             {text}
-                             <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
+                           {hasText && (
+                             <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap">
+                               {text}
+                             </div>
+                           )}
+                           <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
                                {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                {timeStr}
-                               {/* ИСПРАВЛЕНИЕ: ВОЗВРАЩЕНЫ ЧЕСТНЫЕ 2 ГАЛОЧКИ ДЛЯ ПРОЧИТАННЫХ */}
                                {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{isMsgRead(msg) ? <Check size={12} strokeWidth={2.5}/> : null}</div>}
-                             </span>
-                             <div className="clear-both"></div>
-                           </div>
+                           </span>
+                           <div className="clear-both"></div>
                         </div>
                       )}
                     </div>
-                    
-                    {/* ИСПРАВЛЕНИЕ 2: В группах комментариев БОЛЬШЕ НЕТ */}
                     
                     {mReactionsKeys.length > 0 && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -885,7 +1001,7 @@ export default function ChatPage() {
             ) : (
                threadComments.map((c) => {
                  const isMe = String(c.senderId) === String(currentUserId);
-                 const { text, quotedText, hasMedia, mediaUrls, hasText } = parseContent(c.content);
+                 const { text, quotedText, hasMedia, mediaUrls, hasText, voiceUrl, videoNoteUrl } = parseContent(c.content);
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
 
                  return (
@@ -901,6 +1017,18 @@ export default function ChatPage() {
                        <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
                          <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
                          {quotedText && <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>}
+                         
+                         {videoNoteUrl && (
+                           <div className="p-1 flex justify-center">
+                              <video src={videoNoteUrl} controls className={`w-32 h-32 rounded-full object-cover shadow-sm ${hasText ? 'mb-1' : ''}`} onClick={e => e.stopPropagation()} />
+                           </div>
+                         )}
+                         {voiceUrl && (
+                           <div className={`px-1 py-1 ${hasText ? 'pb-1' : ''}`}>
+                              <audio src={voiceUrl} controls className="h-8 outline-none w-[200px]" onClick={e => e.stopPropagation()} />
+                           </div>
+                         )}
+
                          {hasMedia && (
                              <img 
                                src={mediaUrls[0]} 
@@ -909,7 +1037,11 @@ export default function ChatPage() {
                                onTouchStart={(e) => handleTouchStartPhoto(e, mediaUrls[0])} 
                                onMouseDown={(e) => handleTouchStartPhoto(e, mediaUrls[0])}
                                onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                               onClick={(e) => handlePhotoClick(e, c, 'comment')}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
+                                 openGlobalMenu(e, c, 'comment');
+                               }}
                                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, c, 'comment'); }}
                              />
                          )}
@@ -956,21 +1088,40 @@ export default function ChatPage() {
                 <button type="button" onClick={() => setCommentReplyingTo(null)} className="p-1.5 flex-shrink-0 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors"><X size={16} /></button>
               </div>
              )}
-            <form onSubmit={handleSendComment} className="p-3 flex items-center gap-2 pb-6">
-              <input type="file" accept="image/*,video/*" className="hidden" ref={commentFileInputRef} onChange={handleCommentFileUpload} />
-              <button type="button" onClick={() => commentFileInputRef.current?.click()} disabled={isCommentUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors disabled:opacity-50">
-                {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
-              </button>
-              <input 
-                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
-                value={commentContent} 
-                onChange={e => setCommentContent(e.target.value)} 
-                placeholder={t.commentPlaceholder} 
-              />
-              <button type="submit" disabled={!commentContent.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">
-                <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
-              </button>
-            </form>
+            
+            {recordingType ? (
+               <div className="p-3 flex items-center justify-between pb-6 bg-[#f5f5f7] dark:bg-[#161618]">
+                 <button onClick={() => stopRecording(true)} className="text-red-500 p-2 active:scale-95"><Trash2 size={24} /></button>
+                 <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
+                    <span className="font-mono text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-semibold">{formatTime(recordingTime)}</span>
+                 </div>
+                 <button onClick={() => stopRecording(false)} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center active:scale-95 transition-transform"><Send size={18} className="ml-0.5" /></button>
+               </div>
+            ) : (
+              <form onSubmit={handleSendComment} className="p-3 flex items-center gap-2 pb-6">
+                <input type="file" accept="image/*,video/*" className="hidden" ref={commentFileInputRef} onChange={handleCommentFileUpload} />
+                <button type="button" onClick={() => commentFileInputRef.current?.click()} disabled={isCommentUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors disabled:opacity-50">
+                  {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
+                </button>
+                <input 
+                  className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
+                  value={commentContent} 
+                  onChange={e => setCommentContent(e.target.value)} 
+                  placeholder={t.commentPlaceholder} 
+                />
+                {!commentContent.trim() ? (
+                  <>
+                     <button type="button" onClick={() => startRecording('voice')} className="p-2 text-[#86868b] active:scale-95"><Mic size={22} /></button>
+                     <button type="button" onClick={() => startRecording('video')} className="p-2 text-[#86868b] active:scale-95"><Video size={22} /></button>
+                  </>
+                ) : (
+                  <button type="submit" className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center transition-transform active:scale-95">
+                    <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
+                  </button>
+                )}
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -989,31 +1140,44 @@ export default function ChatPage() {
               <button type="button" onClick={() => { setReplyingTo(null); setEditingMsg(null); setContent(''); }} className="p-1.5 flex-shrink-0 text-[#86868b]"><X size={16} /></button>
             </div>
           )}
-          {!isGroupOrChannel ? (
-            <form onSubmit={handleSend} className="p-3 flex items-center gap-2 pb-6">
-              <input type="file" accept="image/*,video/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50">{isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}</button>
-              <input ref={inputRef} className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px]" value={content} onChange={(e) => { setContent(e.target.value); if (Date.now() - lastTypingTime.current > 2000) { lastTypingTime.current = Date.now(); socket?.emit('typing', { chatId, name: currentUser?.displayName }); } }} placeholder={t.messagePlaceholder} />
-              <button type="submit" disabled={!content.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50"><ChevronRight size={20} strokeWidth={2.5} /></button>
-            </form>
+          
+          {(!isGroupOrChannel || isMember) && !(isChannel && !isAdmin) ? (
+            recordingType ? (
+               <div className="p-3 flex items-center justify-between pb-6 bg-[#f5f5f7] dark:bg-[#161618]">
+                 <button onClick={() => stopRecording(true)} className="text-red-500 p-2 active:scale-95"><Trash2 size={24} /></button>
+                 <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
+                    <span className="font-mono text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-semibold">{formatTime(recordingTime)}</span>
+                 </div>
+                 <button onClick={() => stopRecording(false)} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center active:scale-95 transition-transform"><Send size={18} className="ml-0.5" /></button>
+               </div>
+            ) : (
+              <form onSubmit={handleSend} className="p-3 flex items-center gap-2 pb-6">
+                <input type="file" accept="image/*,video/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50">{isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}</button>
+                <input ref={inputRef} className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px]" value={content} onChange={(e) => { setContent(e.target.value); if (Date.now() - lastTypingTime.current > 2000) { lastTypingTime.current = Date.now(); socket?.emit('typing', { chatId, name: currentUser?.displayName }); } }} placeholder={t.messagePlaceholder} />
+                
+                {!content.trim() ? (
+                  <>
+                     <button type="button" onClick={() => startRecording('voice')} className="p-2 text-[#86868b] active:scale-95"><Mic size={22} /></button>
+                     <button type="button" onClick={() => startRecording('video')} className="p-2 text-[#86868b] active:scale-95"><Video size={22} /></button>
+                  </>
+                ) : (
+                  <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ChevronRight size={20} strokeWidth={2.5} /></button>
+                )}
+              </form>
+            )
           ) : isLoadingRole ? (
             <div className="flex items-center gap-2 px-3 py-3 pb-6 opacity-50"><div className="w-[38px] h-[38px] rounded-full bg-black/5 dark:bg-white/5 animate-pulse"></div><div className="flex-1 h-[38px] rounded-full bg-black/5 dark:bg-white/5 animate-pulse"></div><div className="w-[38px] h-[38px] rounded-full bg-black/5 dark:bg-white/5 animate-pulse"></div></div>
           ) : !isMember ? (
             <div className="flex items-center justify-center pt-2 pb-6 px-4"><button onClick={joinChat} className="w-full py-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] font-semibold rounded-[16px] text-[15px]">{isChannel ? t.subscribe : t.joinGroup}</button></div>
-          ) : (isChannel && !isAdmin) ? (
-            <div className="flex items-center justify-center pt-2 pb-6"><button onClick={() => setIsMuted(!isMuted)} className="text-[#86868b] text-[15px] font-medium">{isMuted ? t.unmute : t.mute}</button></div>
           ) : (
-            <form onSubmit={handleSend} className="p-3 flex items-center gap-2 pb-6">
-              <input type="file" accept="image/*,video/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50">{isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}</button>
-              <input ref={inputRef} className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px]" value={content} onChange={(e) => { setContent(e.target.value); if (Date.now() - lastTypingTime.current > 2000) { lastTypingTime.current = Date.now(); socket?.emit('typing', { chatId, name: currentUser?.displayName }); } }} placeholder={t.messagePlaceholder} />
-              <button type="submit" disabled={!content.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50"><ChevronRight size={20} strokeWidth={2.5} /></button>
-            </form>
+            <div className="flex items-center justify-center pt-2 pb-6"><button onClick={() => setIsMuted(!isMuted)} className="text-[#86868b] text-[15px] font-medium">{isMuted ? t.unmute : t.mute}</button></div>
           )}
         </div>
       )}
 
-      {/* ИСПРАВЛЕНИЕ 2: КНОПКА УДАЛИТЬ ТОЛЬКО ДЛЯ СЕБЯ */}
+      {/* МЕНЮ ДЛЯ УДАЛЕНИЯ / РЕДАКТИРОВАНИЯ */}
       {contextMenu && (() => {
          const menuWidth = 220; const menuHeight = 250;
          let safeX = contextMenu.x; let safeY = contextMenu.y;
@@ -1023,12 +1187,12 @@ export default function ChatPage() {
          if (safeY < 0) safeY = 20;
          
          const isMe = String(contextMenu.item.senderId) === String(currentUserId);
-         const { hasText, hasMedia } = parseContent(contextMenu.item.content);
+         const { hasText, hasMedia, voiceUrl, videoNoteUrl } = parseContent(contextMenu.item.content);
          
          const showReply = contextMenu.type === 'comment' || !isChannel;
          const showCopy = hasText;
-         const showEdit = isMe && !hasMedia && contextMenu.type === 'message';
-         const showDelete = isMe; // Жесткое условие: удалять можно ТОЛЬКО СВОЕ
+         const showEdit = isMe && !hasMedia && !voiceUrl && !videoNoteUrl && contextMenu.type === 'message';
+         const showDelete = isMe;
 
          if (!showReply && !showCopy && !showEdit && !showDelete) return null;
 
