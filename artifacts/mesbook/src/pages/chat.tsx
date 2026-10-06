@@ -120,6 +120,14 @@ const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
   return lang === 'ru' ? `${dateStr} в ${timeStr}` : `${dateStr} at ${timeStr}`;
 };
 
+// ИСПРАВЛЕНИЕ 1: Универсальный чекер прочитанности
+const isMsgRead = (msg: any) => {
+  if (!msg) return false;
+  return msg.read === true || msg.read === 1 || msg.read === '1' || 
+         msg.isRead === true || msg.isRead === 1 || msg.isRead === '1' || 
+         msg.status === 'read' || msg.viewed === true;
+};
+
 export default function ChatPage() {
   const [match, params] = useRoute('/chat/:chatId');
   const chatId = params?.chatId;
@@ -208,16 +216,40 @@ export default function ChatPage() {
     if (!socket) socket = io(window.location.origin, { path: '/socket.io' });
     if (!isSavedChat) {
       socket.emit('join', String(chatId));
-      const handleUpdate = (updatedChatId: number) => { if (Number(updatedChatId) === Number(chatId)) loadData(); };
+      
+      // ИСПРАВЛЕНИЕ 1: Неубиваемый обработчик вебсокетов (теперь он точно не пропустит галочки)
+      const handleUpdate = (data?: any) => { 
+        let idToCheck = null;
+        if (typeof data === 'object' && data !== null) {
+          idToCheck = data.chatId || data.id;
+        } else {
+          idToCheck = data;
+        }
+        if (!idToCheck || String(idToCheck) === String(chatId) || Number(idToCheck) === Number(chatId)) {
+          loadData(); 
+        }
+      };
+      
       const handleTyping = (data: any) => {
         if (Number(data.chatId) === Number(chatId) && data.name !== chatInfo?.participant?.displayName) {
           setTypingUsers(prev => prev.includes(data.name) ? prev : [...prev, data.name]);
           setTimeout(() => setTypingUsers(prev => prev.filter(n => n !== data.name)), 3000);
         }
       };
+
       socket.on('chat_update', handleUpdate);
+      socket.on('message_read', handleUpdate);
+      socket.on('messages_read', handleUpdate);
+      socket.on('message', handleUpdate);
       socket.on('typing', handleTyping);
-      return () => { socket.off('chat_update', handleUpdate); socket.off('typing', handleTyping); };
+      
+      return () => { 
+        socket.off('chat_update', handleUpdate); 
+        socket.off('message_read', handleUpdate);
+        socket.off('messages_read', handleUpdate);
+        socket.off('message', handleUpdate);
+        socket.off('typing', handleTyping); 
+      };
     }
   }, [chatId]);
 
@@ -255,7 +287,9 @@ export default function ChatPage() {
       } catch (e) {}
     }
     setIsLoadingRole(false);
+    
     try { await fetch('/api/chats/' + chatId + '/read', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {}
+    
     try {
       const msgRes = await fetch('/api/chats/' + chatId + '/messages', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
       if (msgRes.ok) {
@@ -359,7 +393,6 @@ export default function ChatPage() {
     finally { setIsCommentUploading(false); if (commentFileInputRef.current) commentFileInputRef.current.value = ''; }
   };
 
-  // ОПТИМИСТИЧНЫЕ РЕАКЦИИ
   const toggleReaction = async (msgId: number, reaction: string, isComment = false) => {
     setContextMenu(null);
     const updateFn = (item: any) => {
@@ -596,7 +629,7 @@ export default function ChatPage() {
               {chatInfo.participant.username && <p className="text-[15px] text-[#86868b] dark:text-[#98989d]">{chatInfo.participant.username}</p>}
               <p className={`mt-1.5 text-[13px] font-medium ${subtitleColor}`}>{subtitleText}</p>
               
-              {/* ИСПРАВЛЕНИЕ: Добавлено описание канала в профиль */}
+              {/* ИСПРАВЛЕНИЕ 3: Описание в профиле */}
               {(chatInfo.participant.description || chatInfo.participant.bio) && (
                 <div className="mt-4 px-6 w-full text-center">
                   <p className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap bg-white dark:bg-[#222224] p-4 rounded-[16px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
@@ -765,7 +798,7 @@ export default function ChatPage() {
                             <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
                                {timeStr}
                                {/* ИСПРАВЛЕНИЕ: ВОЗВРАЩЕНЫ ЧЕСТНЫЕ 2 ГАЛОЧКИ ДЛЯ ПРОЧИТАННЫХ */}
-                               {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{msg.read ? <Check size={11} strokeWidth={2.5}/> : null}</div>}
+                               {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{isMsgRead(msg) ? <Check size={11} strokeWidth={2.5}/> : null}</div>}
                             </div>
                           )}
                         </div>
@@ -782,13 +815,15 @@ export default function ChatPage() {
                                {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                {timeStr}
                                {/* ИСПРАВЛЕНИЕ: ВОЗВРАЩЕНЫ ЧЕСТНЫЕ 2 ГАЛОЧКИ ДЛЯ ПРОЧИТАННЫХ */}
-                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{msg.read ? <Check size={12} strokeWidth={2.5}/> : null}</div>}
+                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{isMsgRead(msg) ? <Check size={12} strokeWidth={2.5}/> : null}</div>}
                              </span>
                              <div className="clear-both"></div>
                            </div>
                         </div>
                       )}
                     </div>
+                    
+                    {/* ИСПРАВЛЕНИЕ 2: В группах комментариев БОЛЬШЕ НЕТ */}
                     
                     {mReactionsKeys.length > 0 && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -820,7 +855,7 @@ export default function ChatPage() {
         </div>
       </main>
 
-      {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ ЧАТОВ (группы/каналы) */}
+      {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ КАНАЛОВ */}
       {activeThread && (
         <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={() => setContextMenu(null)}>
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
@@ -849,11 +884,12 @@ export default function ChatPage() {
                <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
             ) : (
                threadComments.map((c) => {
+                 const isMe = String(c.senderId) === String(currentUserId);
                  const { text, quotedText, hasMedia, mediaUrls, hasText } = parseContent(c.content);
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
 
                  return (
-                   <div key={c.id} className="relative flex flex-col mb-2 z-10">
+                   <div key={c.id} className={`relative flex flex-col mb-2 z-10`}>
                      <div 
                         className="flex gap-3 items-start cursor-pointer" 
                         onClick={(e) => openGlobalMenu(e, c, 'comment')}
@@ -977,7 +1013,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ИСПРАВЛЕНИЕ УДАЛЕНИЯ В МЕНЮ */}
+      {/* ИСПРАВЛЕНИЕ 2: КНОПКА УДАЛИТЬ ТОЛЬКО ДЛЯ СЕБЯ */}
       {contextMenu && (() => {
          const menuWidth = 220; const menuHeight = 250;
          let safeX = contextMenu.x; let safeY = contextMenu.y;
@@ -992,7 +1028,7 @@ export default function ChatPage() {
          const showReply = contextMenu.type === 'comment' || !isChannel;
          const showCopy = hasText;
          const showEdit = isMe && !hasMedia && contextMenu.type === 'message';
-         const showDelete = isMe; // ТОЛЬКО АВТОР МОЖЕТ УДАЛИТЬ СВОЁ
+         const showDelete = isMe; // Жесткое условие: удалять можно ТОЛЬКО СВОЕ
 
          if (!showReply && !showCopy && !showEdit && !showDelete) return null;
 
