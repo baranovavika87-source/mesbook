@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send, Copy, Reply, Mic, Video, Square } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send, Copy, Reply, Mic, Video, Square, Play } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -133,6 +133,74 @@ const formatTime = (sec: number) => {
   return `${m}:${s < 10 ? '0' : ''}${s}`;
 };
 
+// КАСТОМНЫЙ ПЛЕЕР ГОЛОСОВЫХ СООБЩЕНИЙ
+const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved }: any) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const updateProgress = () => {
+       setProgress((audio.currentTime / audio.duration) * 100);
+    };
+    const onEnd = () => { setIsPlaying(false); setProgress(0); };
+    const onLoadedMetadata = () => setDuration(audio.duration);
+    
+    audio.addEventListener('timeupdate', updateProgress);
+    audio.addEventListener('ended', onEnd);
+    audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    return () => {
+      audio.removeEventListener('timeupdate', updateProgress);
+      audio.removeEventListener('ended', onEnd);
+      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+    };
+  }, []);
+
+  const togglePlay = (e: any) => {
+    e.stopPropagation();
+    if (audioRef.current) {
+      if (isPlaying) audioRef.current.pause();
+      else audioRef.current.play();
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const formatAudioTime = (sec: number) => {
+    if (!sec || isNaN(sec) || !isFinite(sec)) return "0:00";
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const bars = [2, 4, 3, 5, 6, 7, 4, 5, 3, 2, 4, 6, 5, 3, 2, 4, 2, 3];
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 w-[240px]">
+      <button onClick={togglePlay} className={`w-11 h-11 shrink-0 rounded-full flex items-center justify-center ${isMe ? 'bg-white dark:bg-[#161618] text-[#1d1d1f] dark:text-[#f5f5f7]' : 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]'}`}>
+         {isPlaying ? <Square size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-1" />}
+      </button>
+      <div className="flex-1 flex flex-col justify-center">
+         <div className="flex items-end gap-[2px] h-6 w-full opacity-80 mt-1">
+            {bars.map((h, i) => (
+               <div key={i} className={`flex-1 rounded-full ${isMe ? 'bg-current' : 'bg-current'}`} style={{ height: `${(h/7)*100}%`, opacity: progress > (i/bars.length)*100 ? 1 : 0.4 }}></div>
+            ))}
+         </div>
+         <div className="flex justify-between items-center text-[11px] mt-1.5 opacity-70 font-medium">
+            <span>{formatAudioTime(isPlaying ? audioRef.current?.currentTime || 0 : duration)}</span>
+            <div className="flex items-center gap-1">
+               <span>{timeStr}</span>
+               {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5} />{(readStatus || isSaved) && <Check size={11} strokeWidth={2.5} />}</div>}
+            </div>
+         </div>
+      </div>
+      <audio ref={audioRef} src={url} preload="metadata" className="hidden" />
+    </div>
+  );
+};
+
 export default function ChatPage() {
   const [match, params] = useRoute('/chat/:chatId');
   const chatId = params?.chatId;
@@ -186,12 +254,16 @@ export default function ChatPage() {
   const [editChatAvatar, setEditChatAvatar] = useState('');
   const [isSavingChat, setIsSavingChat] = useState(false);
   
-  // МЕДИА РЕКОРДЕР
+  // МЕДИА РЕКОРДЕР И КНОПКА
+  const [recordMode, setRecordMode] = useState<'voice' | 'video'>('voice');
+  const [isAnimatingIcon, setIsAnimatingIcon] = useState(false);
   const [recordingType, setRecordingType] = useState<'voice' | 'video' | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
+  
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
   const videoStreamRef = useRef<HTMLVideoElement>(null);
 
   const editAvatarRef = useRef<HTMLInputElement>(null);
@@ -341,7 +413,6 @@ export default function ChatPage() {
         const blob = new Blob(chunksRef.current, { type: type === 'video' ? 'video/webm' : 'audio/webm' });
         stream.getTracks().forEach(t => t.stop());
         
-        // Отправка в Cloudinary
         setIsUploading(true);
         const formData = new FormData();
         formData.append('file', blob, type === 'video' ? 'video.webm' : 'voice.webm');
@@ -382,6 +453,29 @@ export default function ChatPage() {
     setRecordingType(null);
   };
 
+  // ЛОГИКА ТАПА И УДЕРЖАНИЯ КНОПКИ МИКРОФОНА/КАМЕРЫ
+  const handleRecordTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    e.preventDefault();
+    holdTimerRef.current = setTimeout(() => {
+       startRecording(recordMode);
+       holdTimerRef.current = null;
+    }, 300);
+  };
+
+  const handleRecordTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
+    e.preventDefault();
+    if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+        // Это был быстрый тап - переключаем режим с анимацией
+        setIsAnimatingIcon(true);
+        setTimeout(() => {
+            setRecordMode(p => p === 'voice' ? 'video' : 'voice');
+            setIsAnimatingIcon(false);
+        }, 150);
+    }
+  };
+
   const sendDirectMessage = async (msgContent: string) => {
     const tempMsg = { id: Date.now(), content: msgContent, isSending: true, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
     if (isSavedChat) {
@@ -415,6 +509,7 @@ export default function ChatPage() {
     const tempContent = content.trim();
     const finalContent = replyingTo ? `> ${replyingTo.content.replace(/^> .*\n\n/, '')}\n\n${tempContent}` : tempContent;
     setContent(''); setReplyingTo(null);
+    
     sendDirectMessage(finalContent);
   };
 
@@ -592,7 +687,6 @@ export default function ChatPage() {
     setIsSavingChat(false);
   };
 
-  // ОБНОВЛЕННЫЙ ПАРСЕР ДЛЯ ГОЛОСА И ВИДЕОКРУЖКОВ
   const parseContent = (rawText: any) => {
     if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false, voiceUrl: null, videoNoteUrl: null };
     
@@ -600,11 +694,9 @@ export default function ChatPage() {
     let voiceUrl = null;
     let videoNoteUrl = null;
 
-    // Парсинг голоса
     const voiceMatch = /\[VOICE\]\s*(https?:\/\/[^\s]+)/.exec(text);
     if (voiceMatch) { voiceUrl = voiceMatch[1]; text = text.replace(voiceMatch[0], '').trim(); }
 
-    // Парсинг кружочков
     const videoNoteMatch = /\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)/.exec(text);
     if (videoNoteMatch) { videoNoteUrl = videoNoteMatch[1]; text = text.replace(videoNoteMatch[0], '').trim(); }
 
@@ -788,12 +880,18 @@ export default function ChatPage() {
                     >
                       {videoNoteUrl && (
                         <div className="p-3 flex justify-center">
-                           <video src={videoNoteUrl} controls className="w-56 h-56 rounded-full object-cover shadow-lg border border-black/5 dark:border-white/5" onClick={e => e.stopPropagation()} />
+                           <div className="relative inline-block m-2 w-[220px] h-[220px]">
+                              <video src={videoNoteUrl} autoPlay loop muted playsInline className={`w-full h-full rounded-full object-cover border-4 border-black/5 dark:border-white/5 shadow-sm`} onClick={e => e.stopPropagation()} />
+                              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
+                                 {timeStr}
+                              </div>
+                           </div>
                         </div>
                       )}
+
                       {voiceUrl && (
-                        <div className="p-4">
-                           <audio src={voiceUrl} controls className="w-full h-10 outline-none" onClick={e => e.stopPropagation()} />
+                        <div className="relative">
+                           <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg)} isSaved={isSavedChat} />
                         </div>
                       )}
 
@@ -822,9 +920,11 @@ export default function ChatPage() {
                            {quotedText && <div className="mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>}
                            <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
                              {text}
-                             <span className="float-right inline-flex items-center gap-1 text-[11px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
-                               {timeStr}
-                             </span>
+                             {(!voiceUrl && !videoNoteUrl) && (
+                               <span className="float-right inline-flex items-center gap-1 text-[11px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
+                                 {timeStr}
+                               </span>
+                             )}
                              <div className="clear-both"></div>
                            </div>
                         </div>
@@ -882,18 +982,27 @@ export default function ChatPage() {
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
+                      {/* КРУЖОЧКИ (ВИДЕО) */}
                       {videoNoteUrl && (
                         <div className="p-1 flex justify-center">
-                           <video src={videoNoteUrl} controls className={`w-48 h-48 rounded-full object-cover shadow-md ${hasText ? 'mb-1' : ''}`} onClick={e => e.stopPropagation()} />
+                           <div className="relative inline-block w-[220px] h-[220px]">
+                              <video src={videoNoteUrl} autoPlay loop muted playsInline className={`w-full h-full rounded-full object-cover border-4 ${isMe ? 'border-white/20 dark:border-black/20' : 'border-black/5 dark:border-white/5'} shadow-sm`} onClick={e => e.stopPropagation()} />
+                              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
+                                 {timeStr}
+                                 {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={10} strokeWidth={3}/>{(isMsgRead(msg) || isSavedChat) ? <Check size={10} strokeWidth={3}/> : null}</div>}
+                              </div>
+                           </div>
                         </div>
                       )}
                       
+                      {/* ГОЛОСОВЫЕ */}
                       {voiceUrl && (
-                        <div className={`px-2 py-2 ${hasText ? 'pb-1' : ''}`}>
-                           <audio src={voiceUrl} controls className={`h-10 outline-none w-[220px] ${isMe ? 'invert sepia saturate-0 hue-rotate-180 brightness-200' : ''}`} onClick={e => e.stopPropagation()} />
+                        <div className={`${hasText ? 'pb-1' : ''}`}>
+                           <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg)} isSaved={isSavedChat} />
                         </div>
                       )}
 
+                      {/* МЕДИА */}
                       {hasMedia && (
                         <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''} ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`}>
                           {mediaUrls.map((url, idx) => (
@@ -915,28 +1024,30 @@ export default function ChatPage() {
                           {(!hasText && !voiceUrl && !videoNoteUrl) && (
                             <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
                                {timeStr}
-                               {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{isMsgRead(msg) ? <Check size={11} strokeWidth={2.5}/> : null}</div>}
+                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5}/>{(isMsgRead(msg) || isSavedChat) ? <Check size={11} strokeWidth={2.5}/> : null}</div>}
                             </div>
                           )}
                         </div>
                       )}
                       
-                      {(hasText || voiceUrl || videoNoteUrl) && (
+                      {/* ТЕКСТ */}
+                      {hasText && (
                         <div className="px-3.5 pt-2 pb-2.5">
                            {quotedText && (
                              <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/10 dark:border-white/10'}`}>{quotedText}</div>
                            )}
-                           {hasText && (
-                             <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap">
-                               {text}
-                             </div>
-                           )}
-                           <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
-                               {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
-                               {timeStr}
-                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{isMsgRead(msg) ? <Check size={12} strokeWidth={2.5}/> : null}</div>}
-                           </span>
-                           <div className="clear-both"></div>
+                           <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap">
+                             {text}
+                             
+                             {(!voiceUrl && !videoNoteUrl) && (
+                               <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
+                                 {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
+                                 {timeStr}
+                                 {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{(isMsgRead(msg) || isSavedChat) ? <Check size={12} strokeWidth={2.5}/> : null}</div>}
+                               </span>
+                             )}
+                             <div className="clear-both"></div>
+                           </div>
                         </div>
                       )}
                     </div>
@@ -971,7 +1082,7 @@ export default function ChatPage() {
         </div>
       </main>
 
-      {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ КАНАЛОВ */}
+      {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ ЧАТОВ (группы/каналы) */}
       {activeThread && (
         <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={() => setContextMenu(null)}>
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
@@ -1003,6 +1114,7 @@ export default function ChatPage() {
                  const isMe = String(c.senderId) === String(currentUserId);
                  const { text, quotedText, hasMedia, mediaUrls, hasText, voiceUrl, videoNoteUrl } = parseContent(c.content);
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
+                 const timeStr = new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
                  return (
                    <div key={c.id} className={`relative flex flex-col mb-2 z-10`}>
@@ -1020,12 +1132,18 @@ export default function ChatPage() {
                          
                          {videoNoteUrl && (
                            <div className="p-1 flex justify-center">
-                              <video src={videoNoteUrl} controls className={`w-32 h-32 rounded-full object-cover shadow-sm ${hasText ? 'mb-1' : ''}`} onClick={e => e.stopPropagation()} />
+                              <div className="relative inline-block w-[160px] h-[160px]">
+                                <video src={videoNoteUrl} autoPlay loop muted playsInline className={`w-full h-full rounded-full object-cover border-4 border-black/5 dark:border-white/5 shadow-sm`} onClick={e => e.stopPropagation()} />
+                                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
+                                   {timeStr}
+                                </div>
+                              </div>
                            </div>
                          )}
+                         
                          {voiceUrl && (
-                           <div className={`px-1 py-1 ${hasText ? 'pb-1' : ''}`}>
-                              <audio src={voiceUrl} controls className="h-8 outline-none w-[200px]" onClick={e => e.stopPropagation()} />
+                           <div className={`${hasText ? 'pb-1' : ''}`}>
+                              <VoicePlayer url={voiceUrl} isMe={false} timeStr={timeStr} readStatus={true} isSaved={false} />
                            </div>
                          )}
 
@@ -1046,7 +1164,10 @@ export default function ChatPage() {
                              />
                          )}
                          {hasText && <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{text}</span>}
-                         <span className="text-[11px] text-[#86868b] dark:text-[#98989d] mt-1.5 text-right">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                         
+                         {(!voiceUrl && !videoNoteUrl) && (
+                           <span className="text-[11px] text-[#86868b] dark:text-[#98989d] mt-1.5 text-right">{timeStr}</span>
+                         )}
                        </div>
                      </div>
 
@@ -1088,40 +1209,21 @@ export default function ChatPage() {
                 <button type="button" onClick={() => setCommentReplyingTo(null)} className="p-1.5 flex-shrink-0 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors"><X size={16} /></button>
               </div>
              )}
-            
-            {recordingType ? (
-               <div className="p-3 flex items-center justify-between pb-6 bg-[#f5f5f7] dark:bg-[#161618]">
-                 <button onClick={() => stopRecording(true)} className="text-red-500 p-2 active:scale-95"><Trash2 size={24} /></button>
-                 <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
-                    <span className="font-mono text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-semibold">{formatTime(recordingTime)}</span>
-                 </div>
-                 <button onClick={() => stopRecording(false)} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center active:scale-95 transition-transform"><Send size={18} className="ml-0.5" /></button>
-               </div>
-            ) : (
-              <form onSubmit={handleSendComment} className="p-3 flex items-center gap-2 pb-6">
-                <input type="file" accept="image/*,video/*" className="hidden" ref={commentFileInputRef} onChange={handleCommentFileUpload} />
-                <button type="button" onClick={() => commentFileInputRef.current?.click()} disabled={isCommentUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors disabled:opacity-50">
-                  {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
-                </button>
-                <input 
-                  className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
-                  value={commentContent} 
-                  onChange={e => setCommentContent(e.target.value)} 
-                  placeholder={t.commentPlaceholder} 
-                />
-                {!commentContent.trim() ? (
-                  <>
-                     <button type="button" onClick={() => startRecording('voice')} className="p-2 text-[#86868b] active:scale-95"><Mic size={22} /></button>
-                     <button type="button" onClick={() => startRecording('video')} className="p-2 text-[#86868b] active:scale-95"><Video size={22} /></button>
-                  </>
-                ) : (
-                  <button type="submit" className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center transition-transform active:scale-95">
-                    <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
-                  </button>
-                )}
-              </form>
-            )}
+            <form onSubmit={handleSendComment} className="p-3 flex items-center gap-2 pb-6">
+              <input type="file" accept="image/*,video/*" className="hidden" ref={commentFileInputRef} onChange={handleCommentFileUpload} />
+              <button type="button" onClick={() => commentFileInputRef.current?.click()} disabled={isCommentUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors disabled:opacity-50">
+                {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
+              </button>
+              <input 
+                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
+                value={commentContent} 
+                onChange={e => setCommentContent(e.target.value)} 
+                placeholder={t.commentPlaceholder} 
+              />
+              <button type="submit" disabled={!commentContent.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">
+                <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
+              </button>
+            </form>
           </div>
         </div>
       )}
@@ -1157,13 +1259,24 @@ export default function ChatPage() {
                 <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50">{isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}</button>
                 <input ref={inputRef} className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px]" value={content} onChange={(e) => { setContent(e.target.value); if (Date.now() - lastTypingTime.current > 2000) { lastTypingTime.current = Date.now(); socket?.emit('typing', { chatId, name: currentUser?.displayName }); } }} placeholder={t.messagePlaceholder} />
                 
+                {/* ИСПРАВЛЕНИЕ 1: КНОПКА МИКРОФОНА/КАМЕРЫ/ОТПРАВИТЬ С АНИМАЦИЕЙ */}
                 {!content.trim() ? (
-                  <>
-                     <button type="button" onClick={() => startRecording('voice')} className="p-2 text-[#86868b] active:scale-95"><Mic size={22} /></button>
-                     <button type="button" onClick={() => startRecording('video')} className="p-2 text-[#86868b] active:scale-95"><Video size={22} /></button>
-                  </>
+                  <button
+                     type="button"
+                     onMouseDown={handleRecordTouchStart}
+                     onMouseUp={handleRecordTouchEnd}
+                     onTouchStart={handleRecordTouchStart}
+                     onTouchEnd={handleRecordTouchEnd}
+                     onMouseLeave={handleRecordTouchEnd}
+                     className="w-[38px] h-[38px] shrink-0 rounded-full flex items-center justify-center text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer select-none"
+                     style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
+                  >
+                     <div className={`transition-transform duration-150 ${isAnimatingIcon ? 'scale-0' : 'scale-100'}`}>
+                        {recordMode === 'voice' ? <Mic size={22} /> : <Camera size={22} />}
+                     </div>
+                  </button>
                 ) : (
-                  <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ChevronRight size={20} strokeWidth={2.5} /></button>
+                  <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" /></button>
                 )}
               </form>
             )
