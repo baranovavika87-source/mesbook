@@ -49,8 +49,7 @@ const translations = {
     replyAction: "Ответить",
     copy: "Копировать",
     editAction: "Изменить",
-    deleteAction: "Удалить",
-    cancel: "ОТМЕНА"
+    deleteAction: "Удалить"
   },
   en: {
     saved: "Saved Messages",
@@ -89,8 +88,7 @@ const translations = {
     replyAction: "Reply",
     copy: "Copy",
     editAction: "Edit",
-    deleteAction: "Delete",
-    cancel: "CANCEL"
+    deleteAction: "Delete"
   }
 };
 
@@ -123,20 +121,22 @@ const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
 };
 
 const isMsgRead = (msg: any, isSavedChat: boolean) => {
-  if (isSavedChat) return true; // ИСПРАВЛЕНИЕ 3: В избранном всегда 2 галочки
+  if (isSavedChat) return true; 
   if (!msg) return false;
   return msg.read === true || msg.read === 1 || msg.read === '1' || 
          msg.isRead === true || msg.isRead === 1 || msg.isRead === '1' || 
          msg.status === 'read' || msg.viewed === true;
 };
 
-const formatTime = (sec: number) => {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s},0`; // Формат как в ТГ 00:00,0
+// ИСПРАВЛЕНИЕ: Форматер миллисекунд для плавной записи
+const formatMsTime = (ms: number) => {
+  const totalSeconds = Math.floor(ms / 1000);
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  const milliseconds = Math.floor((ms % 1000) / 10);
+  return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s},${milliseconds < 10 ? '0' : ''}${milliseconds}`;
 };
 
-// КАСТОМНЫЙ ПЛЕЕР ГОЛОСОВЫХ СООБЩЕНИЙ (С ТОНКИМИ ПОЛОСКАМИ)
 const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved }: any) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -178,7 +178,6 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved }: any) => {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Более частые и тонкие полоски как в ТГ
   const bars = [2, 4, 3, 5, 7, 8, 6, 4, 5, 3, 2, 4, 6, 5, 7, 8, 6, 4, 2, 3, 5, 4, 2];
 
   return (
@@ -262,15 +261,16 @@ export default function ChatPage() {
   const [recordMode, setRecordMode] = useState<'voice' | 'video'>('voice');
   const [isAnimatingIcon, setIsAnimatingIcon] = useState(false);
   const [recordingType, setRecordingType] = useState<'voice' | 'video' | null>(null);
-  const [recordingTime, setRecordingTime] = useState(0);
+  const [recordingMs, setRecordingMs] = useState(0);
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
   
-  const [expandedVideoMsgId, setExpandedVideoMsgId] = useState<number | null>(null); // Для увеличения кружочка
-  const [uploadingMsgId, setUploadingMsgId] = useState<number | null>(null); // Для спиннера загрузки
+  const [expandedVideoMsgId, setExpandedVideoMsgId] = useState<number | null>(null);
+  const [uploadingMsgId, setUploadingMsgId] = useState<number | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const requestRef = useRef<number>();
+  const startTimeRef = useRef<number>(0);
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
   const videoStreamRef = useRef<HTMLVideoElement>(null);
 
@@ -406,13 +406,10 @@ export default function ChatPage() {
     }
   }, [threadComments]);
 
-  // ФУНКЦИИ ЗАПИСИ И ОТПРАВКИ
-  const initCamera = async (mode: 'user' | 'environment') => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: mode } });
-      if (videoStreamRef.current) videoStreamRef.current.srcObject = stream;
-      return stream;
-    } catch(e) { return null; }
+  // ФУНКЦИИ ЗАПИСИ
+  const animateTimer = () => {
+    setRecordingMs(Date.now() - startTimeRef.current);
+    requestRef.current = requestAnimationFrame(animateTimer);
   };
 
   const startRecording = async (type: 'voice' | 'video', mode: 'user' | 'environment' = 'user') => {
@@ -429,7 +426,6 @@ export default function ChatPage() {
         const blob = new Blob(chunksRef.current, { type: type === 'video' ? 'video/webm' : 'audio/webm' });
         stream.getTracks().forEach(t => t.stop());
         
-        // Показываем спиннер загрузки
         const tempId = Date.now();
         setUploadingMsgId(tempId);
         
@@ -447,7 +443,6 @@ export default function ChatPage() {
           const data = await res.json();
           if (data.secure_url) {
              const tag = type === 'video' ? '[VIDEO_NOTE]' : '[VOICE]';
-             // Удаляем временное сообщение и шлем настоящее
              setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
              sendDirectMessage(`${tag} ${data.secure_url}`);
           }
@@ -460,15 +455,16 @@ export default function ChatPage() {
       recorder.start();
       mediaRecorderRef.current = recorder;
       setRecordingType(type);
-      setRecordingTime(0);
-      timerRef.current = setInterval(() => setRecordingTime(p => p + 1), 1000);
+      
+      startTimeRef.current = Date.now();
+      requestRef.current = requestAnimationFrame(animateTimer);
     } catch(e) { 
       alert('Необходим доступ к микрофону и/или камере'); 
     }
   };
 
   const stopRecording = (cancel: boolean = false) => {
-    if (timerRef.current) clearInterval(timerRef.current);
+    if (requestRef.current) cancelAnimationFrame(requestRef.current);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       if (cancel) {
          mediaRecorderRef.current.onstop = () => {
@@ -480,16 +476,21 @@ export default function ChatPage() {
     setRecordingType(null);
   };
 
+  // ИСПРАВЛЕНИЕ: Бесшовный переворот камеры
   const toggleCamera = async () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-       const newMode = cameraFacingMode === 'user' ? 'environment' : 'user';
-       setCameraFacingMode(newMode);
-       mediaRecorderRef.current.stop(); // Останавливаем старую
-       setTimeout(() => startRecording('video', newMode), 100); // Запускаем с новой камерой
+    const newMode = cameraFacingMode === 'user' ? 'environment' : 'user';
+    setCameraFacingMode(newMode);
+    try {
+        const stream = mediaRecorderRef.current?.stream;
+        const track = stream?.getVideoTracks()[0];
+        if (track && track.applyConstraints) {
+            await track.applyConstraints({ facingMode: newMode });
+        }
+    } catch (e) {
+        // Fallback handled safely without crashing
     }
   };
 
-  // ЛОГИКА ТАПА И УДЕРЖАНИЯ КНОПКИ МИКРОФОНА/КАМЕРЫ
   const handleRecordTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     e.preventDefault();
     holdTimerRef.current = setTimeout(() => {
@@ -503,7 +504,6 @@ export default function ChatPage() {
     if (holdTimerRef.current) {
         clearTimeout(holdTimerRef.current);
         holdTimerRef.current = null;
-        // Быстрый тап - переключаем режим с анимацией
         setIsAnimatingIcon(true);
         setTimeout(() => {
             setRecordMode(p => p === 'voice' ? 'video' : 'voice');
@@ -784,11 +784,11 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={() => setContextMenu(null)}>
       
-      {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ */}
+      {/* ИСПРАВЛЕНИЕ: ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ ПО ЦЕНТРУ */}
       {recordingType === 'video' && (
-         <div className="fixed bottom-24 right-4 w-40 h-40 rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200">
+         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200">
            <video ref={videoStreamRef} autoPlay muted playsInline className={`w-full h-full object-cover transform ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
-           <div className="absolute top-2 left-1/2 -translate-x-1/2 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-white" />
+           <div className="absolute top-4 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full animate-pulse shadow-sm" />
          </div>
       )}
 
@@ -897,7 +897,7 @@ export default function ChatPage() {
 
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
               const mReactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
-              const isMsgUploading = msg.id === uploadingMsgId; // Флаг спиннера
+              const isMsgUploading = msg.id === uploadingMsgId; 
 
               // КАНАЛЫ
               if (isChannel) {
@@ -921,16 +921,17 @@ export default function ChatPage() {
                          </div>
                       ) : (
                         <>
-                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК БЕЗ ФОНА, УВЕЛИЧИВАЕТСЯ ПРИ КЛИКЕ */}
+                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК */}
                           {videoNoteUrl && (
                             <div className="p-3 flex justify-center">
-                               <div className="relative inline-block w-[240px] h-[240px] rounded-full" onClick={(e) => {
+                               <div className={`relative inline-block w-[240px] h-[240px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
+                               onClick={(e) => {
                                   e.stopPropagation();
                                   setExpandedVideoMsgId(expandedVideoMsgId === msg.id ? null : msg.id);
                                }}>
                                   <video 
                                     src={videoNoteUrl} autoPlay loop muted playsInline 
-                                    className={`w-full h-full rounded-full object-cover shadow-md transition-transform duration-300 ease-out ${expandedVideoMsgId === msg.id ? 'scale-150 z-50 fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-2xl' : 'scale-100 z-10'}`} 
+                                    className={`w-full h-full rounded-full object-cover`} 
                                   />
                                   {expandedVideoMsgId !== msg.id && (
                                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
@@ -1042,16 +1043,17 @@ export default function ChatPage() {
                          </div>
                       ) : (
                         <>
-                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК БЕЗ ФОНА, УВЕЛИЧИВАЕТСЯ ПРИ КЛИКЕ */}
+                          {/* ИСПРАВЛЕНИЕ: КРУЖОЧКИ И УВЕЛИЧЕНИЕ КАК В ТГ */}
                           {videoNoteUrl && (
                             <div className="p-1.5 flex justify-center">
-                               <div className={`relative inline-block w-[220px] h-[220px] rounded-full`} onClick={(e) => {
+                               <div className={`relative inline-block w-[220px] h-[220px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
+                               onClick={(e) => {
                                   e.stopPropagation();
                                   setExpandedVideoMsgId(expandedVideoMsgId === msg.id ? null : msg.id);
                                }}>
                                   <video 
                                     src={videoNoteUrl} autoPlay loop muted playsInline 
-                                    className={`w-full h-full rounded-full object-cover shadow-sm transition-transform duration-300 ease-out ${expandedVideoMsgId === msg.id ? 'scale-[1.6] z-50 fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-2xl' : 'scale-100 z-10'}`} 
+                                    className={`w-full h-full rounded-full object-cover`} 
                                   />
                                   {expandedVideoMsgId !== msg.id && (
                                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2.5 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
@@ -1214,11 +1216,17 @@ export default function ChatPage() {
                          
                          {videoNoteUrl && (
                            <div className="p-1 flex justify-center">
-                              <div className="relative inline-block w-[160px] h-[160px]">
-                                <video src={videoNoteUrl} autoPlay loop muted playsInline className={`w-full h-full rounded-full object-cover border-4 border-black/5 dark:border-white/5 shadow-sm`} onClick={e => e.stopPropagation()} />
-                                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
-                                   {timeStr}
-                                </div>
+                              <div className={`relative inline-block w-[160px] h-[160px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === c.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
+                              onClick={(e) => {
+                                 e.stopPropagation();
+                                 setExpandedVideoMsgId(expandedVideoMsgId === c.id ? null : c.id);
+                              }}>
+                                <video src={videoNoteUrl} autoPlay loop muted playsInline className={`w-full h-full rounded-full object-cover`} />
+                                {expandedVideoMsgId !== c.id && (
+                                   <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
+                                      {timeStr}
+                                   </div>
+                                )}
                               </div>
                            </div>
                          )}
@@ -1297,7 +1305,7 @@ export default function ChatPage() {
                 {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
               </button>
               <input 
-                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
+                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-[20px] px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
                 value={commentContent} 
                 onChange={e => setCommentContent(e.target.value)} 
                 placeholder={t.commentPlaceholder} 
@@ -1329,18 +1337,16 @@ export default function ChatPage() {
             recordingType ? (
                <div className="p-3 flex items-center justify-between pb-6 bg-[#f5f5f7] dark:bg-[#161618]">
                  <div className="flex items-center gap-3">
-                   <button onClick={() => stopRecording(true)} className="text-red-500 p-2 active:scale-95"><Trash2 size={24} /></button>
-                   {/* КНОПКА ПЕРЕВОРОТА КАМЕРЫ ДЛЯ КРУЖОЧКОВ */}
+                   <button onClick={() => stopRecording(true)} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-2 active:scale-95 transition-transform"><Trash2 size={24} /></button>
                    {recordingType === 'video' && (
-                     <button onClick={toggleCamera} className="text-[#86868b] p-2 active:scale-95"><RefreshCw size={22} /></button>
+                     <button onClick={toggleCamera} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-2 active:scale-95 transition-transform"><RefreshCw size={22} /></button>
                    )}
                  </div>
                  
                  <div className="flex flex-col items-center flex-1">
-                    <span className="text-[#86868b] text-[11px] font-medium tracking-wide mb-1">{t.cancel}</span>
                     <div className="flex items-center gap-2">
-                       <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
-                       <span className="font-mono text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-semibold">{formatTime(recordingTime)}</span>
+                       <div className="w-2.5 h-2.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full animate-pulse shadow-sm" />
+                       <span className="font-mono text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-semibold tracking-wide">{formatMsTime(recordingMs)}</span>
                     </div>
                  </div>
                  <button onClick={() => stopRecording(false)} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center active:scale-95 transition-transform"><ArrowUp size={20} strokeWidth={2.5} /></button>
@@ -1351,7 +1357,6 @@ export default function ChatPage() {
                 <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors">{isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}</button>
                 <input ref={inputRef} className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-[20px] px-4 py-2 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px]" value={content} onChange={(e) => { setContent(e.target.value); if (Date.now() - lastTypingTime.current > 2000) { lastTypingTime.current = Date.now(); socket?.emit('typing', { chatId, name: currentUser?.displayName }); } }} placeholder={t.messagePlaceholder} />
                 
-                {/* ИСПРАВЛЕНИЕ: КНОПКА МИКРОФОНА/КАМЕРЫ/ОТПРАВИТЬ С АНИМАЦИЕЙ */}
                 {!content.trim() ? (
                   <button
                      type="button"
@@ -1368,7 +1373,6 @@ export default function ChatPage() {
                      </div>
                   </button>
                 ) : (
-                  // ИСПРАВЛЕНИЕ: КНОПКА ОТПРАВИТЬ (СТРЕЛОЧКА ВВЕРХ)
                   <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ArrowUp size={20} strokeWidth={2.5} /></button>
                 )}
               </form>
