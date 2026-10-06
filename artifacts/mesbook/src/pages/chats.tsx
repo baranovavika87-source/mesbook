@@ -401,7 +401,7 @@ export default function ChatsPage() {
 
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
-        <a className="flex items-center px-4 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors border-b border-black/[0.04] dark:border-white/[0.04] last:border-0 bg-white dark:bg-[#222224]">
+        <a className="flex items-center px-4 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors border-b border-black/5 dark:border-white/5 last:border-0 bg-white dark:bg-[#222224]">
           <div className="relative w-[52px] h-[52px] shrink-0">
             <div className={`w-full h-full rounded-full flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 ${isSaved ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
               {isSaved ? (
@@ -466,7 +466,7 @@ export default function ChatsPage() {
       <Link key={user.id} href={'/chat/' + user.id}>
         <a 
           onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
-          className="flex items-center justify-between px-4 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors border-b border-black/[0.04] dark:border-white/[0.04] bg-white dark:bg-[#222224]"
+          className="flex items-center justify-between px-4 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors border-b border-black/5 dark:border-white/5 last:border-0 bg-white dark:bg-[#222224]"
         >
           <div className="flex items-center gap-3.5">
             <div className="relative w-[52px] h-[52px] shrink-0">
@@ -687,8 +687,8 @@ export default function ChatsPage() {
                 )}
               </button>
               
-              <h1 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">
-                mesogram
+              <h1 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] uppercase tracking-widest">
+                MESO
               </h1>
               
               <button 
