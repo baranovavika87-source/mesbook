@@ -595,6 +595,15 @@ export default function ChatPage() {
               <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 text-center px-4 tracking-tight">{chatInfo.participant.displayName}</h2>
               {chatInfo.participant.username && <p className="text-[15px] text-[#86868b] dark:text-[#98989d]">{chatInfo.participant.username}</p>}
               <p className={`mt-1.5 text-[13px] font-medium ${subtitleColor}`}>{subtitleText}</p>
+              
+              {/* ИСПРАВЛЕНИЕ: Добавлено описание канала в профиль */}
+              {(chatInfo.participant.description || chatInfo.participant.bio) && (
+                <div className="mt-4 px-6 w-full text-center">
+                  <p className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap bg-white dark:bg-[#222224] p-4 rounded-[16px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
+                    {chatInfo.participant.description || chatInfo.participant.bio}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -660,7 +669,7 @@ export default function ChatPage() {
                                     style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
                                     onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
                                     onMouseDown={(e) => handleTouchStartPhoto(e, url)}
-                                    onTouchEnd={clearPhotoTimer} onMouseUp={clearPhotoTimer}
+                                    onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
                                     onClick={(e) => handlePhotoClick(e, msg, 'message')}
                                     onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
                                     onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
@@ -687,6 +696,7 @@ export default function ChatPage() {
                            {mReactionsKeys.map(key => {
                              const rData = msg.reactions[key];
                              const count = typeof rData === 'number' ? rData : (rData?.count || 1);
+                             
                              return (
                                <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                  <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
@@ -711,6 +721,7 @@ export default function ChatPage() {
                 );
               }
 
+              // ГРУППЫ И ЛИЧНЫЕ ЧАТЫ (ПУЗЫРИ)
               return (
                 <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
                   {showDate && (
@@ -743,7 +754,7 @@ export default function ChatPage() {
                                     style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
                                     onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
                                     onMouseDown={(e) => handleTouchStartPhoto(e, url)}
-                                    onTouchEnd={clearPhotoTimer} onMouseUp={clearPhotoTimer}
+                                    onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
                                     onClick={(e) => handlePhotoClick(e, msg, 'message')}
                                     onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
                                     onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
@@ -753,7 +764,8 @@ export default function ChatPage() {
                           {!hasText && (
                             <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
                                {timeStr}
-                               {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{(msg.read === true || msg.read === 1) && <Check size={11} strokeWidth={2.5}/>}</div>}
+                               {/* ИСПРАВЛЕНИЕ: ВОЗВРАЩЕНЫ ЧЕСТНЫЕ 2 ГАЛОЧКИ ДЛЯ ПРОЧИТАННЫХ */}
+                               {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5}/>{msg.read ? <Check size={11} strokeWidth={2.5}/> : null}</div>}
                             </div>
                           )}
                         </div>
@@ -769,25 +781,14 @@ export default function ChatPage() {
                              <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
                                {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                {timeStr}
-                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{(msg.read === true || msg.read === 1) && <Check size={12} strokeWidth={2.5}/>}</div>}
+                               {/* ИСПРАВЛЕНИЕ: ВОЗВРАЩЕНЫ ЧЕСТНЫЕ 2 ГАЛОЧКИ ДЛЯ ПРОЧИТАННЫХ */}
+                               {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{msg.read ? <Check size={12} strokeWidth={2.5}/> : null}</div>}
                              </span>
                              <div className="clear-both"></div>
                            </div>
                         </div>
                       )}
                     </div>
-                    
-                    {isGroup && (
-                       <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }} className="w-full flex items-center justify-between px-3 py-2 mt-1 border border-black/5 dark:border-white/5 bg-white dark:bg-[#222224] transition-colors hover:bg-black/5 dark:hover:bg-white/5 rounded-[16px]">
-                          <div className="flex gap-2 items-center">
-                            <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                            <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-                              {(msg.commentsCount || 0) > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount || 0, t.commentsCount, lang)}` : t.comments}
-                            </span>
-                          </div>
-                          <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                        </button>
-                    )}
                     
                     {mReactionsKeys.length > 0 && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -852,7 +853,7 @@ export default function ChatPage() {
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
 
                  return (
-                   <div key={c.id} className={`relative flex flex-col mb-2 z-10`}>
+                   <div key={c.id} className="relative flex flex-col mb-2 z-10">
                      <div 
                         className="flex gap-3 items-start cursor-pointer" 
                         onClick={(e) => openGlobalMenu(e, c, 'comment')}
@@ -871,7 +872,7 @@ export default function ChatPage() {
                                style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
                                onTouchStart={(e) => handleTouchStartPhoto(e, mediaUrls[0])} 
                                onMouseDown={(e) => handleTouchStartPhoto(e, mediaUrls[0])}
-                               onTouchEnd={clearPhotoTimer} onMouseUp={clearPhotoTimer}
+                               onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
                                onClick={(e) => handlePhotoClick(e, c, 'comment')}
                                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, c, 'comment'); }}
                              />
@@ -976,24 +977,22 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ГЛОБАЛЬНОЕ МЕНЮ ПО КООРДИНАТАМ */}
+      {/* ИСПРАВЛЕНИЕ УДАЛЕНИЯ В МЕНЮ */}
       {contextMenu && (() => {
-         const menuWidth = 220; 
-         const menuHeight = 250;
-         let safeX = contextMenu.x; 
-         let safeY = contextMenu.y;
+         const menuWidth = 220; const menuHeight = 250;
+         let safeX = contextMenu.x; let safeY = contextMenu.y;
          
          if (safeX + menuWidth > window.innerWidth) safeX = window.innerWidth - menuWidth - 10;
          if (safeY + menuHeight > window.innerHeight) safeY = safeY - menuHeight;
          if (safeY < 0) safeY = 20;
          
          const isMe = String(contextMenu.item.senderId) === String(currentUserId);
-         const { hasText } = parseContent(contextMenu.item.content);
+         const { hasText, hasMedia } = parseContent(contextMenu.item.content);
          
          const showReply = contextMenu.type === 'comment' || !isChannel;
          const showCopy = hasText;
-         const showEdit = isMe && contextMenu.type === 'message';
-         const showDelete = (isMe && contextMenu.type === 'message') || (isMe && contextMenu.type === 'comment') || isAdmin;
+         const showEdit = isMe && !hasMedia && contextMenu.type === 'message';
+         const showDelete = isMe; // ТОЛЬКО АВТОР МОЖЕТ УДАЛИТЬ СВОЁ
 
          if (!showReply && !showCopy && !showEdit && !showDelete) return null;
 
@@ -1007,24 +1006,16 @@ export default function ChatPage() {
                 </div>
                 <div className="flex flex-col bg-white/95 dark:bg-[#222224]/95 backdrop-blur-xl rounded-[20px] shadow-lg border border-black/5 dark:border-white/5 overflow-hidden w-full">
                    {showReply && (
-                     <button onClick={(e) => { e.stopPropagation(); if (contextMenu.type === 'comment') setCommentReplyingTo(contextMenu.item); else setReplyingTo(contextMenu.item); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5">
-                       <Reply size={18} className="text-[#86868b]" /> {t.replyAction}
-                     </button>
+                     <button onClick={(e) => { e.stopPropagation(); if (contextMenu.type === 'comment') setCommentReplyingTo(contextMenu.item); else setReplyingTo(contextMenu.item); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Reply size={18} className="text-[#86868b]" /> {t.replyAction}</button>
                    )}
                    {showCopy && (
-                     <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(contextMenu.item.content).text); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5">
-                       <Copy size={18} className="text-[#86868b]" /> {t.copy}
-                     </button>
+                     <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(contextMenu.item.content).text); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Copy size={18} className="text-[#86868b]" /> {t.copy}</button>
                    )}
                    {showEdit && (
-                     <button onClick={(e) => { e.stopPropagation(); setContextMenu(null); startEditing(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5">
-                       <Edit2 size={18} className="text-[#86868b]" /> {t.editAction}
-                     </button>
+                     <button onClick={(e) => { e.stopPropagation(); setContextMenu(null); startEditing(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Edit2 size={18} className="text-[#86868b]" /> {t.editAction}</button>
                    )}
                    {showDelete && (
-                     <button onClick={(e) => { e.stopPropagation(); if (contextMenu.type === 'comment') deleteMessage(contextMenu.id, true); else deleteMessage(contextMenu.id); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5">
-                       <Trash2 size={18} className="text-[#86868b]" /> {t.deleteAction}
-                     </button>
+                     <button onClick={(e) => { e.stopPropagation(); if (contextMenu.type === 'comment') deleteMessage(contextMenu.id, true); else deleteMessage(contextMenu.id); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5"><Trash2 size={18} className="text-[#86868b]" /> {t.deleteAction}</button>
                    )}
                 </div>
              </div>
