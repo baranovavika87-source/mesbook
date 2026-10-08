@@ -157,7 +157,6 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration }:
     
     const onLoadedMetadata = () => {
       if (fixedDuration) return; 
-      
       if (audio.duration === Infinity) {
         audio.currentTime = 1e10; 
         audio.addEventListener('seeked', function onLoadSeek() {
@@ -280,8 +279,13 @@ export default function ChatPage() {
   const [isAnimatingIcon, setIsAnimatingIcon] = useState(false);
   const [recordingType, setRecordingType] = useState<'voice' | 'video' | null>(null);
   const [recordingMs, setRecordingMs] = useState(0);
-  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
   
+  // КАНВАС-ПРОКСИ РЕФЫ
+  const cameraModeRef = useRef<'user' | 'environment'>('user');
+  const hiddenVideoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawFrameRef = useRef<number>();
+
   const [expandedVideoMsgId, setExpandedVideoMsgId] = useState<number | null>(null);
   const [uploadingMsgId, setUploadingMsgId] = useState<number | null>(null);
 
@@ -290,7 +294,6 @@ export default function ChatPage() {
   const requestRef = useRef<number>();
   const startTimeRef = useRef<number>(0);
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const videoStreamRef = useRef<HTMLVideoElement>(null);
 
   const editAvatarRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -432,70 +435,160 @@ export default function ChatPage() {
 
   const startRecording = async (type: 'voice' | 'video', mode: 'user' | 'environment' = 'user') => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' ? { facingMode: mode } : false });
-      
       setRecordingType(type);
       
-      setTimeout(() => {
-         if (type === 'video' && videoStreamRef.current) {
-            videoStreamRef.current.srcObject = stream;
-            videoStreamRef.current.muted = true;
-            videoStreamRef.current.play().catch(() => {});
-         }
-      }, 50);
-
-      let options: any = {};
       if (type === 'voice') {
-         if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) options = { mimeType: 'audio/webm;codecs=opus' };
-         else if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' };
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          
+          let options: any = {};
+          if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) options = { mimeType: 'audio/webm;codecs=opus' };
+          else if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' };
+
+          const recorder = new MediaRecorder(stream, options);
+          chunksRef.current = [];
+          recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+          
+          recorder.onstop = async () => {
+            const realDuration = (Date.now() - startTimeRef.current) / 1000;
+            const mimeType = recorder.mimeType || 'audio/webm';
+            const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+            const blob = new Blob(chunksRef.current, { type: mimeType });
+            
+            stream.getTracks().forEach(t => t.stop());
+            
+            const tempId = Date.now();
+            setUploadingMsgId(tempId);
+            
+            const tempMsg = { id: tempId, content: '[VOICE] loading', isSending: true, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
+            setMessages((prev: any) => [...prev, tempMsg]);
+            forceScrollToBottom();
+
+            const formData = new FormData();
+            formData.append('file', blob, `voice.${ext}`);
+            formData.append('upload_preset', 'mesogram-cloud');
+            formData.append('resource_type', 'auto'); 
+            
+            try {
+              const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
+              const data = await res.json();
+              if (data.secure_url) {
+                 setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
+                 sendDirectMessage(`[VOICE] ${data.secure_url} D:${realDuration.toFixed(1)}`);
+              }
+            } catch(e) {
+               setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
+            }
+            setUploadingMsgId(null);
+          };
+          
+          recorder.start();
+          mediaRecorderRef.current = recorder;
+          
+          startTimeRef.current = Date.now();
+          requestRef.current = requestAnimationFrame(animateTimer);
       } else {
-         if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) options = { mimeType: 'video/webm;codecs=vp8,opus' };
-         else if (MediaRecorder.isTypeSupported('video/mp4')) options = { mimeType: 'video/mp4' };
+          // ИСПРАВЛЕНИЕ: ВИДЕОКРУЖКИ ЧЕРЕЗ КАНВАС-ПРОКСИ
+          cameraModeRef.current = mode;
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode } });
+
+          // Ждем 100мс чтобы React успел отрендерить скрытый video и canvas
+          setTimeout(() => {
+              if (!hiddenVideoRef.current || !canvasRef.current) return;
+
+              hiddenVideoRef.current.srcObject = videoStream;
+              hiddenVideoRef.current.muted = true;
+              hiddenVideoRef.current.play().catch(()=>{});
+
+              const ctx = canvasRef.current.getContext('2d');
+              const drawFrame = () => {
+                  if (ctx && hiddenVideoRef.current && hiddenVideoRef.current.readyState >= 2) {
+                      const video = hiddenVideoRef.current;
+                      // Вырезаем идеальный квадрат из центра камеры
+                      const size = Math.min(video.videoWidth, video.videoHeight);
+                      const x = (video.videoWidth - size) / 2;
+                      const y = (video.videoHeight - size) / 2;
+
+                      ctx.save();
+                      ctx.clearRect(0, 0, 240, 240);
+                      
+                      // Зеркалим только фронталку
+                      if (cameraModeRef.current === 'user') {
+                          ctx.translate(240, 0);
+                          ctx.scale(-1, 1);
+                      }
+                      ctx.drawImage(video, x, y, size, size, 0, 0, 240, 240);
+                      ctx.restore();
+                  }
+                  drawFrameRef.current = requestAnimationFrame(drawFrame);
+              };
+              drawFrame();
+
+              let canvasStream;
+              try {
+                  canvasStream = (canvasRef.current as any).captureStream(30);
+              } catch (e) {
+                  // Fallback если браузер не поддерживает captureStream
+                  canvasStream = videoStream;
+              }
+
+              const combinedStream = new MediaStream([
+                  canvasStream.getVideoTracks()[0],
+                  audioStream.getAudioTracks()[0]
+              ]);
+
+              let options: any = {};
+              if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) options = { mimeType: 'video/webm;codecs=vp8,opus' };
+              else if (MediaRecorder.isTypeSupported('video/mp4')) options = { mimeType: 'video/mp4' };
+
+              const recorder = new MediaRecorder(combinedStream, options);
+              chunksRef.current = [];
+              recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+              
+              recorder.onstop = async () => {
+                  const realDuration = (Date.now() - startTimeRef.current) / 1000;
+                  const mimeType = recorder.mimeType || 'video/webm';
+                  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+                  const blob = new Blob(chunksRef.current, { type: mimeType });
+                  
+                  // Останавливаем все потоки
+                  audioStream.getTracks().forEach(t => t.stop());
+                  videoStream.getTracks().forEach(t => t.stop());
+                  const currentVidStream = hiddenVideoRef.current?.srcObject as MediaStream;
+                  currentVidStream?.getTracks().forEach(t => t.stop());
+                  if (drawFrameRef.current) cancelAnimationFrame(drawFrameRef.current);
+                  
+                  const tempId = Date.now();
+                  setUploadingMsgId(tempId);
+                  const tempMsg = { id: tempId, content: '[VIDEO_NOTE] loading', isSending: true, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
+                  setMessages((prev: any) => [...prev, tempMsg]);
+                  forceScrollToBottom();
+
+                  const formData = new FormData();
+                  formData.append('file', blob, `video.${ext}`);
+                  formData.append('upload_preset', 'mesogram-cloud');
+                  formData.append('resource_type', 'video'); 
+                  
+                  try {
+                      const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
+                      const data = await res.json();
+                      if (data.secure_url) {
+                         setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
+                         sendDirectMessage(`[VIDEO_NOTE] ${data.secure_url} D:${realDuration.toFixed(1)}`);
+                      }
+                  } catch(e) {
+                     setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
+                  }
+                  setUploadingMsgId(null);
+              };
+              
+              recorder.start();
+              mediaRecorderRef.current = recorder;
+              startTimeRef.current = Date.now();
+              requestRef.current = requestAnimationFrame(animateTimer);
+
+          }, 100);
       }
-
-      const recorder = new MediaRecorder(stream, options);
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      
-      recorder.onstop = async () => {
-        const realDuration = (Date.now() - startTimeRef.current) / 1000;
-        const mimeType = recorder.mimeType || (type === 'video' ? 'video/webm' : 'audio/webm');
-        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        
-        stream.getTracks().forEach(t => t.stop());
-        
-        const tempId = Date.now();
-        setUploadingMsgId(tempId);
-        
-        const tempMsg = { id: tempId, content: type === 'video' ? '[VIDEO_NOTE] loading' : '[VOICE] loading', isSending: true, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
-        setMessages((prev: any) => [...prev, tempMsg]);
-        forceScrollToBottom();
-
-        const formData = new FormData();
-        formData.append('file', blob, type === 'video' ? `video.${ext}` : `voice.${ext}`);
-        formData.append('upload_preset', 'mesogram-cloud');
-        formData.append('resource_type', type === 'video' ? 'video' : 'auto'); 
-        
-        try {
-          const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
-          const data = await res.json();
-          if (data.secure_url) {
-             const tag = type === 'video' ? '[VIDEO_NOTE]' : '[VOICE]';
-             setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
-             sendDirectMessage(`${tag} ${data.secure_url} D:${realDuration.toFixed(1)}`);
-          }
-        } catch(e) {
-           setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
-        }
-        setUploadingMsgId(null);
-      };
-      
-      recorder.start();
-      mediaRecorderRef.current = recorder;
-      
-      startTimeRef.current = Date.now();
-      requestRef.current = requestAnimationFrame(animateTimer);
     } catch(e) { 
       alert('Необходим доступ к микрофону и/или камере'); 
       setRecordingType(null);
@@ -517,32 +610,23 @@ export default function ChatPage() {
     setRecordingType(null);
   };
 
-  // ИСПРАВЛЕНИЕ: ЧЕСТНЫЙ ПЕРЕВОРОТ КАМЕРЫ (HOT SWAP)
+  // ИСПРАВЛЕНИЕ: ЧЕСТНЫЙ ПЕРЕВОРОТ КАМЕРЫ НА ЛЕТУ
   const toggleCamera = async () => {
-    const newMode = cameraFacingMode === 'user' ? 'environment' : 'user';
-    setCameraFacingMode(newMode);
+    const newMode = cameraModeRef.current === 'user' ? 'environment' : 'user';
     
     try {
-        const stream = mediaRecorderRef.current?.stream;
-        const oldVideoTrack = stream?.getVideoTracks()[0];
+        const newStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { exact: newMode } }
+        }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: newMode } }));
+
+        cameraModeRef.current = newMode;
         
-        if (stream && oldVideoTrack) {
-            // Запрашиваем новый видео-трек с нужной камерой
-            const newStream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: { exact: newMode } } 
-            }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: newMode } })); // Fallback
-            
-            const newVideoTrack = newStream.getVideoTracks()[0];
-            
-            // На лету меняем трек в идущей записи
-            stream.removeTrack(oldVideoTrack);
-            oldVideoTrack.stop();
-            stream.addTrack(newVideoTrack);
-            
-            // Обновляем превью
-            if (videoStreamRef.current) {
-                videoStreamRef.current.srcObject = stream;
-            }
+        const oldStream = hiddenVideoRef.current?.srcObject as MediaStream;
+        oldStream?.getVideoTracks().forEach(t => t.stop());
+
+        if (hiddenVideoRef.current) {
+            hiddenVideoRef.current.srcObject = newStream;
+            hiddenVideoRef.current.play().catch(()=>{});
         }
     } catch (e) {
         console.error('Camera flip failed:', e);
@@ -552,7 +636,7 @@ export default function ChatPage() {
   const handleRecordTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     e.preventDefault();
     holdTimerRef.current = setTimeout(() => {
-       startRecording(recordMode, cameraFacingMode);
+       startRecording(recordMode, cameraModeRef.current);
        holdTimerRef.current = null;
     }, 300);
   };
@@ -822,7 +906,7 @@ export default function ChatPage() {
     } catch(e) {}
     
     const hasMedia = mediaUrls.length > 0;
-    const hasText = !!text || !!quotedText;
+    const hasText = !!text.trim() || !!quotedText;
     const isVideo = hasMedia && !!mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
     
     return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration };
@@ -854,7 +938,9 @@ export default function ChatPage() {
       {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ ПО ЦЕНТРУ */}
       {recordingType === 'video' && (
          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[240px] h-[240px] rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200">
-           <video ref={videoStreamRef} autoPlay muted playsInline className={`w-full h-full object-cover transform ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
+           <video ref={hiddenVideoRef} playsInline muted autoPlay className="hidden" />
+           <canvas ref={canvasRef} width={240} height={240} className="w-full h-full object-cover rounded-full" />
+           <div className="absolute top-4 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full animate-pulse shadow-sm" />
          </div>
       )}
 
@@ -955,7 +1041,6 @@ export default function ChatPage() {
             return messages.map((msg: any) => {
               const isMe = String(msg.senderId) === String(currentUserId);
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration } = parseContent(msg.content);
-              
               const isOnlyVideoNote = videoNoteUrl && !hasText && !hasMedia && !voiceUrl;
               
               const dateObj = new Date(msg.createdAt);
@@ -986,11 +1071,11 @@ export default function ChatPage() {
                     >
                       {isMsgUploading ? (
                          <div className="p-4 flex items-center justify-center text-[#86868b] dark:text-[#98989d]">
-                            <Loader2 size={24} className="animate-spin mr-2" /> <span>Загрузка...</span>
+                            <Loader2 size={24} className="animate-spin mr-2" /> <span className="text-[14px]">Загрузка...</span>
                          </div>
                       ) : (
                         <>
-                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК БЕЗ ФОНА */}
+                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК */}
                           {videoNoteUrl && (
                             <div className={`${isOnlyVideoNote ? '' : 'p-3'} flex justify-center`}>
                                <div className={`relative inline-block w-[240px] h-[240px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
@@ -1112,8 +1197,8 @@ export default function ChatPage() {
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
                       {isMsgUploading ? (
-                         <div className="px-4 py-3 flex items-center justify-center opacity-80">
-                            <Loader2 size={20} className="animate-spin mr-2" /> <span>Загрузка...</span>
+                         <div className={`px-4 py-3 flex items-center justify-center opacity-80 ${isOnlyVideoNote ? 'bg-white/10 dark:bg-black/10 rounded-full w-[220px] h-[220px]' : ''}`}>
+                            <Loader2 size={20} className="animate-spin mr-2" /> <span className="text-[14px]">Загрузка...</span>
                          </div>
                       ) : (
                         <>
@@ -1368,7 +1453,7 @@ export default function ChatPage() {
                 {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
               </button>
               <input 
-                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-[20px] px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
+                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
                 value={commentContent} 
                 onChange={e => setCommentContent(e.target.value)} 
                 placeholder={t.commentPlaceholder} 
