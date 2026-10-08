@@ -46,6 +46,8 @@ async function ensureSchema(database: any) {
   try { await database.execute("ALTER TABLE messages ADD COLUMN is_edited INTEGER DEFAULT 0"); } catch (e) {}
   try { await database.execute("ALTER TABLE messages ADD COLUMN parent_id INTEGER DEFAULT NULL"); } catch (e) {}
   try { await database.execute("CREATE TABLE IF NOT EXISTS message_reactions (message_id INTEGER, user_id INTEGER, reaction TEXT, PRIMARY KEY (message_id, user_id))"); } catch (e) {}
+  // ИСПРАВЛЕНИЕ: Добавляем универсальную таблицу для закрепленных сообщений
+  try { await database.execute("CREATE TABLE IF NOT EXISTS pinned_messages (chat_id INTEGER PRIMARY KEY, message_id INTEGER)"); } catch (e) {}
   schemaEnsured = true;
 }
 
@@ -219,8 +221,106 @@ router.post("/chats/:chatId/join", async (req, res): Promise<void> => {
   const database = await getDatabase();
   await ensureSchema(database);
   try { await database.execute({ sql: "INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, 'member')", args: [chatId, currentUserId] }); } catch(e) {}
+  broadcastUpdate(chatId);
   res.json({ success: true });
 });
+
+// ИСПРАВЛЕНИЕ: Выход из чата
+router.post("/chats/:chatId/leave", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
+  const chatId = Number(req.params.chatId);
+  const database = await getDatabase();
+  try { 
+    await database.execute({ sql: "DELETE FROM chat_members WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] }); 
+  } catch(e) {}
+  broadcastUpdate(chatId);
+  res.json({ success: true });
+});
+
+// ИСПРАВЛЕНИЕ: Полное удаление чата (и его сообщений)
+router.post("/chats/:chatId/delete", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
+  const chatId = Number(req.params.chatId);
+  const database = await getDatabase();
+  
+  try { 
+    await database.execute({ sql: "DELETE FROM message_reactions WHERE message_id IN (SELECT id FROM messages WHERE chat_id = ?)", args: [chatId] });
+    await database.execute({ sql: "DELETE FROM messages WHERE chat_id = ?", args: [chatId] });
+    await database.execute({ sql: "DELETE FROM chat_members WHERE chat_id = ?", args: [chatId] });
+    await database.execute({ sql: "DELETE FROM pinned_messages WHERE chat_id = ?", args: [chatId] });
+    
+    if (chatId >= 100000000) {
+       await database.execute({ sql: "DELETE FROM chats WHERE id = ?", args: [chatId - 100000000] });
+    }
+  } catch(e) {}
+  broadcastUpdate(chatId);
+  res.json({ success: true });
+});
+
+// ИСПРАВЛЕНИЕ: Изменение роли участника (Админки)
+router.patch("/chats/:chatId/members/:userId/role", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
+  const chatId = Number(req.params.chatId);
+  const targetUserId = Number(req.params.userId);
+  const { role } = req.body;
+  
+  const database = await getDatabase();
+  
+  let isAdmin = false;
+  const memberRes = await database.execute({ sql: "SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?", args: [chatId, currentUserId] });
+  if (memberRes.rows.length && memberRes.rows[0].role === 'admin') isAdmin = true;
+  else if (chatId >= 100000000) {
+    const chatRes = await database.execute({ sql: "SELECT participant_id FROM chats WHERE id = ?", args: [chatId - 100000000] });
+    if (Number(chatRes.rows[0]?.participant_id) === currentUserId) isAdmin = true;
+  }
+
+  if (!isAdmin) { res.status(403).json({ error: "Access denied" }); return; }
+
+  try { 
+    await database.execute({ sql: "UPDATE chat_members SET role = ? WHERE chat_id = ? AND user_id = ?", args: [role, chatId, targetUserId] });
+  } catch(e) {}
+  
+  broadcastUpdate(chatId);
+  res.json({ success: true });
+});
+
+// ИСПРАВЛЕНИЕ: Закрепление сообщений
+router.post("/chats/:chatId/pin", async (req, res): Promise<void> => {
+  const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
+  const chatId = parseChatId(currentUserId, req.params.chatId);
+  const { messageId } = req.body;
+  if (!chatId) { res.status(400).json({ error: "Invalid chatId" }); return; }
+  
+  const database = await getDatabase();
+  try {
+    if (messageId) {
+      await database.execute({ sql: "INSERT INTO pinned_messages (chat_id, message_id) VALUES (?, ?) ON CONFLICT(chat_id) DO UPDATE SET message_id = ?", args: [chatId, messageId, messageId] });
+    } else {
+      await database.execute({ sql: "DELETE FROM pinned_messages WHERE chat_id = ?", args: [chatId] });
+    }
+  } catch(e) {}
+  
+  broadcastUpdate(chatId);
+  res.json({ success: true });
+});
+
+// ИСПРАВЛЕНИЕ: Получение участников чата
+router.get("/chats/:chatId/members", async (req, res): Promise<void> => {
+  const chatId = Number(req.params.chatId);
+  const database = await getDatabase();
+  
+  try {
+    const result = await database.execute({
+      sql: `SELECT u.id, u.display_name as displayName, u.username, u.avatar_url as avatarUrl, cm.role 
+            FROM chat_members cm JOIN users u ON cm.user_id = u.id WHERE cm.chat_id = ?`,
+      args: [chatId]
+    });
+    res.json(result.rows);
+  } catch (e) {
+    res.json([]);
+  }
+});
+
 
 router.post("/chats/:chatId/typing", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]);
@@ -294,7 +394,6 @@ router.post("/chats/:chatId/read", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
-// ИСПРАВЛЕНИЕ: Достаем аватарки и имена для реакций
 router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const chatId = parseChatId(currentUserId, req.params.chatId);
@@ -338,6 +437,16 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
     };
   });
 
+  // ИСПРАВЛЕНИЕ: Достаем закрепленное сообщение
+  let pinnedMessage = null;
+  try {
+     const pinRes = await database.execute({ sql: "SELECT message_id FROM pinned_messages WHERE chat_id = ?", args: [chatId] });
+     if (pinRes.rows.length > 0) {
+        const pMsgId = pinRes.rows[0].message_id;
+        pinnedMessage = messages.find(m => m.id === Number(pMsgId)) || null;
+     }
+  } catch(e) {}
+
   const now = Date.now();
   const typing: string[] = [];
   for (const [key, data] of typingStates.entries()) {
@@ -350,7 +459,8 @@ router.get("/chats/:chatId/messages", async (req, res): Promise<void> => {
   }
 
   await database.execute({ sql: "UPDATE messages SET read_by_me = 1 WHERE chat_id = ? AND sender_id != ?", args: [chatId, currentUserId] });
-  res.json({ messages, typing });
+  // Возвращаем pinnedMessage вместе с сообщениями
+  res.json({ messages, typing, pinnedMessage });
 });
 
 router.get("/chats/:chatId/messages/:messageId/comments", async (req, res): Promise<void> => {
@@ -479,7 +589,6 @@ router.delete("/chats/:chatId/messages/:messageId", async (req, res): Promise<vo
   res.json({ success: true });
 });
 
-// ИСПРАВЛЕНИЕ: Достаем аватарки и имена для реакций на стену
 router.get("/wall/feed", async (req, res): Promise<void> => {
   const currentUserId = Number(req.headers.authorization?.split(" ")[1]) || 1;
   const database = await getDatabase();
