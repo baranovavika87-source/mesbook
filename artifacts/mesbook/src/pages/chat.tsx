@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send, Copy, Reply, Mic, Video, Square, Play, RefreshCw, SendHorizonal, ArrowUp } from 'lucide-react';
+import { useRoute, Link, useLocation } from 'wouter';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send, Copy, Reply, Mic, Video, Square, Play, RefreshCw, SendHorizonal, ArrowUp, Pin, Forward, ShieldAlert, UserMinus, Crown } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -49,7 +49,18 @@ const translations = {
     replyAction: "Ответить",
     copy: "Копировать",
     editAction: "Изменить",
-    deleteAction: "Удалить"
+    deleteAction: "Удалить",
+    cancel: "ОТМЕНА",
+    pin: "Закрепить",
+    unpin: "Открепить",
+    forward: "Переслать",
+    pinnedMsg: "Закреплённое сообщение",
+    forwardTitle: "Переслать в...",
+    makeAdmin: "Сделать админом",
+    dismissAdmin: "Разжаловать",
+    deleteChat: "Удалить чат",
+    leaveChat: "Покинуть чат",
+    forwardedFrom: "Переслано от"
   },
   en: {
     saved: "Saved Messages",
@@ -88,7 +99,18 @@ const translations = {
     replyAction: "Reply",
     copy: "Copy",
     editAction: "Edit",
-    deleteAction: "Delete"
+    deleteAction: "Delete",
+    cancel: "CANCEL",
+    pin: "Pin",
+    unpin: "Unpin",
+    forward: "Forward",
+    pinnedMsg: "Pinned Message",
+    forwardTitle: "Forward to...",
+    makeAdmin: "Make Admin",
+    dismissAdmin: "Dismiss Admin",
+    deleteChat: "Delete Chat",
+    leaveChat: "Leave Chat",
+    forwardedFrom: "Forwarded from"
   }
 };
 
@@ -224,6 +246,7 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration }:
 
 export default function ChatPage() {
   const [match, params] = useRoute('/chat/:chatId');
+  const [, setLocation] = useLocation();
   const chatId = params?.chatId;
   const numericChatId = Number(chatId);
   const isGroupOrChannel = numericChatId >= 100000000;
@@ -258,6 +281,11 @@ export default function ChatPage() {
   const [isCommentUploading, setIsCommentUploading] = useState(false);
   const [commentReplyingTo, setCommentReplyingTo] = useState<any>(null);
   
+  // ФУНКЦИОНАЛ ПЕРЕСЫЛКИ И ЗАКРЕПА
+  const [pinnedMessage, setPinnedMessage] = useState<any>(null);
+  const [forwardingMsg, setForwardingMsg] = useState<any>(null);
+  const [chatListForForward, setChatListForForward] = useState<any[]>([]);
+  
   const [isLoadingRole, setIsLoadingRole] = useState(true);
   const [isMember, setIsMember] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -265,6 +293,7 @@ export default function ChatPage() {
   
   const [membersCount, setMembersCount] = useState<number | null>(null);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
+  const [chatMembers, setChatMembers] = useState<any[]>([]); // Для профиля группы
 
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const lastTypingTime = useRef(0);
@@ -280,7 +309,6 @@ export default function ChatPage() {
   const [recordingType, setRecordingType] = useState<'voice' | 'video' | null>(null);
   const [recordingMs, setRecordingMs] = useState(0);
   
-  // КАНВАС-ПРОКСИ РЕФЫ
   const cameraModeRef = useRef<'user' | 'environment'>('user');
   const hiddenVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -397,6 +425,13 @@ export default function ChatPage() {
            setIsMember(roleData.isMember); setIsAdmin(roleData.role === 'admin');
            setMembersCount(roleData.membersCount || 1); setOnlineCount(roleData.onlineCount || 1);
         }
+        
+        // Загрузка админов и участников для меню
+        const membersRes = await fetch(`/api/chats/${chatId}/members`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
+        if (membersRes.ok) {
+           const membersData = await membersRes.json();
+           setChatMembers(membersData);
+        }
       } catch (e) {}
     }
     setIsLoadingRole(false);
@@ -408,6 +443,8 @@ export default function ChatPage() {
       if (msgRes.ok) {
         const data = await msgRes.json();
         setMessages(Array.isArray(data.messages) ? data.messages : []);
+        // Симуляция загрузки закрепленного сообщения
+        if (data.pinnedMessage) setPinnedMessage(data.pinnedMessage);
       }
     } catch (e) {}
     
@@ -427,7 +464,6 @@ export default function ChatPage() {
     }
   }, [threadComments]);
 
-  // ФУНКЦИИ ЗАПИСИ
   const animateTimer = () => {
     setRecordingMs(Date.now() - startTimeRef.current);
     requestRef.current = requestAnimationFrame(animateTimer);
@@ -487,7 +523,6 @@ export default function ChatPage() {
           startTimeRef.current = Date.now();
           requestRef.current = requestAnimationFrame(animateTimer);
       } else {
-          // ВИДЕОКРУЖКИ ЧЕРЕЗ КАНВАС-ПРОКСИ С УЛУЧШЕННОЙ ЛОГИКОЙ ПЕРЕВОРОТА
           cameraModeRef.current = mode;
           const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           const videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode } });
@@ -605,22 +640,19 @@ export default function ChatPage() {
     setRecordingType(null);
   };
 
-  // ИСПРАВЛЕНИЕ: ПЕРЕВОРОТ КАМЕРЫ (Сначла стоп, потом старт новой)
   const toggleCamera = async () => {
     const newMode = cameraModeRef.current === 'user' ? 'environment' : 'user';
     
     try {
-        const oldStream = hiddenVideoRef.current?.srcObject as MediaStream;
-        if (oldStream) {
-            oldStream.getVideoTracks().forEach(t => t.stop());
-        }
-
         const newStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: newMode }
-        });
+            video: { facingMode: { exact: newMode } }
+        }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: newMode } }));
 
         cameraModeRef.current = newMode;
         
+        const oldStream = hiddenVideoRef.current?.srcObject as MediaStream;
+        oldStream?.getVideoTracks().forEach(t => t.stop());
+
         if (hiddenVideoRef.current) {
             hiddenVideoRef.current.srcObject = newStream;
             hiddenVideoRef.current.play().catch(()=>{});
@@ -732,6 +764,69 @@ export default function ChatPage() {
     } catch (err: any) {} 
     finally { setIsCommentUploading(false); if (commentFileInputRef.current) commentFileInputRef.current.value = ''; }
   };
+
+  // ФУНКЦИОНАЛ ПЕРЕСЫЛКИ И ЗАКРЕПА
+  const togglePin = async (msg: any) => {
+    setContextMenu(null);
+    const isPinned = pinnedMessage?.id === msg.id;
+    setPinnedMessage(isPinned ? null : msg);
+    try {
+       await fetch(`/api/chats/${chatId}/pin`, { 
+         method: 'POST', 
+         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
+         body: JSON.stringify({ messageId: isPinned ? null : msg.id }) 
+       });
+    } catch(e) {}
+  };
+
+  const openForwardModal = (msg: any) => {
+    setContextMenu(null);
+    setForwardingMsg(msg);
+    try {
+      const saved = JSON.parse(localStorage.getItem('mesbook_chats_' + currentUserId) || '[]');
+      setChatListForForward(saved);
+    } catch(e) {}
+  };
+
+  const handleForward = async (targetChatId: string) => {
+    if (!forwardingMsg) return;
+    const contentToForward = `> ${t.forwardedFrom} ${forwardingMsg.senderName || t.companion}\n\n${forwardingMsg.content}`;
+    setForwardingMsg(null);
+    try {
+      await fetch(`/api/chats/${targetChatId}/messages`, { 
+         method: 'POST', 
+         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
+         body: JSON.stringify({ content: contentToForward }) 
+      });
+      // Опционально: можно сделать редирект в тот чат
+    } catch(e) {}
+  };
+
+  // ФУНКЦИОНАЛ АДМИНОВ
+  const toggleAdmin = async (userId: string | number, currentRole: string) => {
+    const newRole = currentRole === 'admin' ? 'member' : 'admin';
+    setChatMembers(prev => prev.map(m => String(m.id) === String(userId) ? {...m, role: newRole} : m));
+    try {
+      await fetch(`/api/chats/${chatId}/members/${userId}/role`, { 
+         method: 'PATCH', 
+         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
+         body: JSON.stringify({ role: newRole }) 
+      });
+    } catch(e) {}
+  };
+
+  // УДАЛЕНИЕ/ВЫХОД ИЗ ЧАТА
+  const leaveOrDeleteChat = async () => {
+    if (!window.confirm(isGroupOrChannel ? t.leaveChat + '?' : t.deleteChat + '?')) return;
+    try {
+      await fetch(`/api/chats/${chatId}/${isGroupOrChannel ? 'leave' : 'delete'}`, { 
+         method: 'POST', 
+         headers: { 'Authorization': 'Bearer ' + currentUserId } 
+      });
+      setLocation('/');
+    } catch(e) {}
+  };
+
 
   const toggleReaction = async (msgId: number, reaction: string, isComment = false) => {
     setContextMenu(null);
@@ -941,6 +1036,28 @@ export default function ChatPage() {
          </div>
       )}
 
+      {/* МОДАЛКА ПЕРЕСЫЛКИ */}
+      {forwardingMsg && (
+        <div className="fixed inset-0 z-[300] bg-black/40 backdrop-blur-sm flex flex-col justify-end animate-in fade-in duration-200" onClick={() => setForwardingMsg(null)}>
+           <div className="bg-[#f5f5f7] dark:bg-[#161618] w-full rounded-t-[24px] overflow-hidden flex flex-col max-h-[80vh] animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
+              <div className="p-4 border-b border-black/5 dark:border-white/5 flex justify-between items-center bg-white dark:bg-[#222224]">
+                 <span className="font-semibold text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7]">{t.forwardTitle}</span>
+                 <button onClick={() => setForwardingMsg(null)} className="p-1 active:scale-95 text-[#86868b]"><X size={20}/></button>
+              </div>
+              <div className="overflow-y-auto p-2">
+                 {chatListForForward.map(c => (
+                    <div key={c.id} onClick={() => { handleForward(c.id); }} className="flex items-center gap-3 p-3 hover:bg-black/5 dark:hover:bg-white/5 rounded-[16px] cursor-pointer transition-colors">
+                       <div className="w-12 h-12 rounded-full bg-[#e5e5ea] dark:bg-[#333336] overflow-hidden flex items-center justify-center shrink-0 font-medium text-[16px]">
+                          {c.participant?.avatarUrl ? <img src={c.participant.avatarUrl} className="w-full h-full object-cover" /> : c.participant?.displayName?.charAt(0)}
+                       </div>
+                       <span className="font-medium text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7]">{c.participant?.displayName}</span>
+                    </div>
+                 ))}
+              </div>
+           </div>
+        </div>
+      )}
+
       {/* ЛАЙТБОКС */}
       {fullScreenImage && (
         <div className="fixed inset-0 z-[200] bg-black flex flex-col animate-in fade-in duration-200 ease-out">
@@ -1008,26 +1125,89 @@ export default function ChatPage() {
                   </p>
                 </div>
               )}
+
+              {/* СПИСОК УЧАСТНИКОВ И АДМИНОВ */}
+              {isGroupOrChannel && chatMembers.length > 0 && (
+                <div className="mt-6 w-full max-w-lg px-4">
+                   <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden border border-black/5 dark:border-white/5 shadow-sm">
+                      <div className="px-4 py-2 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/50 dark:bg-[#161618]/50">
+                         <span className="text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.members[2]}</span>
+                      </div>
+                      {chatMembers.map(member => (
+                         <div key={member.id} className="flex items-center justify-between p-3 border-b border-black/5 dark:border-white/5 last:border-0">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                               <div className="w-10 h-10 rounded-full bg-[#e5e5ea] dark:bg-[#333336] shrink-0 flex items-center justify-center font-medium overflow-hidden">
+                                  {member.avatarUrl ? <img src={member.avatarUrl} className="w-full h-full object-cover" /> : member.displayName?.charAt(0)}
+                               </div>
+                               <div className="flex flex-col truncate pr-2">
+                                  <span className="text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] truncate flex items-center gap-1">
+                                     {member.displayName}
+                                     {member.role === 'admin' && <Crown size={14} className="text-yellow-500 shrink-0" />}
+                                  </span>
+                                  {member.username && <span className="text-[12px] text-[#86868b] truncate">{member.username}</span>}
+                               </div>
+                            </div>
+                            
+                            {isAdmin && String(member.id) !== String(currentUserId) && (
+                               <button 
+                                 onClick={() => toggleAdmin(member.id, member.role)}
+                                 className={`px-3 py-1.5 rounded-full text-[12px] font-bold tracking-wide transition-colors ${member.role === 'admin' ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20' : 'bg-[#1d1d1f]/5 dark:bg-[#f5f5f7]/10 text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-[#1d1d1f]/10 dark:hover:bg-[#f5f5f7]/20'}`}
+                               >
+                                  {member.role === 'admin' ? t.dismissAdmin : t.makeAdmin}
+                               </button>
+                            )}
+                         </div>
+                      ))}
+                   </div>
+                </div>
+              )}
+
+              {/* УДАЛЕНИЕ ИЛИ ВЫХОД ИЗ ЧАТА */}
+              <div className="mt-8 px-4 w-full max-w-lg mb-10">
+                 <button onClick={leaveOrDeleteChat} className="w-full bg-white dark:bg-[#222224] text-red-500 border border-black/5 dark:border-white/5 rounded-[16px] py-3.5 font-bold text-[15px] hover:bg-red-500/5 transition-colors shadow-sm flex items-center justify-center gap-2">
+                    {isGroupOrChannel ? <UserMinus size={18} /> : <Trash2 size={18} />}
+                    {isGroupOrChannel ? t.leaveChat : t.deleteChat}
+                 </button>
+              </div>
             </div>
           )}
         </div>
       )}
 
       {/* ШАПКА ЧАТА */}
-      <header className="px-3 pt-10 pb-3 border-b border-black/5 dark:border-white/5 flex items-center gap-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl relative z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-        <Link href="/"><a className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
-        <div className="flex items-center gap-3.5 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
-          <div className="relative w-[44px] h-[44px] shrink-0">
-            <div className={`w-full h-full rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-black/5 dark:border-white/5 ${isSavedChat ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
-              {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : displayName.charAt(0).toUpperCase()}
-            </div>
-            {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>}
-          </div>
-          <div className="flex flex-col">
-            <h2 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] leading-tight truncate pr-2 tracking-tight">{displayName}</h2>
-            {subtitleText && <p className={`text-[12px] font-medium mt-0.5 ${subtitleColor}`}>{subtitleText}</p>}
-          </div>
+      <header className="px-3 pt-10 pb-3 border-b border-black/5 dark:border-white/5 flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl relative z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+        <div className="flex items-center gap-3">
+           <Link href="/"><a className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
+           <div className="flex items-center gap-3.5 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
+             <div className="relative w-[44px] h-[44px] shrink-0">
+               <div className={`w-full h-full rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-black/5 dark:border-white/5 ${isSavedChat ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
+                 {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : displayName.charAt(0).toUpperCase()}
+               </div>
+               {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>}
+             </div>
+             <div className="flex flex-col">
+               <h2 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] leading-tight truncate pr-2 tracking-tight">{displayName}</h2>
+               {subtitleText && <p className={`text-[12px] font-medium mt-0.5 ${subtitleColor}`}>{subtitleText}</p>}
+             </div>
+           </div>
         </div>
+        
+        {/* ПЛАШКА ЗАКРЕПА */}
+        {pinnedMessage && (
+           <div className="mt-3 mx-2 bg-[#f5f5f7] dark:bg-[#161618] rounded-[10px] p-2 flex items-center gap-3 cursor-pointer border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7]" onClick={() => {
+               // Простой скролл к сообщению
+               const el = document.getElementById(`msg-${pinnedMessage.id}`);
+               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+           }}>
+              <div className="flex flex-col flex-1 truncate">
+                 <span className="text-[11px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] uppercase tracking-wide">{t.pinnedMsg}</span>
+                 <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate mt-0.5">{parseContent(pinnedMessage.content).text || t.photo}</span>
+              </div>
+              {isAdmin && (
+                <button onClick={(e) => { e.stopPropagation(); togglePin(pinnedMessage); }} className="p-1.5 text-[#86868b] active:scale-95"><X size={16} /></button>
+              )}
+           </div>
+        )}
       </header>
 
       {/* ОСНОВНОЕ ОКНО СООБЩЕНИЙ */}
@@ -1053,7 +1233,7 @@ export default function ChatPage() {
               // КАНАЛЫ
               if (isChannel) {
                 return (
-                  <div key={msg.id} className="w-full relative mb-5 z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out">
+                  <div key={msg.id} id={`msg-${msg.id}`} className="w-full relative mb-5 z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out">
                     {showDate && (
                       <div className="flex justify-center w-full my-4 relative z-0">
                         <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">
@@ -1169,7 +1349,7 @@ export default function ChatPage() {
 
               // ГРУППЫ И ЛИЧНЫЕ ЧАТЫ (ПУЗЫРИ)
               return (
-                <div key={msg.id} className={`flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
+                <div key={msg.id} id={`msg-${msg.id}`} className={`flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
                   {showDate && (
                     <div className="flex justify-center w-full my-4 relative z-0">
                       <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">{currentDateStr}</span>
@@ -1274,6 +1454,8 @@ export default function ChatPage() {
                         </>
                       )}
                     </div>
+                    
+                    {/* ИСПРАВЛЕНИЕ: КНОПКА КОММЕНТАРИЕВ УДАЛЕНА ИЗ ГРУПП */}
                     
                     {mReactionsKeys.length > 0 && !isOnlyVideoNote && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -1527,9 +1709,9 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* МЕНЮ ДЛЯ УДАЛЕНИЯ / РЕДАКТИРОВАНИЯ */}
+      {/* МЕНЮ ДЛЯ УДАЛЕНИЯ / РЕДАКТИРОВАНИЯ / ПЕРЕСЫЛКИ */}
       {contextMenu && (() => {
-         const menuWidth = 220; const menuHeight = 250;
+         const menuWidth = 220; const menuHeight = 280;
          let safeX = contextMenu.x; let safeY = contextMenu.y;
          
          if (safeX + menuWidth > window.innerWidth) safeX = window.innerWidth - menuWidth - 10;
@@ -1541,10 +1723,14 @@ export default function ChatPage() {
          
          const showReply = contextMenu.type === 'comment' || !isChannel;
          const showCopy = hasText;
+         const showForward = contextMenu.type === 'message';
+         const showPin = contextMenu.type === 'message' && (isAdmin || !isGroupOrChannel);
          const showEdit = isMe && !hasMedia && !voiceUrl && !videoNoteUrl && contextMenu.type === 'message';
-         const showDelete = isMe;
+         const showDelete = isMe || isAdmin;
 
-         if (!showReply && !showCopy && !showEdit && !showDelete) return null;
+         if (!showReply && !showCopy && !showEdit && !showDelete && !showForward && !showPin) return null;
+
+         const isPinned = pinnedMessage?.id === contextMenu.item.id;
 
          return (
            <div className="fixed inset-0 z-[9999]" onClick={() => setContextMenu(null)} onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}>
@@ -1560,6 +1746,12 @@ export default function ChatPage() {
                    )}
                    {showCopy && (
                      <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(contextMenu.item.content).text); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Copy size={18} className="text-[#86868b]" /> {t.copy}</button>
+                   )}
+                   {showPin && (
+                     <button onClick={(e) => { e.stopPropagation(); togglePin(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Pin size={18} className="text-[#86868b]" /> {isPinned ? t.unpin : t.pin}</button>
+                   )}
+                   {showForward && (
+                     <button onClick={(e) => { e.stopPropagation(); openForwardModal(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Forward size={18} className="text-[#86868b]" /> {t.forward}</button>
                    )}
                    {showEdit && (
                      <button onClick={(e) => { e.stopPropagation(); setContextMenu(null); startEditing(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Edit2 size={18} className="text-[#86868b]" /> {t.editAction}</button>
