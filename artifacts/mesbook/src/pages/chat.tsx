@@ -487,12 +487,11 @@ export default function ChatPage() {
           startTimeRef.current = Date.now();
           requestRef.current = requestAnimationFrame(animateTimer);
       } else {
-          // ИСПРАВЛЕНИЕ: ВИДЕОКРУЖКИ ЧЕРЕЗ КАНВАС-ПРОКСИ
+          // ВИДЕОКРУЖКИ ЧЕРЕЗ КАНВАС-ПРОКСИ С УЛУЧШЕННОЙ ЛОГИКОЙ ПЕРЕВОРОТА
           cameraModeRef.current = mode;
           const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           const videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode } });
 
-          // Ждем 100мс чтобы React успел отрендерить скрытый video и canvas
           setTimeout(() => {
               if (!hiddenVideoRef.current || !canvasRef.current) return;
 
@@ -504,7 +503,6 @@ export default function ChatPage() {
               const drawFrame = () => {
                   if (ctx && hiddenVideoRef.current && hiddenVideoRef.current.readyState >= 2) {
                       const video = hiddenVideoRef.current;
-                      // Вырезаем идеальный квадрат из центра камеры
                       const size = Math.min(video.videoWidth, video.videoHeight);
                       const x = (video.videoWidth - size) / 2;
                       const y = (video.videoHeight - size) / 2;
@@ -512,7 +510,6 @@ export default function ChatPage() {
                       ctx.save();
                       ctx.clearRect(0, 0, 240, 240);
                       
-                      // Зеркалим только фронталку
                       if (cameraModeRef.current === 'user') {
                           ctx.translate(240, 0);
                           ctx.scale(-1, 1);
@@ -528,7 +525,6 @@ export default function ChatPage() {
               try {
                   canvasStream = (canvasRef.current as any).captureStream(30);
               } catch (e) {
-                  // Fallback если браузер не поддерживает captureStream
                   canvasStream = videoStream;
               }
 
@@ -551,7 +547,6 @@ export default function ChatPage() {
                   const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
                   const blob = new Blob(chunksRef.current, { type: mimeType });
                   
-                  // Останавливаем все потоки
                   audioStream.getTracks().forEach(t => t.stop());
                   videoStream.getTracks().forEach(t => t.stop());
                   const currentVidStream = hiddenVideoRef.current?.srcObject as MediaStream;
@@ -610,20 +605,22 @@ export default function ChatPage() {
     setRecordingType(null);
   };
 
-  // ИСПРАВЛЕНИЕ: ЧЕСТНЫЙ ПЕРЕВОРОТ КАМЕРЫ НА ЛЕТУ
+  // ИСПРАВЛЕНИЕ: ПЕРЕВОРОТ КАМЕРЫ (Сначла стоп, потом старт новой)
   const toggleCamera = async () => {
     const newMode = cameraModeRef.current === 'user' ? 'environment' : 'user';
     
     try {
+        const oldStream = hiddenVideoRef.current?.srcObject as MediaStream;
+        if (oldStream) {
+            oldStream.getVideoTracks().forEach(t => t.stop());
+        }
+
         const newStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { exact: newMode } }
-        }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: newMode } }));
+            video: { facingMode: newMode }
+        });
 
         cameraModeRef.current = newMode;
         
-        const oldStream = hiddenVideoRef.current?.srcObject as MediaStream;
-        oldStream?.getVideoTracks().forEach(t => t.stop());
-
         if (hiddenVideoRef.current) {
             hiddenVideoRef.current.srcObject = newStream;
             hiddenVideoRef.current.play().catch(()=>{});
@@ -937,7 +934,7 @@ export default function ChatPage() {
       
       {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ ПО ЦЕНТРУ */}
       {recordingType === 'video' && (
-         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[240px] h-[240px] rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200">
+         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[240px] h-[240px] rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200 bg-black">
            <video ref={hiddenVideoRef} playsInline muted autoPlay className="hidden" />
            <canvas ref={canvasRef} width={240} height={240} className="w-full h-full object-cover rounded-full" />
            <div className="absolute top-4 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full animate-pulse shadow-sm" />
@@ -1075,7 +1072,6 @@ export default function ChatPage() {
                          </div>
                       ) : (
                         <>
-                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК */}
                           {videoNoteUrl && (
                             <div className={`${isOnlyVideoNote ? '' : 'p-3'} flex justify-center`}>
                                <div className={`relative inline-block w-[240px] h-[240px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
@@ -1202,7 +1198,6 @@ export default function ChatPage() {
                          </div>
                       ) : (
                         <>
-                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК БЕЗ ФОНА */}
                           {videoNoteUrl && (
                             <div className={`${isOnlyVideoNote ? '' : 'p-1.5'} flex justify-center`}>
                                <div className={`relative inline-block w-[220px] h-[220px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
@@ -1224,14 +1219,12 @@ export default function ChatPage() {
                             </div>
                           )}
                           
-                          {/* ГОЛОСОВЫЕ */}
                           {voiceUrl && (
                             <div className={`${hasText ? 'pb-1' : ''}`}>
                                <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} fixedDuration={fixedDuration} />
                             </div>
                           )}
 
-                          {/* МЕДИА */}
                           {hasMedia && (
                             <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''} ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`}>
                               {mediaUrls.map((url, idx) => (
@@ -1259,7 +1252,6 @@ export default function ChatPage() {
                             </div>
                           )}
                           
-                          {/* ТЕКСТ */}
                           {hasText && (
                             <div className="px-3.5 pt-2 pb-2.5">
                                {quotedText && (
