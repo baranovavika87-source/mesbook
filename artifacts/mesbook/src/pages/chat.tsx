@@ -136,7 +136,6 @@ const formatMsTime = (ms: number) => {
   return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s},${milliseconds < 10 ? '0' : ''}${milliseconds}`;
 };
 
-// ИСПРАВЛЕНИЕ: ПЛЕЕР С ЖЕСТКО ЗАДАННОЙ ДЛИТЕЛЬНОСТЬЮ
 const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration }: any) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -157,7 +156,7 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration }:
     const onEnd = () => { setIsPlaying(false); setProgress(0); };
     
     const onLoadedMetadata = () => {
-      if (fixedDuration) return; // Используем точную длину из сообщения, игнорируем браузер
+      if (fixedDuration) return; 
       
       if (audio.duration === Infinity) {
         audio.currentTime = 1e10; 
@@ -445,7 +444,6 @@ export default function ChatPage() {
          }
       }, 50);
 
-      // ИСПРАВЛЕНИЕ: Выбираем правильный MimeType для устройств (Особенно Android)
       let options: any = {};
       if (type === 'voice') {
          if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) options = { mimeType: 'audio/webm;codecs=opus' };
@@ -460,7 +458,6 @@ export default function ChatPage() {
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       
       recorder.onstop = async () => {
-        // ИСПРАВЛЕНИЕ: Высчитываем реальную длительность и сохраняем ее!
         const realDuration = (Date.now() - startTimeRef.current) / 1000;
         const mimeType = recorder.mimeType || (type === 'video' ? 'video/webm' : 'audio/webm');
         const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
@@ -486,7 +483,6 @@ export default function ChatPage() {
           if (data.secure_url) {
              const tag = type === 'video' ? '[VIDEO_NOTE]' : '[VOICE]';
              setMessages((prev: any) => prev.filter((m:any) => m.id !== tempId));
-             // Сохраняем длительность прямо в сообщении
              sendDirectMessage(`${tag} ${data.secure_url} D:${realDuration.toFixed(1)}`);
           }
         } catch(e) {
@@ -521,16 +517,36 @@ export default function ChatPage() {
     setRecordingType(null);
   };
 
+  // ИСПРАВЛЕНИЕ: ЧЕСТНЫЙ ПЕРЕВОРОТ КАМЕРЫ (HOT SWAP)
   const toggleCamera = async () => {
     const newMode = cameraFacingMode === 'user' ? 'environment' : 'user';
     setCameraFacingMode(newMode);
+    
     try {
         const stream = mediaRecorderRef.current?.stream;
-        const track = stream?.getVideoTracks()[0];
-        if (track && track.applyConstraints) {
-            await track.applyConstraints({ facingMode: newMode });
+        const oldVideoTrack = stream?.getVideoTracks()[0];
+        
+        if (stream && oldVideoTrack) {
+            // Запрашиваем новый видео-трек с нужной камерой
+            const newStream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: { exact: newMode } } 
+            }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: newMode } })); // Fallback
+            
+            const newVideoTrack = newStream.getVideoTracks()[0];
+            
+            // На лету меняем трек в идущей записи
+            stream.removeTrack(oldVideoTrack);
+            oldVideoTrack.stop();
+            stream.addTrack(newVideoTrack);
+            
+            // Обновляем превью
+            if (videoStreamRef.current) {
+                videoStreamRef.current.srcObject = stream;
+            }
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error('Camera flip failed:', e);
+    }
   };
 
   const handleRecordTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
@@ -765,7 +781,6 @@ export default function ChatPage() {
     setIsSavingChat(false);
   };
 
-  // ИСПРАВЛЕНИЕ: ЧТЕНИЕ ТОЧНОЙ ДЛИТЕЛЬНОСТИ ИЗ ТЕКСТА
   const parseContent = (rawText: any) => {
     if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false, voiceUrl: null, videoNoteUrl: null, fixedDuration: null };
     
@@ -836,7 +851,7 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={() => setContextMenu(null)}>
       
-      {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ */}
+      {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ ПО ЦЕНТРУ */}
       {recordingType === 'video' && (
          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[240px] h-[240px] rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200">
            <video ref={videoStreamRef} autoPlay muted playsInline className={`w-full h-full object-cover transform ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
@@ -940,6 +955,9 @@ export default function ChatPage() {
             return messages.map((msg: any) => {
               const isMe = String(msg.senderId) === String(currentUserId);
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration } = parseContent(msg.content);
+              
+              const isOnlyVideoNote = videoNoteUrl && !hasText && !hasMedia && !voiceUrl;
+              
               const dateObj = new Date(msg.createdAt);
               const dateLocale = lang === 'ru' ? 'ru-RU' : 'en-US';
               const currentDateStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString(dateLocale, { day: 'numeric', month: 'long' });
@@ -962,7 +980,7 @@ export default function ChatPage() {
                       </div>
                     )}
                     <div 
-                      className="w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col cursor-pointer"
+                      className={isOnlyVideoNote ? `w-full flex justify-center cursor-pointer` : `w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col cursor-pointer`}
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
@@ -972,8 +990,9 @@ export default function ChatPage() {
                          </div>
                       ) : (
                         <>
+                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК БЕЗ ФОНА */}
                           {videoNoteUrl && (
-                            <div className="p-3 flex justify-center">
+                            <div className={`${isOnlyVideoNote ? '' : 'p-3'} flex justify-center`}>
                                <div className={`relative inline-block w-[240px] h-[240px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
                                onClick={(e) => {
                                   e.stopPropagation();
@@ -1035,7 +1054,7 @@ export default function ChatPage() {
                         </>
                       )}
 
-                      {mReactionsKeys.length > 0 && (
+                      {mReactionsKeys.length > 0 && !isOnlyVideoNote && (
                         <div className="px-4 pb-3 flex flex-wrap gap-1.5 pt-1.5">
                            {mReactionsKeys.map(key => {
                              const rData = msg.reactions[key];
@@ -1051,15 +1070,17 @@ export default function ChatPage() {
                         </div>
                       )}
 
-                      <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-b-[24px]">
-                        <div className="flex gap-2 items-center">
-                          <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                          <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-                            {(msg.commentsCount || 0) > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount || 0, t.commentsCount, lang)}` : t.comments}
-                          </span>
-                        </div>
-                        <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
-                      </button>
+                      {!isOnlyVideoNote && (
+                        <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-b-[24px]">
+                          <div className="flex gap-2 items-center">
+                            <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
+                            <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+                              {(msg.commentsCount || 0) > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount || 0, t.commentsCount, lang)}` : t.comments}
+                            </span>
+                          </div>
+                          <ChevronRight size={16} className="text-[#86868b] dark:text-[#98989d]" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -1076,14 +1097,17 @@ export default function ChatPage() {
                   
                   <div className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} relative`}>
                     
-                    {isGroup && !isMe && msg.senderName && (
+                    {isGroup && !isMe && msg.senderName && !isOnlyVideoNote && (
                       <span className="text-[13px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] ml-2 mb-1">
                         {msg.senderName}
                       </span>
                     )}
 
                     <div 
-                      className={`shadow-[0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-none relative flex flex-col min-w-[60px] cursor-pointer ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`}
+                      className={isOnlyVideoNote 
+                        ? `relative flex flex-col cursor-pointer bg-transparent`
+                        : `shadow-[0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-none relative flex flex-col min-w-[60px] cursor-pointer ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`
+                      }
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
@@ -1093,8 +1117,9 @@ export default function ChatPage() {
                          </div>
                       ) : (
                         <>
+                          {/* ИСПРАВЛЕНИЕ: ИДЕАЛЬНО ОБРЕЗАННЫЙ КРУЖОЧЕК БЕЗ ФОНА */}
                           {videoNoteUrl && (
-                            <div className="p-1.5 flex justify-center">
+                            <div className={`${isOnlyVideoNote ? '' : 'p-1.5'} flex justify-center`}>
                                <div className={`relative inline-block w-[220px] h-[220px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
                                onClick={(e) => {
                                   e.stopPropagation();
@@ -1114,12 +1139,14 @@ export default function ChatPage() {
                             </div>
                           )}
                           
+                          {/* ГОЛОСОВЫЕ */}
                           {voiceUrl && (
                             <div className={`${hasText ? 'pb-1' : ''}`}>
                                <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} fixedDuration={fixedDuration} />
                             </div>
                           )}
 
+                          {/* МЕДИА */}
                           {hasMedia && (
                             <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''} ${hasText ? 'rounded-t-[18px]' : 'rounded-[18px]'}`}>
                               {mediaUrls.map((url, idx) => (
@@ -1147,6 +1174,7 @@ export default function ChatPage() {
                             </div>
                           )}
                           
+                          {/* ТЕКСТ */}
                           {hasText && (
                             <div className="px-3.5 pt-2 pb-2.5">
                                {quotedText && (
@@ -1170,7 +1198,7 @@ export default function ChatPage() {
                       )}
                     </div>
                     
-                    {mReactionsKeys.length > 0 && (
+                    {mReactionsKeys.length > 0 && !isOnlyVideoNote && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
                         {mReactionsKeys.map(key => {
                            const rData = msg.reactions[key];
@@ -1231,6 +1259,7 @@ export default function ChatPage() {
                threadComments.map((c) => {
                  const isMe = String(c.senderId) === String(currentUserId);
                  const { text, quotedText, hasMedia, mediaUrls, hasText, voiceUrl, videoNoteUrl, fixedDuration } = parseContent(c.content);
+                 const isOnlyVideoNote = videoNoteUrl && !hasText && !hasMedia && !voiceUrl;
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
                  const timeStr = new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
@@ -1244,12 +1273,12 @@ export default function ChatPage() {
                        <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
                          {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName?.charAt(0).toUpperCase() || 'U'}
                        </div>
-                       <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
-                         <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
+                       <div className={isOnlyVideoNote ? `relative flex flex-col flex-1 bg-transparent` : `flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5`}>
+                         {!isOnlyVideoNote && <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>}
                          {quotedText && <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>}
                          
                          {videoNoteUrl && (
-                           <div className="p-1 flex justify-center">
+                           <div className={`${isOnlyVideoNote ? '' : 'p-1'} flex justify-start`}>
                               <div className={`relative inline-block w-[160px] h-[160px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === c.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
                               onClick={(e) => {
                                  e.stopPropagation();
@@ -1295,7 +1324,7 @@ export default function ChatPage() {
                        </div>
                      </div>
 
-                     {cReactionsKeys.length > 0 && (
+                     {cReactionsKeys.length > 0 && !isOnlyVideoNote && (
                         <div className="flex flex-wrap gap-1 mt-1 justify-start pl-12">
                           {cReactionsKeys.map(key => {
                              const rData = c.reactions[key];
@@ -1339,7 +1368,7 @@ export default function ChatPage() {
                 {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
               </button>
               <input 
-                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
+                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-[20px] px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px] transition-colors focus:border-black/20 dark:focus:border-white/20" 
                 value={commentContent} 
                 onChange={e => setCommentContent(e.target.value)} 
                 placeholder={t.commentPlaceholder} 
