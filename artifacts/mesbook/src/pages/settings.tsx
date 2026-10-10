@@ -209,31 +209,33 @@ export default function SettingsPage() {
               <textarea rows={3} value={editBio} onChange={e => setEditBio(e.target.value)} className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none" placeholder="Расскажите немного о себе..." />
             </div>
           </div>
-          
-          {/* Смена пароля вынесена в отдельный блок */}
-          <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden border border-black/5 dark:border-white/5 flex flex-col">
-            <div className="px-5 py-3 border-b border-black/5 dark:border-white/5">
-              <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mt-1">{t.password}</label>
-              <input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="••••••••" className="w-full bg-transparent py-1.5 text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
-            </div>
-          </div>
-          
         </div>
       </div>
     );
   }
 
-  // --- ЭКРАН КОНФИДЕНЦИАЛЬНОСТИ (С ВЫХОДОМ ИЗ АККАУНТА) ---
+  // --- ЭКРАН КОНФИДЕНЦИАЛЬНОСТИ (С ВЫХОДОМ ИЗ АККАУНТА И ПАРОЛЕМ) ---
   if (activeView === 'privacy') {
     return (
       <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans animate-in slide-in-from-right-8 duration-300 ease-out overflow-y-auto">
-        <header className="flex items-center gap-6 px-4 pt-12 pb-4 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 border-b border-black/5 dark:border-white/5">
-          <button onClick={() => setActiveView('main')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
-          <h1 className="text-[22px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.privacy}</h1>
+        <header className="flex items-center justify-between px-4 pt-12 pb-4 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setActiveView('main')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
+            <h1 className="text-[20px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.privacy}</h1>
+          </div>
+          <button onClick={handleSaveProfile} disabled={isSaving} className="text-[#1d1d1f] dark:text-[#f5f5f7] font-medium text-[16px] px-2 py-1 active:scale-95 transition-transform">
+            {isSaving ? <Loader2 size={20} className="animate-spin" /> : t.save}
+          </button>
         </header>
 
         <div className="px-4 flex flex-col gap-4 max-w-2xl mx-auto w-full pt-6">
-           {/* Аккуратная кнопка логаута */}
+           <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden border border-black/5 dark:border-white/5 flex flex-col">
+            <div className="px-5 py-3 border-b border-black/5 dark:border-white/5">
+              <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mt-1">{t.password}</label>
+              <input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="••••••••" className="w-full bg-transparent py-1.5 text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
+            </div>
+           </div>
+           
            <button onClick={handleLogout} className="bg-white dark:bg-[#222224] rounded-[18px] py-3.5 px-4 flex items-center justify-center gap-2 text-[#1d1d1f] dark:text-[#f5f5f7] font-medium text-[15px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] border border-black/5 dark:border-white/5 active:scale-[0.98] transition-all">
               <LogOut size={18} strokeWidth={2} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />
               {t.logout}
