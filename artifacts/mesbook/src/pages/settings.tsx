@@ -1,113 +1,89 @@
-import { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'wouter';
-import { ArrowLeft, Loader2, Camera, LogOut, User as UserIcon, Calendar, Link as LinkIcon, AtSign, Globe, ChevronRight, Check } from 'lucide-react';
-
-const getUserId = () => {
-  try {
-    const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}');
-    return u.id || u.userId || u._id || 1;
-  } catch (e) { return 1; }
-};
+import { useState, useRef } from 'react';
+import { Link, useLocation } from 'wouter';
+import { ArrowLeft, User, MessageSquare, Lock, Bell, Globe, ChevronRight, LogOut, Camera, Loader2, Check, X } from 'lucide-react';
 
 const translations = {
   ru: {
     settings: "Настройки",
     account: "Аккаунт",
-    accountDesc: "Имя пользователя, «О себе»",
+    accountSub: "Номер, имя пользователя, «О себе»",
+    chatSettings: "Настройки чатов",
+    chatSettingsSub: "Обои, ночная тема, анимации",
+    privacy: "Конфиденциальность",
+    privacySub: "Время захода, устройства, ключи доступа",
+    notifications: "Уведомления",
+    notificationsSub: "Звуки, звонки, счётчик сообщений",
     language: "Язык",
+    languageSub: "Русский",
     logout: "Выйти из аккаунта",
-    profile: "Профиль",
+    editProfile: "Изменить профиль",
     name: "Имя",
-    username: "Имя пользователя",
+    username: "Никнейм (@username)",
     bio: "О себе",
-    personalChannel: "Личный канал",
-    birthDate: "Дата рождения",
-    save: "Сохранить",
-    uploading: "Загрузка..."
+    cancel: "Отмена"
   },
   en: {
     settings: "Settings",
     account: "Account",
-    accountDesc: "Username, Bio",
+    accountSub: "Number, username, bio",
+    chatSettings: "Chat Settings",
+    chatSettingsSub: "Wallpaper, Night Mode, Animations",
+    privacy: "Privacy",
+    privacySub: "Last seen, devices, passkeys",
+    notifications: "Notifications",
+    notificationsSub: "Sounds, calls, message counter",
     language: "Language",
+    languageSub: "English",
     logout: "Log Out",
-    profile: "Profile",
+    editProfile: "Edit Profile",
     name: "Name",
-    username: "Username",
+    username: "Username (@username)",
     bio: "Bio",
-    personalChannel: "Personal Channel",
-    birthDate: "Birth Date",
-    save: "Save",
-    uploading: "Uploading..."
+    cancel: "Cancel"
   }
 };
 
 export default function SettingsPage() {
-  const currentUserId = getUserId();
   const [, setLocation] = useLocation();
-  
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    try { return JSON.parse(localStorage.getItem('mesbook_user') || '{}'); } catch(e) { return {}; }
+  });
+
   const [lang, setLang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
 
-  const [user, setUser] = useState<any>(null);
-  
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editName, setEditName] = useState(currentUser?.displayName || '');
+  const [editUsername, setEditUsername] = useState(currentUser?.username || '');
+  const [editBio, setEditBio] = useState(currentUser?.bio || '');
+  const [editAvatar, setEditAvatar] = useState(currentUser?.avatarUrl || '');
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [view, setView] = useState<'main' | 'profile'>('main');
-  const [showLangModal, setShowLangModal] = useState(false);
-  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [formData, setFormData] = useState({
-    displayName: '',
-    username: '',
-    bio: '',
-    personalChannel: '',
-    birthDate: ''
-  });
+  const handleLogout = () => {
+    localStorage.removeItem('mesbook_user');
+    window.location.href = '/';
+  };
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data);
-          setFormData({
-            displayName: data.displayName || '',
-            username: data.username || '',
-            bio: data.bio || '',
-            personalChannel: data.personalChannel || '',
-            birthDate: data.birthDate || ''
-          });
-        }
-      } catch (e) {}
-    };
-    fetchUser();
-  }, [currentUserId]);
+  const toggleLanguage = () => {
+    const newLang = lang === 'ru' ? 'en' : 'ru';
+    localStorage.setItem('mesbook_lang', newLang);
+    setLang(newLang);
+    window.location.reload();
+  };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
-    const form = new FormData();
-    form.append('file', file);
-    form.append('upload_preset', 'mesogram-cloud'); 
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'mesogram-cloud'); 
     try {
-      const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: form });
+      const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.secure_url) {
-        const patchRes = await fetch('/api/me', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
-          body: JSON.stringify({ avatarUrl: data.secure_url })
-        });
-        if (patchRes.ok) {
-          const updatedUser = await patchRes.json();
-          setUser(updatedUser);
-          localStorage.setItem('mesbook_user', JSON.stringify(updatedUser));
-        }
-      }
+      if (data.secure_url) setEditAvatar(data.secure_url);
     } catch (err) {}
     setIsUploading(false);
   };
@@ -117,179 +93,159 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/me', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
-        body: JSON.stringify(formData)
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + currentUser.id
+        },
+        body: JSON.stringify({
+          displayName: editName,
+          username: editUsername,
+          bio: editBio,
+          avatarUrl: editAvatar
+        })
       });
       if (res.ok) {
         const updatedUser = await res.json();
-        setUser(updatedUser);
         localStorage.setItem('mesbook_user', JSON.stringify(updatedUser));
-        setView('main');
+        setCurrentUser(updatedUser);
+        
+        // Обновляем аккаунт в списке мультиаккаунтов, если есть
+        try {
+           let accs = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
+           accs = accs.map((a: any) => String(a.id) === String(updatedUser.id) ? updatedUser : a);
+           localStorage.setItem('mesbook_accounts', JSON.stringify(accs));
+        } catch(e) {}
+        
+        setShowEditProfile(false);
       }
     } catch (e) {}
     setIsSaving(false);
   };
 
-  const changeLanguage = (newLang: 'ru' | 'en') => {
-    setLang(newLang);
-    localStorage.setItem('mesbook_lang', newLang);
-    setShowLangModal(false);
-    window.location.reload();
-  };
+  const SettingItem = ({ icon, title, subtitle, onClick, hasBorder = true }: any) => (
+    <>
+      <button onClick={onClick} className="flex items-center gap-4 px-4 py-3 active:bg-black/5 dark:active:bg-white/5 transition-colors w-full text-left">
+         <div className="w-[38px] h-[38px] flex-shrink-0 flex items-center justify-center rounded-[12px] bg-[#f5f5f7] dark:bg-[#161618] text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
+            {icon}
+         </div>
+         <div className="flex flex-col flex-1 overflow-hidden pr-2">
+            <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{title}</span>
+            <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate mt-[1px]">{subtitle}</span>
+         </div>
+         <ChevronRight size={18} className="text-[#86868b] dark:text-[#98989d] flex-shrink-0" />
+      </button>
+      {hasBorder && <div className="h-[1px] w-full bg-black/5 dark:bg-white/5 ml-[70px]"></div>}
+    </>
+  );
 
-  const handleLogout = () => {
-    const accounts = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
-    const newAccounts = accounts.filter((a: any) => String(a.id) !== String(currentUserId));
-    localStorage.setItem('mesbook_accounts', JSON.stringify(newAccounts));
-    if (newAccounts.length > 0) {
-      localStorage.setItem('mesbook_user', JSON.stringify(newAccounts[0]));
-    } else {
-      localStorage.removeItem('mesbook_user');
-    }
-    window.location.href = '/';
-  };
-
-  if (!user) return <div className="flex h-[100dvh] items-center justify-center bg-[#f5f5f7] dark:bg-[#161618]"><Loader2 size={32} className="animate-spin text-[#86868b]" /></div>;
-
-  // --- ЭКРАН РЕДАКТИРОВАНИЯ ПРОФИЛЯ ---
-  if (view === 'profile') {
+  if (showEditProfile) {
     return (
-      <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right fade-in duration-300 ease-out">
-        <header className="flex items-center justify-between px-4 pt-12 pb-4 bg-[#f5f5f7]/90 dark:bg-[#161618]/90 sticky top-0 z-10 backdrop-blur-xl border-b border-black/5 dark:border-white/5">
-          <button onClick={() => setView('main')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 flex items-center gap-1">
-            <ArrowLeft size={26} strokeWidth={2} /> 
-          </button>
-          <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[18px] font-semibold absolute left-1/2 -translate-x-1/2 tracking-tight">{t.profile}</h1>
-          <button onClick={handleSaveProfile} disabled={isSaving} className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[16px] active:opacity-70 transition-opacity">
-            {isSaving ? <Loader2 size={20} className="animate-spin" /> : t.save}
+      <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans animate-in slide-in-from-bottom duration-300 ease-out overflow-y-auto">
+        <header className="flex items-center justify-between px-4 pt-12 pb-4 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setShowEditProfile(false)} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><X size={26} strokeWidth={2} /></button>
+            <h1 className="text-[20px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.editProfile}</h1>
+          </div>
+          <button onClick={handleSaveProfile} disabled={isSaving} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-1 active:scale-95 transition-transform">
+            {isSaving ? <Loader2 size={24} className="animate-spin" /> : <Check size={26} strokeWidth={2.5} />}
           </button>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-4 pt-6 pb-20">
-          <div className="flex flex-col items-center mb-8">
-            <div className="relative w-[100px] h-[100px] rounded-full shadow-sm bg-white dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 cursor-pointer mb-3" onClick={() => fileInputRef.current?.click()}>
-              {user.avatarUrl && user.avatarUrl.length > 5 ? (
-                <img src={user.avatarUrl} className="w-full h-full object-cover" />
-              ) : (
-                <Camera size={36} className="text-[#86868b] dark:text-[#98989d]" />
-              )}
-              {isUploading && (
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm">
-                  <Loader2 size={24} className="text-white animate-spin" />
-                </div>
-              )}
+        <div className="px-4 pt-8 w-full max-w-lg mx-auto flex flex-col gap-5 pb-10">
+          <div className="flex justify-center mb-4">
+            <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-white dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 relative cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+              {editAvatar && editAvatar.length > 5 ? <img src={editAvatar} className="w-full h-full object-cover" /> : <Camera size={36} className="text-[#86868b] dark:text-[#98989d]" />}
+              {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
             </div>
             <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
           </div>
 
-          <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden flex flex-col shadow-sm border border-black/5 dark:border-white/5">
-            <div className="flex flex-col px-4 py-3 border-b border-black/5 dark:border-white/5">
-              <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase mb-1">{t.name}</span>
-              <input type="text" value={formData.displayName} onChange={e => setFormData({...formData, displayName: e.target.value})} className="bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
+          <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden border border-black/5 dark:border-white/5 flex flex-col">
+            <div className="px-5 py-3 border-b border-black/5 dark:border-white/5">
+              <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mt-1">{t.name}</label>
+              <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-transparent py-1.5 text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
             </div>
-            <div className="flex flex-col px-4 py-3 border-b border-black/5 dark:border-white/5">
-              <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase mb-1">{t.username}</span>
-              <input type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
+            <div className="px-5 py-3 border-b border-black/5 dark:border-white/5">
+              <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mt-1">{t.username}</label>
+              <input type="text" value={editUsername} onChange={e => setEditUsername(e.target.value)} className="w-full bg-transparent py-1.5 text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
             </div>
-            <div className="flex flex-col px-4 py-3 border-b border-black/5 dark:border-white/5">
-              <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase mb-1">{t.bio}</span>
-              <textarea rows={2} value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} className="bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none" />
-            </div>
-            <div className="flex flex-col px-4 py-3 border-b border-black/5 dark:border-white/5">
-              <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase mb-1">{t.personalChannel}</span>
-              <input type="text" value={formData.personalChannel} onChange={e => setFormData({...formData, personalChannel: e.target.value})} className="bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
-            </div>
-            <div className="flex flex-col px-4 py-3">
-              <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase mb-1">{t.birthDate}</span>
-              <input type="text" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
+            <div className="px-5 py-4">
+              <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mb-2">{t.bio}</label>
+              <textarea rows={3} value={editBio} onChange={e => setEditBio(e.target.value)} className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none" placeholder="Расскажите немного о себе..." />
             </div>
           </div>
-        </main>
+        </div>
       </div>
     );
   }
 
-  // --- ГЛАВНЫЙ ЭКРАН НАСТРОЕК ---
   return (
-    <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right fade-in duration-300 ease-out">
-      
-      <header className="flex items-center px-4 pt-12 pb-4 bg-white/80 dark:bg-[#222224]/80 sticky top-0 z-10 shadow-[0_1px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl border-b border-black/5 dark:border-white/5">
-        <button onClick={() => setLocation('/')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 mr-4">
-           <ArrowLeft size={26} strokeWidth={2} />
-        </button>
-        <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[22px] font-bold tracking-tight">{t.settings}</h1>
+    <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out">
+      <header className="flex items-center gap-6 px-4 pt-12 pb-4 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10">
+        <Link href="/"><a className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
+        <h1 className="text-[22px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.settings}</h1>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 pt-6 pb-20">
-        
-        {/* Аватарка */}
-        <div className="flex flex-col items-center pt-2 pb-8">
-          <div className="w-[110px] h-[110px] rounded-full bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7] flex items-center justify-center text-[40px] font-medium mb-3 border border-black/5 dark:border-white/5 shadow-sm">
-            {user.avatarUrl && user.avatarUrl.length > 5 ? (
-              <img src={user.avatarUrl} className="w-full h-full object-cover rounded-full" />
-            ) : (
-              <span>{user.displayName?.charAt(0).toUpperCase()}</span>
-            )}
-          </div>
-          <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{user.displayName}</h2>
-          <p className="text-[15px] text-[#86868b] dark:text-[#98989d] mt-0.5">{user.username}</p>
+      <main className="flex-1 overflow-y-auto pb-10">
+        {/* Profile Info */}
+        <div className="flex flex-col items-center pt-2 pb-6">
+           <div className="w-[100px] h-[100px] rounded-full overflow-hidden bg-[#e5e5ea] dark:bg-[#333336] border border-black/5 dark:border-white/5 mb-3 shadow-sm flex items-center justify-center">
+             {currentUser?.avatarUrl ? <img src={currentUser.avatarUrl} className="w-full h-full object-cover" /> : <span className="text-[32px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{currentUser?.displayName?.charAt(0).toUpperCase() || 'U'}</span>}
+           </div>
+           <h2 className="text-[20px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{currentUser?.displayName || 'Пользователь'}</h2>
+           <p className="text-[15px] text-[#86868b] dark:text-[#98989d] mt-0.5">{currentUser?.username || '@username'}</p>
         </div>
 
-        {/* Основные настройки - Строгий монохром */}
-        <div className="mb-6">
-           <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden flex flex-col shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
-               <button onClick={() => setView('profile')} className="flex items-center justify-between px-4 py-3.5 w-full text-left border-b border-black/5 dark:border-white/5 active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="w-9 h-9 rounded-[10px] bg-[#f5f5f7] dark:bg-[#333336] flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7]"><UserIcon size={20}/></div>
-                    <div className="flex flex-col">
-                       <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight">{t.account}</span>
-                       <span className="text-[13px] text-[#86868b] dark:text-[#98989d] leading-tight mt-0.5">{t.accountDesc}</span>
-                    </div>
-                  </div>
-                  <ChevronRight size={20} className="text-[#86868b] dark:text-[#98989d]" />
-               </button>
-
-               <button onClick={() => setShowLangModal(true)} className="flex items-center justify-between px-4 py-3.5 w-full text-left active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="w-9 h-9 rounded-[10px] bg-[#f5f5f7] dark:bg-[#333336] flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7]"><Globe size={20}/></div>
-                    <div className="flex flex-col">
-                       <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight">{t.language}</span>
-                       <span className="text-[13px] text-[#86868b] dark:text-[#98989d] leading-tight mt-0.5 uppercase">{lang}</span>
-                    </div>
-                  </div>
-                  <ChevronRight size={20} className="text-[#86868b] dark:text-[#98989d]" />
-               </button>
+        {/* Settings Groups */}
+        <div className="px-4 flex flex-col gap-4 max-w-2xl mx-auto w-full">
+           
+           {/* Main Block (Telegram Style) */}
+           <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 overflow-hidden flex flex-col">
+              <SettingItem 
+                icon={<User size={20} strokeWidth={2.5} />} 
+                title={t.account} 
+                subtitle={t.accountSub} 
+                onClick={() => setShowEditProfile(true)} 
+              />
+              <SettingItem 
+                icon={<MessageSquare size={20} strokeWidth={2.5} />} 
+                title={t.chatSettings} 
+                subtitle={t.chatSettingsSub} 
+              />
+              <SettingItem 
+                icon={<Lock size={20} strokeWidth={2.5} />} 
+                title={t.privacy} 
+                subtitle={t.privacySub} 
+              />
+              <SettingItem 
+                icon={<Bell size={20} strokeWidth={2.5} />} 
+                title={t.notifications} 
+                subtitle={t.notificationsSub} 
+                hasBorder={false}
+              />
            </div>
-        </div>
 
-        {/* Логаут - Монохром */}
-        <div className="mb-8">
-           <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
-               <button onClick={handleLogout} className="flex items-center justify-center w-full px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[16px] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
-                  {t.logout}
-               </button>
+           {/* Language Block */}
+           <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 overflow-hidden flex flex-col">
+              <SettingItem 
+                icon={<Globe size={20} strokeWidth={2.5} />} 
+                title={t.language} 
+                subtitle={t.languageSub} 
+                onClick={toggleLanguage} 
+                hasBorder={false}
+              />
            </div>
+
+           {/* Logout Block */}
+           <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 overflow-hidden flex flex-col mt-2">
+              <button onClick={handleLogout} className="flex items-center justify-center gap-2 p-4 text-red-500 font-semibold text-[16px] hover:bg-black/5 dark:hover:bg-white/5 active:bg-black/10 dark:active:bg-white/10 transition-colors w-full">
+                 <LogOut size={20} strokeWidth={2.5} className="mr-1" />
+                 {t.logout}
+              </button>
+           </div>
+
         </div>
       </main>
-
-      {/* Модалка выбора языка */}
-      {showLangModal && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/20 dark:bg-black/50 backdrop-blur-sm animate-in fade-in" onClick={() => setShowLangModal(false)}>
-           <div className="w-full max-w-sm bg-[#f5f5f7] dark:bg-[#161618] rounded-t-[24px] sm:rounded-[24px] p-6 pb-10 sm:pb-6 animate-in slide-in-from-bottom" onClick={e => e.stopPropagation()}>
-              <h3 className="text-[18px] font-bold mb-5 text-center text-[#1d1d1f] dark:text-[#f5f5f7]">{t.language}</h3>
-              <div className="flex flex-col gap-3">
-                 <button onClick={() => changeLanguage('ru')} className={`flex items-center justify-between p-4 rounded-[16px] border transition-colors ${lang === 'ru' ? 'border-[#1d1d1f] dark:border-[#f5f5f7] bg-white dark:bg-[#222224]' : 'border-black/5 dark:border-white/5 bg-white/50 dark:bg-[#222224]/50'}`}>
-                   <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">Русский</span>
-                   {lang === 'ru' && <Check size={20} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />}
-                 </button>
-                 <button onClick={() => changeLanguage('en')} className={`flex items-center justify-between p-4 rounded-[16px] border transition-colors ${lang === 'en' ? 'border-[#1d1d1f] dark:border-[#f5f5f7] bg-white dark:bg-[#222224]' : 'border-black/5 dark:border-white/5 bg-white/50 dark:bg-[#222224]/50'}`}>
-                   <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">English</span>
-                   {lang === 'en' && <Check size={20} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />}
-                 </button>
-              </div>
-           </div>
-        </div>
-      )}
     </div>
   );
 }
