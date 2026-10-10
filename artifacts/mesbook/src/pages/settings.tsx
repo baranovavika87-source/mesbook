@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { ArrowLeft, User, MessageSquare, Lock, Bell, Globe, ChevronRight, LogOut, Camera, Loader2, X, Check } from 'lucide-react';
+import { ArrowLeft, User, MessageSquare, Lock, Bell, Globe, ChevronRight, LogOut, Camera, Loader2, Check } from 'lucide-react';
 
 const translations = {
   ru: {
@@ -16,11 +16,11 @@ const translations = {
     language: "Язык",
     languageSub: "Русский",
     logout: "Выйти из аккаунта",
-    editProfile: "Изменить профиль",
     name: "Имя",
     username: "Никнейм (@username)",
     bio: "О себе",
     birthday: "Дата рождения",
+    password: "Сменить пароль",
     cancel: "Отмена",
     save: "Сохранить",
     russian: "Русский",
@@ -39,11 +39,11 @@ const translations = {
     language: "Language",
     languageSub: "English",
     logout: "Log Out",
-    editProfile: "Edit Profile",
     name: "Name",
     username: "Username (@username)",
     bio: "Bio",
     birthday: "Birthday",
+    password: "Change Password",
     cancel: "Cancel",
     save: "Save",
     russian: "Русский",
@@ -68,6 +68,7 @@ export default function SettingsPage() {
   const [editUsername, setEditUsername] = useState(currentUser?.username || '');
   const [editBio, setEditBio] = useState(currentUser?.bio || '');
   const [editBirthDate, setEditBirthDate] = useState(currentUser?.birthDate || '');
+  const [editPassword, setEditPassword] = useState('');
   const [editAvatar, setEditAvatar] = useState(currentUser?.avatarUrl || '');
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -102,20 +103,27 @@ export default function SettingsPage() {
   const handleSaveProfile = async () => {
     setIsSaving(true);
     try {
+      const bodyParams: any = {
+        displayName: editName,
+        username: editUsername,
+        bio: editBio,
+        birthDate: editBirthDate,
+        avatarUrl: editAvatar
+      };
+      
+      if (editPassword.trim() !== '') {
+         bodyParams.password = editPassword.trim();
+      }
+
       const res = await fetch('/api/me', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + currentUser.id
         },
-        body: JSON.stringify({
-          displayName: editName,
-          username: editUsername,
-          bio: editBio,
-          birthDate: editBirthDate,
-          avatarUrl: editAvatar
-        })
+        body: JSON.stringify(bodyParams)
       });
+      
       if (res.ok) {
         const updatedUser = await res.json();
         localStorage.setItem('mesbook_user', JSON.stringify(updatedUser));
@@ -127,6 +135,7 @@ export default function SettingsPage() {
            localStorage.setItem('mesbook_accounts', JSON.stringify(accs));
         } catch(e) {}
         
+        setEditPassword('');
         setActiveView('main');
       }
     } catch (e) {}
@@ -147,38 +156,37 @@ export default function SettingsPage() {
     </button>
   );
 
-  // --- ЭКРАН РЕДАКТИРОВАНИЯ ПРОФИЛЯ ---
+  // --- ЭКРАН РЕДАКТИРОВАНИЯ АККАУНТА ---
   if (activeView === 'edit') {
     return (
       <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans animate-in slide-in-from-right-8 duration-300 ease-out overflow-y-auto">
         <header className="flex items-center justify-between px-4 pt-12 pb-4 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
           <div className="flex items-center gap-4">
-            <button onClick={() => setActiveView('main')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><X size={26} strokeWidth={2} /></button>
-            <h1 className="text-[20px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.editProfile}</h1>
+            <button onClick={() => setActiveView('main')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
+            <h1 className="text-[20px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.account}</h1>
           </div>
-          {/* Текстовая кнопка "Сохранить" вместо галочки */}
-          <button onClick={handleSaveProfile} disabled={isSaving} className="text-[#1d1d1f] dark:text-[#f5f5f7] px-2 py-1 active:scale-95 transition-transform font-medium text-[16px]">
+          <button onClick={handleSaveProfile} disabled={isSaving} className="text-[#1d1d1f] dark:text-[#f5f5f7] font-medium text-[16px] px-2 py-1 active:scale-95 transition-transform">
             {isSaving ? <Loader2 size={20} className="animate-spin" /> : t.save}
           </button>
         </header>
 
         <div className="px-4 pt-8 w-full max-w-lg mx-auto flex flex-col gap-5 pb-10">
-          <div className="flex justify-center mb-4">
-            <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-[#0f172a] dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 relative cursor-pointer group" onClick={() => fileInputRef.current?.click()}>
-              {editAvatar && editAvatar.length > 5 ? (
-                <img src={editAvatar} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-[40px] font-medium text-white">{editName.charAt(0).toUpperCase()}</span>
-              )}
-              
-              {/* Маленькая иконка камеры по центру */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                 <div className="w-10 h-10 rounded-full flex items-center justify-center">
-                    <Camera size={24} strokeWidth={1.5} className="text-white opacity-80" />
-                 </div>
+          <div className="flex justify-center mb-6">
+            <div className="relative cursor-pointer group" onClick={() => fileInputRef.current?.click()}>
+              {/* Сама аватарка */}
+              <div className="w-[100px] h-[100px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-[#0f172a] dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5">
+                {editAvatar && editAvatar.length > 5 ? (
+                  <img src={editAvatar} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-[36px] font-medium text-white">{editName.charAt(0).toUpperCase()}</span>
+                )}
+                {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10"><Loader2 size={24} className="text-white animate-spin" /></div>}
               </div>
               
-              {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10"><Loader2 size={24} className="text-white animate-spin" /></div>}
+              {/* Маленькая иконка камеры сбоку (в монохромном стиле) */}
+              <div className="absolute bottom-0 right-0 w-8 h-8 bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full flex items-center justify-center border-2 border-[#f5f5f7] dark:border-[#161618] shadow-sm transition-transform active:scale-95 z-20">
+                <Camera size={14} className="text-[#f5f5f7] dark:text-[#1d1d1f]" strokeWidth={2.5} />
+              </div>
             </div>
             <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
           </div>
@@ -201,6 +209,15 @@ export default function SettingsPage() {
               <textarea rows={3} value={editBio} onChange={e => setEditBio(e.target.value)} className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none" placeholder="Расскажите немного о себе..." />
             </div>
           </div>
+          
+          {/* Смена пароля вынесена в отдельный блок */}
+          <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden border border-black/5 dark:border-white/5 flex flex-col">
+            <div className="px-5 py-3 border-b border-black/5 dark:border-white/5">
+              <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mt-1">{t.password}</label>
+              <input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="••••••••" className="w-full bg-transparent py-1.5 text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
+            </div>
+          </div>
+          
         </div>
       </div>
     );
@@ -216,13 +233,11 @@ export default function SettingsPage() {
         </header>
 
         <div className="px-4 flex flex-col gap-4 max-w-2xl mx-auto w-full pt-6">
-           <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 overflow-hidden flex flex-col">
-              {/* Логаут перенесен сюда */}
-              <button onClick={handleLogout} className="flex items-center justify-center gap-2 p-4 text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[16px] hover:bg-black/5 dark:hover:bg-white/5 active:bg-black/10 dark:active:bg-white/10 transition-colors w-full">
-                 <LogOut size={20} strokeWidth={2.5} className="mr-1" />
-                 {t.logout}
-              </button>
-           </div>
+           {/* Аккуратная кнопка логаута */}
+           <button onClick={handleLogout} className="bg-white dark:bg-[#222224] rounded-[18px] py-3.5 px-4 flex items-center justify-center gap-2 text-[#1d1d1f] dark:text-[#f5f5f7] font-medium text-[15px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] border border-black/5 dark:border-white/5 active:scale-[0.98] transition-all">
+              <LogOut size={18} strokeWidth={2} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />
+              {t.logout}
+           </button>
         </div>
       </div>
     );
@@ -300,7 +315,6 @@ export default function SettingsPage() {
                 subtitle={t.notificationsSub} 
                 hasBorder={true}
               />
-              {/* Вызов нового экрана языков */}
               <SettingItem 
                 icon={<Globe size={20} strokeWidth={2.5} />} 
                 title={t.language} 
