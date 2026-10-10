@@ -20,6 +20,7 @@ const translations = {
     name: "Имя",
     username: "Никнейм (@username)",
     bio: "О себе",
+    birthday: "Дата рождения",
     cancel: "Отмена"
   },
   en: {
@@ -39,6 +40,7 @@ const translations = {
     name: "Name",
     username: "Username (@username)",
     bio: "Bio",
+    birthday: "Birthday",
     cancel: "Cancel"
   }
 };
@@ -56,6 +58,7 @@ export default function SettingsPage() {
   const [editName, setEditName] = useState(currentUser?.displayName || '');
   const [editUsername, setEditUsername] = useState(currentUser?.username || '');
   const [editBio, setEditBio] = useState(currentUser?.bio || '');
+  const [editBirthDate, setEditBirthDate] = useState(currentUser?.birthDate || '');
   const [editAvatar, setEditAvatar] = useState(currentUser?.avatarUrl || '');
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -101,6 +104,7 @@ export default function SettingsPage() {
           displayName: editName,
           username: editUsername,
           bio: editBio,
+          birthDate: editBirthDate,
           avatarUrl: editAvatar
         })
       });
@@ -109,7 +113,6 @@ export default function SettingsPage() {
         localStorage.setItem('mesbook_user', JSON.stringify(updatedUser));
         setCurrentUser(updatedUser);
         
-        // Обновляем аккаунт в списке мультиаккаунтов, если есть
         try {
            let accs = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
            accs = accs.map((a: any) => String(a.id) === String(updatedUser.id) ? updatedUser : a);
@@ -122,20 +125,18 @@ export default function SettingsPage() {
     setIsSaving(false);
   };
 
+  // Компонент меню с линиями на всю ширину
   const SettingItem = ({ icon, title, subtitle, onClick, hasBorder = true }: any) => (
-    <>
-      <button onClick={onClick} className="flex items-center gap-4 px-4 py-3 active:bg-black/5 dark:active:bg-white/5 transition-colors w-full text-left">
-         <div className="w-[38px] h-[38px] flex-shrink-0 flex items-center justify-center rounded-[12px] bg-[#f5f5f7] dark:bg-[#161618] text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
-            {icon}
-         </div>
-         <div className="flex flex-col flex-1 overflow-hidden pr-2">
-            <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{title}</span>
-            <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate mt-[1px]">{subtitle}</span>
-         </div>
-         <ChevronRight size={18} className="text-[#86868b] dark:text-[#98989d] flex-shrink-0" />
-      </button>
-      {hasBorder && <div className="h-[1px] w-full bg-black/5 dark:bg-white/5 ml-[70px]"></div>}
-    </>
+    <button onClick={onClick} className={`flex items-center gap-4 px-4 py-3.5 active:bg-black/5 dark:active:bg-white/5 transition-colors w-full text-left ${hasBorder ? 'border-b border-black/5 dark:border-white/5' : ''}`}>
+       <div className="w-[38px] h-[38px] flex-shrink-0 flex items-center justify-center rounded-[12px] bg-[#f5f5f7] dark:bg-[#161618] text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
+          {icon}
+       </div>
+       <div className="flex flex-col flex-1 overflow-hidden pr-2">
+          <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{title}</span>
+          <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate mt-[1px]">{subtitle}</span>
+       </div>
+       <ChevronRight size={18} className="text-[#86868b] dark:text-[#98989d] flex-shrink-0" />
+    </button>
   );
 
   if (showEditProfile) {
@@ -153,9 +154,19 @@ export default function SettingsPage() {
 
         <div className="px-4 pt-8 w-full max-w-lg mx-auto flex flex-col gap-5 pb-10">
           <div className="flex justify-center mb-4">
-            <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-white dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 relative cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-              {editAvatar && editAvatar.length > 5 ? <img src={editAvatar} className="w-full h-full object-cover" /> : <Camera size={36} className="text-[#86868b] dark:text-[#98989d]" />}
-              {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
+            <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-white dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 relative cursor-pointer group" onClick={() => fileInputRef.current?.click()}>
+              {editAvatar && editAvatar.length > 5 ? (
+                <img src={editAvatar} className="w-full h-full object-cover" />
+              ) : (
+                <User size={48} className="text-[#86868b] dark:text-[#98989d]" />
+              )}
+              
+              {/* Иконка камеры поверх аватарки */}
+              <div className="absolute inset-0 bg-black/30 dark:bg-black/40 flex items-center justify-center transition-opacity">
+                <Camera size={32} className="text-white opacity-90" strokeWidth={1.5} />
+              </div>
+              
+              {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10"><Loader2 size={24} className="text-white animate-spin" /></div>}
             </div>
             <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
           </div>
@@ -169,10 +180,23 @@ export default function SettingsPage() {
               <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mt-1">{t.username}</label>
               <input type="text" value={editUsername} onChange={e => setEditUsername(e.target.value)} className="w-full bg-transparent py-1.5 text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] outline-none" />
             </div>
+            {/* Поле даты рождения */}
+            <div className="px-5 py-3 border-b border-black/5 dark:border-white/5">
+              <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mt-1">{t.birthday}</label>
+              <input type="date" value={editBirthDate} onChange={e => setEditBirthDate(e.target.value)} className="w-full bg-transparent py-1.5 text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] outline-none [color-scheme:light] dark:[color-scheme:dark]" />
+            </div>
             <div className="px-5 py-4">
               <label className="block text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider mb-2">{t.bio}</label>
               <textarea rows={3} value={editBio} onChange={e => setEditBio(e.target.value)} className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none" placeholder="Расскажите немного о себе..." />
             </div>
+          </div>
+
+          {/* Кнопка выхода из аккаунта */}
+          <div className="mt-4">
+             <button onClick={handleLogout} className="flex items-center justify-center gap-2 p-4 text-red-500 font-semibold text-[16px] bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 active:scale-95 transition-all w-full">
+                <LogOut size={20} strokeWidth={2.5} className="mr-1" />
+                {t.logout}
+             </button>
           </div>
         </div>
       </div>
@@ -196,37 +220,34 @@ export default function SettingsPage() {
            <p className="text-[15px] text-[#86868b] dark:text-[#98989d] mt-0.5">{currentUser?.username || '@username'}</p>
         </div>
 
-        {/* Settings Groups */}
+        {/* Settings Group (Единый блок) */}
         <div className="px-4 flex flex-col gap-4 max-w-2xl mx-auto w-full">
-           
-           {/* Main Block (Telegram Style) */}
            <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 overflow-hidden flex flex-col">
               <SettingItem 
                 icon={<User size={20} strokeWidth={2.5} />} 
                 title={t.account} 
                 subtitle={t.accountSub} 
                 onClick={() => setShowEditProfile(true)} 
+                hasBorder={true}
               />
               <SettingItem 
                 icon={<MessageSquare size={20} strokeWidth={2.5} />} 
                 title={t.chatSettings} 
                 subtitle={t.chatSettingsSub} 
+                hasBorder={true}
               />
               <SettingItem 
                 icon={<Lock size={20} strokeWidth={2.5} />} 
                 title={t.privacy} 
                 subtitle={t.privacySub} 
+                hasBorder={true}
               />
               <SettingItem 
                 icon={<Bell size={20} strokeWidth={2.5} />} 
                 title={t.notifications} 
                 subtitle={t.notificationsSub} 
-                hasBorder={false}
+                hasBorder={true}
               />
-           </div>
-
-           {/* Language Block */}
-           <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 overflow-hidden flex flex-col">
               <SettingItem 
                 icon={<Globe size={20} strokeWidth={2.5} />} 
                 title={t.language} 
@@ -235,15 +256,6 @@ export default function SettingsPage() {
                 hasBorder={false}
               />
            </div>
-
-           {/* Logout Block */}
-           <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 overflow-hidden flex flex-col mt-2">
-              <button onClick={handleLogout} className="flex items-center justify-center gap-2 p-4 text-red-500 font-semibold text-[16px] hover:bg-black/5 dark:hover:bg-white/5 active:bg-black/10 dark:active:bg-white/10 transition-colors w-full">
-                 <LogOut size={20} strokeWidth={2.5} className="mr-1" />
-                 {t.logout}
-              </button>
-           </div>
-
         </div>
       </main>
     </div>
