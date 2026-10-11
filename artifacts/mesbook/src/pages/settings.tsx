@@ -30,8 +30,8 @@ const translations = {
     themeDark: "Тёмная",
     themeAuto: "Авто",
     textSize: "Размер текста",
-    chatBackground: "Фон чата",
-    previewText: "Смотри, как круто работает смена размера текста и фона! 😎",
+    chatBackground: "Цвет чата",
+    previewText: "Привет, как твои дела?",
     previewTime: "12:34"
   },
   en: {
@@ -61,8 +61,8 @@ const translations = {
     themeDark: "Dark",
     themeAuto: "Auto",
     textSize: "Text Size",
-    chatBackground: "Chat Background",
-    previewText: "Look how cool the text size and background change works! 😎",
+    chatBackground: "Chat Color",
+    previewText: "Hi, how are you?",
     previewTime: "12:34"
   }
 };
@@ -91,14 +91,13 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Chat Settings State
+  // Chat Settings State (Live values)
   const [theme, setTheme] = useState(localStorage.getItem('mesbook_theme') || 'auto');
   const [textSize, setTextSize] = useState(Number(localStorage.getItem('mesbook_text_size')) || 16);
   const [wallpaper, setWallpaper] = useState(localStorage.getItem('mesbook_wallpaper') || '');
 
-  // Эффект для живой смены темы
+  // Эффект для живой смены темы (без немедленного сохранения)
   useEffect(() => {
-    localStorage.setItem('mesbook_theme', theme);
     if (theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     } else {
@@ -106,9 +105,21 @@ export default function SettingsPage() {
     }
   }, [theme]);
 
-  // Эффекты для сохранения настроек чата
-  useEffect(() => { localStorage.setItem('mesbook_text_size', textSize.toString()); }, [textSize]);
-  useEffect(() => { localStorage.setItem('mesbook_wallpaper', wallpaper); }, [wallpaper]);
+  // Функции сохранения и отмены для настроек чата
+  const handleSaveChatSettings = () => {
+    localStorage.setItem('mesbook_theme', theme);
+    localStorage.setItem('mesbook_text_size', textSize.toString());
+    localStorage.setItem('mesbook_wallpaper', wallpaper);
+    setActiveView('main');
+  };
+
+  const cancelChatSettings = () => {
+    const savedTheme = localStorage.getItem('mesbook_theme') || 'auto';
+    setTheme(savedTheme);
+    setTextSize(Number(localStorage.getItem('mesbook_text_size')) || 16);
+    setWallpaper(localStorage.getItem('mesbook_wallpaper') || '');
+    setActiveView('main');
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('mesbook_user');
@@ -250,9 +261,16 @@ export default function SettingsPage() {
   if (activeView === 'chat_settings') {
     return (
       <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans animate-in slide-in-from-right-8 duration-300 ease-out overflow-y-auto">
-        <header className="flex items-center gap-4 px-4 pt-12 pb-4 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-          <button onClick={() => setActiveView('main')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
-          <h1 className="text-[20px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.chatSettings}</h1>
+        <header className="flex items-center justify-between px-4 pt-12 pb-4 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+          <div className="flex items-center gap-4">
+            {/* Кнопка назад теперь отменяет изменения без сохранения */}
+            <button onClick={cancelChatSettings} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
+            <h1 className="text-[20px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.chatSettings}</h1>
+          </div>
+          {/* Кнопка сохранить */}
+          <button onClick={handleSaveChatSettings} className="text-[#1d1d1f] dark:text-[#f5f5f7] font-medium text-[16px] px-2 py-1 active:scale-95 transition-transform">
+            {t.save}
+          </button>
         </header>
 
         <div className="flex flex-col max-w-2xl mx-auto w-full pb-10">
@@ -260,12 +278,10 @@ export default function SettingsPage() {
            {/* ПРЕВЬЮ ЧАТА */}
            <div className="mx-4 mt-6 h-[220px] rounded-[24px] overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 relative bg-cover bg-center transition-all duration-300"
                 style={{ 
-                   background: wallpaper ? (wallpaper.startsWith('http') ? `url(${wallpaper})` : wallpaper) : undefined,
-                   backgroundColor: !wallpaper ? (theme === 'dark' ? '#161618' : '#e5e5ea') : undefined,
-                   backgroundSize: 'cover'
+                   background: wallpaper ? wallpaper : undefined,
+                   backgroundColor: !wallpaper ? (theme === 'dark' ? '#161618' : '#e5e5ea') : undefined
                 }}>
               <div className="absolute inset-0 flex flex-col justify-end p-4">
-                 {/* Фейковое сообщение в превью */}
                  <div className="bg-white dark:bg-[#222224] rounded-[18px] rounded-tl-[4px] p-3 max-w-[85%] self-start shadow-sm border border-black/5 dark:border-white/5 transition-all">
                     <div style={{ fontSize: `${textSize}px` }} className="text-[#1d1d1f] dark:text-[#f5f5f7] leading-snug">
                        {t.previewText}
@@ -298,20 +314,20 @@ export default function SettingsPage() {
              </div>
            </div>
 
-           {/* ОБОИ ЧАТА */}
+           {/* ПАЛИТРА: ОБОИ ЧАТА */}
            <div className="px-4 mt-4">
              <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 p-5 flex flex-col gap-3">
                 <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.chatBackground}</span>
                 <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x">
-                  {/* Стандартный пустой фон */}
+                  {/* Кнопка сброса (без фона) */}
                   <button onClick={() => setWallpaper('')} className={`w-[75px] h-[100px] shrink-0 rounded-[14px] bg-[#f5f5f7] dark:bg-[#161618] border-[3px] transition-all flex items-center justify-center snap-start ${!wallpaper ? 'border-[#1d1d1f] dark:border-[#f5f5f7]' : 'border-black/5 dark:border-white/5'}`}>
                      <X className="text-[#86868b] opacity-50" size={24} />
                   </button>
                   
-                  {/* Палитра монохромных и спокойных цветов */}
-                  {['#1d1d1f', '#0f172a', '#1e3a8a', '#14532d', '#581c87', 'https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=200&q=80', 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=200&q=80'].map(bg => (
-                    <button key={bg} onClick={() => setWallpaper(bg)} className={`w-[75px] h-[100px] shrink-0 rounded-[14px] border-[3px] transition-all bg-cover bg-center snap-start ${wallpaper === bg ? 'border-[#1d1d1f] dark:border-[#f5f5f7]' : 'border-transparent'}`} style={{ background: bg.startsWith('http') ? `url(${bg})` : bg, backgroundSize: 'cover' }}></button>
-                  ))}
+                  {/* Палитра выбора цвета */}
+                  <div className={`w-[75px] h-[100px] shrink-0 rounded-[14px] border-[3px] transition-all flex items-center justify-center snap-start relative overflow-hidden ${wallpaper && wallpaper.startsWith('#') ? 'border-[#1d1d1f] dark:border-[#f5f5f7]' : 'border-black/5 dark:border-white/5'}`} style={{ backgroundColor: wallpaper || '#1d1d1f' }}>
+                     <input type="color" value={wallpaper || '#1d1d1f'} onChange={e => setWallpaper(e.target.value)} className="absolute opacity-0 inset-[-10px] w-[200%] h-[200%] cursor-pointer" />
+                  </div>
                 </div>
              </div>
            </div>
