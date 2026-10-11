@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
-import { ArrowLeft, User, MessageSquare, Lock, Bell, Globe, ChevronRight, LogOut, Camera, Loader2, Check } from 'lucide-react';
+import { ArrowLeft, User, MessageSquare, Lock, Bell, Globe, ChevronRight, LogOut, Camera, Loader2, Check, X, Image as ImageIcon } from 'lucide-react';
 
 const translations = {
   ru: {
@@ -8,7 +8,7 @@ const translations = {
     account: "Аккаунт",
     accountSub: "Номер, имя пользователя, «О себе»",
     chatSettings: "Настройки чатов",
-    chatSettingsSub: "Обои, ночная тема, анимации",
+    chatSettingsSub: "Обои, ночная тема, размер текста",
     privacy: "Конфиденциальность",
     privacySub: "Время захода, устройства, ключи доступа",
     notifications: "Уведомления",
@@ -24,14 +24,22 @@ const translations = {
     cancel: "Отмена",
     save: "Сохранить",
     russian: "Русский",
-    english: "English"
+    english: "English",
+    theme: "Тема оформления",
+    themeLight: "Светлая",
+    themeDark: "Тёмная",
+    themeAuto: "Авто",
+    textSize: "Размер текста",
+    chatBackground: "Фон чата",
+    previewText: "Смотри, как круто работает смена размера текста и фона! 😎",
+    previewTime: "12:34"
   },
   en: {
     settings: "Settings",
     account: "Account",
     accountSub: "Number, username, bio",
     chatSettings: "Chat Settings",
-    chatSettingsSub: "Wallpaper, Night Mode, Animations",
+    chatSettingsSub: "Wallpaper, Night Mode, Text Size",
     privacy: "Privacy",
     privacySub: "Last seen, devices, passkeys",
     notifications: "Notifications",
@@ -47,11 +55,19 @@ const translations = {
     cancel: "Cancel",
     save: "Save",
     russian: "Русский",
-    english: "English"
+    english: "English",
+    theme: "Appearance",
+    themeLight: "Light",
+    themeDark: "Dark",
+    themeAuto: "Auto",
+    textSize: "Text Size",
+    chatBackground: "Chat Background",
+    previewText: "Look how cool the text size and background change works! 😎",
+    previewTime: "12:34"
   }
 };
 
-type ViewState = 'main' | 'edit' | 'privacy' | 'language';
+type ViewState = 'main' | 'edit' | 'privacy' | 'language' | 'chat_settings';
 
 export default function SettingsPage() {
   const [, setLocation] = useLocation();
@@ -64,6 +80,7 @@ export default function SettingsPage() {
 
   const [activeView, setActiveView] = useState<ViewState>('main');
 
+  // Account Edit State
   const [editName, setEditName] = useState(currentUser?.displayName || '');
   const [editUsername, setEditUsername] = useState(currentUser?.username || '');
   const [editBio, setEditBio] = useState(currentUser?.bio || '');
@@ -73,6 +90,25 @@ export default function SettingsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Chat Settings State
+  const [theme, setTheme] = useState(localStorage.getItem('mesbook_theme') || 'auto');
+  const [textSize, setTextSize] = useState(Number(localStorage.getItem('mesbook_text_size')) || 16);
+  const [wallpaper, setWallpaper] = useState(localStorage.getItem('mesbook_wallpaper') || '');
+
+  // Эффект для живой смены темы
+  useEffect(() => {
+    localStorage.setItem('mesbook_theme', theme);
+    if (theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
+  // Эффекты для сохранения настроек чата
+  useEffect(() => { localStorage.setItem('mesbook_text_size', textSize.toString()); }, [textSize]);
+  useEffect(() => { localStorage.setItem('mesbook_wallpaper', wallpaper); }, [wallpaper]);
 
   const handleLogout = () => {
     localStorage.removeItem('mesbook_user');
@@ -142,7 +178,6 @@ export default function SettingsPage() {
     setIsSaving(false);
   };
 
-  // Универсальный компонент для списков
   const SettingItem = ({ icon, title, subtitle, onClick, hasBorder = true }: any) => (
     <button onClick={onClick} className={`flex items-center gap-4 px-4 py-3.5 active:bg-black/5 dark:active:bg-white/5 transition-colors w-full text-left ${hasBorder ? 'border-b border-black/5 dark:border-white/5' : ''}`}>
        <div className="w-[38px] h-[38px] flex-shrink-0 flex items-center justify-center rounded-[12px] bg-[#f5f5f7] dark:bg-[#161618] text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
@@ -173,7 +208,6 @@ export default function SettingsPage() {
         <div className="px-4 pt-8 w-full max-w-lg mx-auto flex flex-col gap-5 pb-10">
           <div className="flex justify-center mb-6">
             <div className="relative cursor-pointer group" onClick={() => fileInputRef.current?.click()}>
-              {/* Сама аватарка */}
               <div className="w-[100px] h-[100px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-[#0f172a] dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5">
                 {editAvatar && editAvatar.length > 5 ? (
                   <img src={editAvatar} className="w-full h-full object-cover" />
@@ -182,8 +216,6 @@ export default function SettingsPage() {
                 )}
                 {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10"><Loader2 size={24} className="text-white animate-spin" /></div>}
               </div>
-              
-              {/* Маленькая иконка камеры сбоку (в монохромном стиле) */}
               <div className="absolute bottom-0 right-0 w-8 h-8 bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full flex items-center justify-center border-2 border-[#f5f5f7] dark:border-[#161618] shadow-sm transition-transform active:scale-95 z-20">
                 <Camera size={14} className="text-[#f5f5f7] dark:text-[#1d1d1f]" strokeWidth={2.5} />
               </div>
@@ -209,6 +241,81 @@ export default function SettingsPage() {
               <textarea rows={3} value={editBio} onChange={e => setEditBio(e.target.value)} className="w-full bg-transparent text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none resize-none" placeholder="Расскажите немного о себе..." />
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- ЭКРАН НАСТРОЕК ЧАТОВ ---
+  if (activeView === 'chat_settings') {
+    return (
+      <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans animate-in slide-in-from-right-8 duration-300 ease-out overflow-y-auto">
+        <header className="flex items-center gap-4 px-4 pt-12 pb-4 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+          <button onClick={() => setActiveView('main')} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
+          <h1 className="text-[20px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.chatSettings}</h1>
+        </header>
+
+        <div className="flex flex-col max-w-2xl mx-auto w-full pb-10">
+           
+           {/* ПРЕВЬЮ ЧАТА */}
+           <div className="mx-4 mt-6 h-[220px] rounded-[24px] overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5 relative bg-cover bg-center transition-all duration-300"
+                style={{ 
+                   background: wallpaper ? (wallpaper.startsWith('http') ? `url(${wallpaper})` : wallpaper) : undefined,
+                   backgroundColor: !wallpaper ? (theme === 'dark' ? '#161618' : '#e5e5ea') : undefined,
+                   backgroundSize: 'cover'
+                }}>
+              <div className="absolute inset-0 flex flex-col justify-end p-4">
+                 {/* Фейковое сообщение в превью */}
+                 <div className="bg-white dark:bg-[#222224] rounded-[18px] rounded-tl-[4px] p-3 max-w-[85%] self-start shadow-sm border border-black/5 dark:border-white/5 transition-all">
+                    <div style={{ fontSize: `${textSize}px` }} className="text-[#1d1d1f] dark:text-[#f5f5f7] leading-snug">
+                       {t.previewText}
+                    </div>
+                    <div className="flex justify-end mt-1">
+                       <span className="text-[11px] text-[#86868b] dark:text-[#98989d]">{t.previewTime}</span>
+                    </div>
+                 </div>
+              </div>
+           </div>
+
+           {/* РАЗМЕР ТЕКСТА */}
+           <div className="px-4 mt-6">
+             <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 p-5 flex flex-col gap-4">
+                <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.textSize}: <span className="text-[#1d1d1f] dark:text-[#f5f5f7]">{textSize}</span></span>
+                <div className="flex items-center gap-4">
+                  <span className="text-[14px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">A</span>
+                  <input type="range" min="12" max="24" step="1" value={textSize} onChange={e => setTextSize(Number(e.target.value))} className="w-full h-1 bg-[#e5e5ea] dark:bg-[#333336] rounded-lg appearance-none cursor-pointer accent-[#1d1d1f] dark:accent-[#f5f5f7]" />
+                  <span className="text-[22px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">A</span>
+                </div>
+             </div>
+           </div>
+
+           {/* ТЕМА (Светлая/Темная/Авто) */}
+           <div className="px-4 mt-4">
+             <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex overflow-hidden p-1">
+                <button onClick={() => setTheme('light')} className={`flex-1 py-2.5 rounded-[20px] text-[15px] font-medium transition-all ${theme === 'light' ? 'bg-[#1d1d1f] text-white dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5'}`}>{t.themeLight}</button>
+                <button onClick={() => setTheme('dark')} className={`flex-1 py-2.5 rounded-[20px] text-[15px] font-medium transition-all ${theme === 'dark' ? 'bg-[#1d1d1f] text-white dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5'}`}>{t.themeDark}</button>
+                <button onClick={() => setTheme('auto')} className={`flex-1 py-2.5 rounded-[20px] text-[15px] font-medium transition-all ${theme === 'auto' ? 'bg-[#1d1d1f] text-white dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5'}`}>{t.themeAuto}</button>
+             </div>
+           </div>
+
+           {/* ОБОИ ЧАТА */}
+           <div className="px-4 mt-4">
+             <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 p-5 flex flex-col gap-3">
+                <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.chatBackground}</span>
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x">
+                  {/* Стандартный пустой фон */}
+                  <button onClick={() => setWallpaper('')} className={`w-[75px] h-[100px] shrink-0 rounded-[14px] bg-[#f5f5f7] dark:bg-[#161618] border-[3px] transition-all flex items-center justify-center snap-start ${!wallpaper ? 'border-[#1d1d1f] dark:border-[#f5f5f7]' : 'border-black/5 dark:border-white/5'}`}>
+                     <X className="text-[#86868b] opacity-50" size={24} />
+                  </button>
+                  
+                  {/* Палитра монохромных и спокойных цветов */}
+                  {['#1d1d1f', '#0f172a', '#1e3a8a', '#14532d', '#581c87', 'https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=200&q=80', 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=200&q=80'].map(bg => (
+                    <button key={bg} onClick={() => setWallpaper(bg)} className={`w-[75px] h-[100px] shrink-0 rounded-[14px] border-[3px] transition-all bg-cover bg-center snap-start ${wallpaper === bg ? 'border-[#1d1d1f] dark:border-[#f5f5f7]' : 'border-transparent'}`} style={{ background: bg.startsWith('http') ? `url(${bg})` : bg, backgroundSize: 'cover' }}></button>
+                  ))}
+                </div>
+             </div>
+           </div>
+
         </div>
       </div>
     );
@@ -299,9 +406,10 @@ export default function SettingsPage() {
                 hasBorder={true}
               />
               <SettingItem 
-                icon={<MessageSquare size={20} strokeWidth={2.5} />} 
+                icon={<ImageIcon size={20} strokeWidth={2.5} />} 
                 title={t.chatSettings} 
                 subtitle={t.chatSettingsSub} 
+                onClick={() => setActiveView('chat_settings')} 
                 hasBorder={true}
               />
               <SettingItem 
