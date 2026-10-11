@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRoute, Link, useLocation } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Calendar, Volume2, Edit3, Camera, ChevronRight, Download, Smile, MessageCircle, Send, Copy, Reply, Mic, Video, Square, Play, RefreshCw, SendHorizonal, ArrowUp, Pin, Forward, ShieldAlert, UserMinus, Crown } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageCircle, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, UserMinus, Crown } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -258,6 +258,25 @@ export default function ChatPage() {
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
 
+  // ИНТЕГРАЦИЯ НАСТРОЕК (Текст, Фон, Тема)
+  const [textSize, setTextSize] = useState(16);
+  const [wallpaper, setWallpaper] = useState('');
+
+  useEffect(() => {
+    const savedSize = Number(localStorage.getItem('mesbook_text_size')) || 16;
+    const savedWallpaper = localStorage.getItem('mesbook_wallpaper') || '';
+    const savedTheme = localStorage.getItem('mesbook_theme') || 'auto';
+
+    setTextSize(savedSize);
+    setWallpaper(savedWallpaper);
+
+    if (savedTheme === 'dark' || (savedTheme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
   const [messages, setMessages] = useState<any[]>(() => {
     try {
       if (isSavedChat) return JSON.parse(localStorage.getItem('mesbook_saved_messages_' + currentUserId) || '[]').map((m: any) => ({...m, isSending: false}));
@@ -281,7 +300,6 @@ export default function ChatPage() {
   const [isCommentUploading, setIsCommentUploading] = useState(false);
   const [commentReplyingTo, setCommentReplyingTo] = useState<any>(null);
   
-  // ФУНКЦИОНАЛ ПЕРЕСЫЛКИ И ЗАКРЕПА
   const [pinnedMessage, setPinnedMessage] = useState<any>(null);
   const [forwardingMsg, setForwardingMsg] = useState<any>(null);
   const [chatListForForward, setChatListForForward] = useState<any[]>([]);
@@ -293,7 +311,7 @@ export default function ChatPage() {
   
   const [membersCount, setMembersCount] = useState<number | null>(null);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
-  const [chatMembers, setChatMembers] = useState<any[]>([]); // Для профиля группы
+  const [chatMembers, setChatMembers] = useState<any[]>([]);
 
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const lastTypingTime = useRef(0);
@@ -426,7 +444,6 @@ export default function ChatPage() {
            setMembersCount(roleData.membersCount || 1); setOnlineCount(roleData.onlineCount || 1);
         }
         
-        // Загрузка админов и участников для меню
         const membersRes = await fetch(`/api/chats/${chatId}/members`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
         if (membersRes.ok) {
            const membersData = await membersRes.json();
@@ -443,7 +460,6 @@ export default function ChatPage() {
       if (msgRes.ok) {
         const data = await msgRes.json();
         setMessages(Array.isArray(data.messages) ? data.messages : []);
-        // Симуляция загрузки закрепленного сообщения
         if (data.pinnedMessage) setPinnedMessage(data.pinnedMessage);
       }
     } catch (e) {}
@@ -765,7 +781,6 @@ export default function ChatPage() {
     finally { setIsCommentUploading(false); if (commentFileInputRef.current) commentFileInputRef.current.value = ''; }
   };
 
-  // ФУНКЦИОНАЛ ПЕРЕСЫЛКИ И ЗАКРЕПА
   const togglePin = async (msg: any) => {
     setContextMenu(null);
     const isPinned = pinnedMessage?.id === msg.id;
@@ -798,11 +813,9 @@ export default function ChatPage() {
          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
          body: JSON.stringify({ content: contentToForward }) 
       });
-      // Опционально: можно сделать редирект в тот чат
     } catch(e) {}
   };
 
-  // ФУНКЦИОНАЛ АДМИНОВ
   const toggleAdmin = async (userId: string | number, currentRole: string) => {
     const newRole = currentRole === 'admin' ? 'member' : 'admin';
     setChatMembers(prev => prev.map(m => String(m.id) === String(userId) ? {...m, role: newRole} : m));
@@ -815,7 +828,6 @@ export default function ChatPage() {
     } catch(e) {}
   };
 
-  // УДАЛЕНИЕ/ВЫХОД ИЗ ЧАТА
   const leaveOrDeleteChat = async () => {
     if (!window.confirm(isGroupOrChannel ? t.leaveChat + '?' : t.deleteChat + '?')) return;
     try {
@@ -826,7 +838,6 @@ export default function ChatPage() {
       setLocation('/');
     } catch(e) {}
   };
-
 
   const toggleReaction = async (msgId: number, reaction: string, isComment = false) => {
     setContextMenu(null);
@@ -1024,8 +1035,13 @@ export default function ChatPage() {
     }
   }
 
+  // --- РЕНДЕР: ИНТЕГРАЦИЯ ЦВЕТА И ОБОЕВ ---
   return (
-    <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out" onClick={() => setContextMenu(null)}>
+    <div 
+      className={`flex flex-col h-[100dvh] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out ${!wallpaper ? 'bg-[#f5f5f7] dark:bg-[#161618]' : ''}`}
+      style={wallpaper ? { background: wallpaper.startsWith('#') ? wallpaper : `url(${wallpaper}) center/cover fixed` } : {}}
+      onClick={() => setContextMenu(null)}
+    >
       
       {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ ПО ЦЕНТРУ */}
       {recordingType === 'video' && (
@@ -1074,7 +1090,7 @@ export default function ChatPage() {
       {/* ПРОФИЛЬ */}
       {showProfile && chatInfo?.participant && (
         <div className="fixed inset-0 z-[150] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out overflow-y-auto">
-          <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+          <header className="flex items-center justify-between px-4 pt-12 pb-4 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
             <div className="flex items-center gap-6">
               <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
               <h1 className="text-[20px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.info}</h1>
@@ -1175,7 +1191,7 @@ export default function ChatPage() {
       )}
 
       {/* ШАПКА ЧАТА */}
-      <header className="px-3 pt-10 pb-3 border-b border-black/5 dark:border-white/5 flex flex-col bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl relative z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+      <header className="px-3 pt-10 pb-3 border-b border-black/5 dark:border-white/5 flex flex-col bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl relative z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
         <div className="flex items-center gap-3">
            <Link href="/"><a className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
            <div className="flex items-center gap-3.5 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
@@ -1195,7 +1211,6 @@ export default function ChatPage() {
         {/* ПЛАШКА ЗАКРЕПА */}
         {pinnedMessage && (
            <div className="mt-3 mx-2 bg-[#f5f5f7] dark:bg-[#161618] rounded-[10px] p-2 flex items-center gap-3 cursor-pointer border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7]" onClick={() => {
-               // Простой скролл к сообщению
                const el = document.getElementById(`msg-${pinnedMessage.id}`);
                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
            }}>
@@ -1236,7 +1251,8 @@ export default function ChatPage() {
                   <div key={msg.id} id={`msg-${msg.id}`} className="w-full relative mb-5 z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out">
                     {showDate && (
                       <div className="flex justify-center w-full my-4 relative z-0">
-                        <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">
+                        {/* ИСПРАВЛЕНИЕ: Полупрозрачная плашка даты если есть фон */}
+                        <span className={`${wallpaper ? 'bg-black/30 text-white backdrop-blur-md' : 'bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d]'} text-[11px] font-bold px-3 py-1 rounded-full capitalize`}>
                           {currentDateStr}
                         </span>
                       </div>
@@ -1300,8 +1316,9 @@ export default function ChatPage() {
                           
                           {hasText && (
                             <div className="px-5 pt-3.5 pb-2.5">
-                               {quotedText && <div className="mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>}
-                               <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
+                               {quotedText && <div className="mb-1.5 pl-2.5 border-l-[3px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]" style={{ fontSize: `${Math.max(11, textSize - 3)}px` }}>{quotedText}</div>}
+                               {/* ИСПРАВЛЕНИЕ: Интеграция textSize */}
+                               <div className="leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]" style={{ fontSize: `${textSize}px` }}>
                                  {text}
                                  {(!voiceUrl && !videoNoteUrl) && (
                                    <span className="float-right inline-flex items-center gap-1 text-[11px] text-[#86868b] dark:text-[#98989d] ml-3 mt-1.5 pointer-events-none select-none">
@@ -1352,7 +1369,9 @@ export default function ChatPage() {
                 <div key={msg.id} id={`msg-${msg.id}`} className={`flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
                   {showDate && (
                     <div className="flex justify-center w-full my-4 relative z-0">
-                      <span className="bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] text-[11px] font-bold px-3 py-1 rounded-full capitalize">{currentDateStr}</span>
+                      <span className={`${wallpaper ? 'bg-black/30 text-white backdrop-blur-md' : 'bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d]'} text-[11px] font-bold px-3 py-1 rounded-full capitalize`}>
+                         {currentDateStr}
+                      </span>
                     </div>
                   )}
                   
@@ -1435,9 +1454,9 @@ export default function ChatPage() {
                           {hasText && (
                             <div className="px-3.5 pt-2 pb-2.5">
                                {quotedText && (
-                                 <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/10 dark:border-white/10'}`}>{quotedText}</div>
+                                 <div className={`mb-1.5 pl-2.5 border-l-[3px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/10 dark:border-white/10'}`} style={{ fontSize: `${Math.max(11, textSize - 3)}px` }}>{quotedText}</div>
                                )}
-                               <div className="text-[16px] leading-[1.35] break-words whitespace-pre-wrap">
+                               <div className="leading-[1.35] break-words whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>
                                  {text}
                                  
                                  {(!voiceUrl && !videoNoteUrl) && (
@@ -1454,8 +1473,6 @@ export default function ChatPage() {
                         </>
                       )}
                     </div>
-                    
-                    {/* ИСПРАВЛЕНИЕ: КНОПКА КОММЕНТАРИЕВ УДАЛЕНА ИЗ ГРУПП */}
                     
                     {mReactionsKeys.length > 0 && !isOnlyVideoNote && (
                       <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -1497,7 +1514,7 @@ export default function ChatPage() {
             </div>
           </header>
           
-          <div ref={commentsScrollRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10">
+          <div ref={commentsScrollRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10" style={wallpaper ? { background: wallpaper.startsWith('#') ? wallpaper : `url(${wallpaper}) center/cover fixed` } : {}}>
             <div className="bg-white dark:bg-[#222224] p-4 rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none mb-2 border border-black/5 dark:border-white/5 flex flex-col">
               <span className="font-semibold text-[14px] text-[#86868b] dark:text-[#98989d] mb-1 block">{activeThread.senderName || t.companion}</span>
               {parseContent(activeThread.content).hasMedia && (
@@ -1508,12 +1525,12 @@ export default function ChatPage() {
                 </div>
               )}
               {parseContent(activeThread.content).hasText && (
-                <p className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap">{parseContent(activeThread.content).text}</p>
+                <p className="text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>{parseContent(activeThread.content).text}</p>
               )}
             </div>
             
             {threadComments.length === 0 ? (
-               <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
+               <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium bg-black/5 dark:bg-white/5 p-2 rounded-xl inline-block mx-auto">{t.noComments}</div>
             ) : (
                threadComments.map((c) => {
                  const isMe = String(c.senderId) === String(currentUserId);
@@ -1534,7 +1551,7 @@ export default function ChatPage() {
                        </div>
                        <div className={isOnlyVideoNote ? `relative flex flex-col flex-1 bg-transparent` : `flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5`}>
                          {!isOnlyVideoNote && <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>}
-                         {quotedText && <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>}
+                         {quotedText && <div className={`mb-1.5 pl-2.5 border-l-[3px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`} style={{ fontSize: `${Math.max(11, textSize - 3)}px` }}>{quotedText}</div>}
                          
                          {videoNoteUrl && (
                            <div className={`${isOnlyVideoNote ? '' : 'p-1'} flex justify-start`}>
@@ -1575,7 +1592,7 @@ export default function ChatPage() {
                                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, c, 'comment'); }}
                              />
                          )}
-                         {hasText && <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{text}</span>}
+                         {hasText && <span className="text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug" style={{ fontSize: `${Math.max(12, textSize - 1)}px` }}>{text}</span>}
                          
                          {(!voiceUrl && !videoNoteUrl) && (
                            <span className="text-[11px] text-[#86868b] dark:text-[#98989d] mt-1.5 text-right">{timeStr}</span>
