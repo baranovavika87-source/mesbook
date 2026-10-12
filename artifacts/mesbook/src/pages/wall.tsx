@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, ArrowLeft, Download, Copy, Reply, ChevronRight, Camera, Paperclip, RefreshCw, Heart, Settings } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, ArrowLeft, Download, Copy, Reply, ChevronRight, Camera, Paperclip, Heart } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -67,8 +67,6 @@ export default function WallPage() {
   const [isLoading, setIsLoading] = useState(true);
   const currentUserId = getUserId();
   
-  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('mesbook_user') || '{}'); } catch(e) { return {}; } })();
-
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
 
@@ -143,6 +141,7 @@ export default function WallPage() {
     }
   }, [threadComments]);
 
+  // НАДЕЖНЫЙ ПАРСЕР КОНТЕНТА (Больше никаких текстовых ссылок)
   const parseContent = (rawText: any) => {
     if (!rawText || typeof rawText !== 'string') {
       return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
@@ -150,19 +149,18 @@ export default function WallPage() {
     
     let text = rawText;
     const mediaUrls: string[] = [];
-    const mediaRegex = /[MEDIA]\s*(https?:\/\/[^\s]+)/g;
-    let match;
     
     try {
-      while ((match = mediaRegex.exec(text)) !== null) {
-        if (match && match[1]) {
-          mediaUrls.push(match[1]);
-        }
+      // Аккуратно извлекаем все медиа-ссылки
+      const mediaMatches = [...text.matchAll(/[MEDIA]\s*(https?:\/\/[^\s]+)/gi)];
+      for (const match of mediaMatches) {
+        if (match[1]) mediaUrls.push(match[1]);
       }
-      // Полностью вырезаем все скрытые теги, чтобы они не лезли в текст
-      text = text.replace(/[MEDIA]\s*(https?:\/\/[^\s]+)/g, '');
-      text = text.replace(/[VOICE]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/g, '');
-      text = text.replace(/\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/g, '');
+      
+      // Полностью очищаем текст от служебных тегов
+      text = text.replace(/[MEDIA]\s*(https?:\/\/[^\s]+)/gi, '');
+      text = text.replace(/[VOICE]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/gi, '');
+      text = text.replace(/\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/gi, '');
       text = text.trim();
     } catch (e) {}
     
@@ -411,23 +409,19 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* ШАПКА ПРИЛОЖЕНИЯ */}
+      {/* ШАПКА ПРИЛОЖЕНИЯ (БЕЗ НАСТРОЕК) */}
       <header className="flex items-center justify-between px-4 pt-12 pb-4 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl">
-        <button onClick={() => loadFeed(false)} className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-medium active:scale-95 transition-all">
+        <button onClick={() => loadFeed(false)} className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] font-medium active:scale-95 transition-all w-[80px] text-left">
            {t.refresh}
         </button>
-        <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[20px] font-bold absolute left-1/2 -translate-x-1/2 tracking-tight">{t.wall}</h1>
-        <Link href="/settings">
-          <a className="text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform p-1">
-             <Settings size={24} strokeWidth={2} />
-          </a>
-        </Link>
+        <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[20px] font-bold tracking-tight absolute left-1/2 -translate-x-1/2">{t.wall}</h1>
+        <div className="w-[80px]"></div> {/* Пустой блок для идеального центрирования заголовка */}
       </header>
 
       {/* ОСНОВНАЯ ЛЕНТА */}
       <main className="flex-1 overflow-y-auto pt-4 pb-24 px-4">
-        {/* Ограничиваем ширину контейнера и выравниваем по центру */}
-        <div className="flex flex-col w-full max-w-[420px] mx-auto">
+        {/* Ограничиваем ширину контейнера и выравниваем по центру (максимум 400px для аккуратности) */}
+        <div className="flex flex-col w-full max-w-[400px] mx-auto">
           {isLoading && posts.length === 0 ? (
             <div className="flex justify-center items-center py-24"><Loader2 size={32} className="animate-spin text-[#86868b] dark:text-[#98989d]" /></div>
           ) : posts.length === 0 ? (
@@ -460,14 +454,13 @@ export default function WallPage() {
                 <div key={post.id} className="w-full relative mb-6 animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out">
                   <div className="w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_4px_20px_rgba(0,0,0,0.04)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden">
                     
-                    {/* ТОНКИЙ ЗАГОЛОВОК КАНАЛА КАК НА ФОТО */}
-                    <div className="px-4 py-3 flex justify-between items-center bg-white dark:bg-[#222224]">
+                    {/* ТОНКИЙ ЗАГОЛОВОК КАНАЛА */}
+                    <div className="px-4 py-3 bg-white dark:bg-[#222224]">
                        <Link href={`/chat/${post.chatId}`}>
-                          <a className="font-bold text-[12px] uppercase tracking-wider text-[#1d1d1f] dark:text-[#f5f5f7] hover:opacity-80 transition-opacity truncate pr-2">
+                          <a className="font-bold text-[12px] uppercase tracking-wider text-[#1d1d1f] dark:text-[#f5f5f7] hover:opacity-80 transition-opacity truncate block">
                             {post.channelName}
                           </a>
                        </Link>
-                       <span className="text-[12px] font-medium text-[#86868b] dark:text-[#98989d] shrink-0">{timeStr}</span>
                     </div>
                     
                     {/* СЕТКА МЕДИА ВО ВСЮ ШИРИНУ КАРТОЧКИ */}
@@ -476,7 +469,7 @@ export default function WallPage() {
                         {mediaUrls.map((url, idx) => (
                            <div 
                              key={idx} 
-                             className={`relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`}
+                             className={`relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-[4/5] object-cover'}`}
                            >
                              {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
                                 <video src={url} controls className="absolute inset-0 w-full h-full object-cover" onClick={(e) => e.stopPropagation()} />
@@ -502,18 +495,24 @@ export default function WallPage() {
                       </div>
                     )}
                     
-                    {/* ТЕКСТ ПОСТА */}
-                    {hasText && (
-                      <div className="px-4 pt-3 pb-1 text-[15px] leading-relaxed text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap break-words" onClick={(e) => openGlobalMenu(e, post, 'post')} onContextMenu={(e) => openGlobalMenu(e, post, 'post')}>
-                         {quotedText && (
-                           <div className="mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>
-                         )}
-                         {text}
-                      </div>
-                    )}
+                    {/* ТЕКСТ ПОСТА И ВРЕМЯ */}
+                    <div className="px-4 pt-3 pb-2" onClick={(e) => openGlobalMenu(e, post, 'post')} onContextMenu={(e) => openGlobalMenu(e, post, 'post')}>
+                       {quotedText && (
+                         <div className="mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>
+                       )}
+                       {hasText && (
+                         <div className="text-[15px] leading-relaxed break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
+                           {text}
+                         </div>
+                       )}
+                       {/* Время снизу поста */}
+                       <div className="text-[11px] font-medium text-[#86868b] dark:text-[#98989d] text-right mt-1">
+                          {timeStr}
+                       </div>
+                    </div>
 
                     {/* ТАБЛЕТКА С ЛАЙКОМ */}
-                    <div className="px-4 pb-3 pt-2">
+                    <div className="px-4 pb-3 pt-1">
                        <button 
                          onClick={() => toggleReaction(post.id, '❤️')} 
                          className="flex items-center gap-1.5 h-[32px] px-3.5 rounded-full bg-black/5 dark:bg-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 w-max"
