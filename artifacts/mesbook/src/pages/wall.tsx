@@ -141,24 +141,42 @@ export default function WallPage() {
     }
   }, [threadComments]);
 
-  // НАДЕЖНЫЙ ПАРСЕР ИЗ ЧАТА
+  // ПУЛЕНЕПРОБИВАЕМЫЙ ПАРСЕР КОНТЕНТА
   const parseContent = (rawText: any) => {
     if (!rawText || typeof rawText !== 'string') return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
     
     let text = rawText;
-    
-    // Убираем маркеры голосовых и кружочков, если они случайно попали в ленту
-    text = text.replace(/[VOICE]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/gi, '');
-    text = text.replace(/\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/gi, '');
-
     const mediaUrls: string[] = [];
-    const mediaRegex = /[MEDIA]\s*(https?:\/\/[^\s]+)/gi;
-    let match;
+    
     try {
+      // 1. Фикс экранированных переносов
+      text = text.replace(/\\n/g, '\n');
+      
+      // 2. Вырезаем маркеры голосовых и кружочков
+      text = text.replace(/[VOICE][\s\S]*?(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/gi, '');
+      text = text.replace(/\[VIDEO_NOTE\][\s\S]*?(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/gi, '');
+
+      // 3. Вытягиваем стандартные [MEDIA] теги (даже если есть пробелы/переносы)
+      const mediaRegex = /[MEDIA][\s\n]*(https?:\/\/[^\s]+)/gi;
+      let match;
       while ((match = mediaRegex.exec(text)) !== null) {
         if (match && match[1]) mediaUrls.push(match[1]);
       }
-      text = text.replace(mediaRegex, '').trim();
+      text = text.replace(/[MEDIA][\s\n]*(https?:\/\/[^\s]+)/gi, '');
+
+      // 4. РЕЗЕРВ (Вытягиваем брошенные ссылки Cloudinary, если тег сломался)
+      const fallbackRegex = /(https?:\/\/res\.cloudinary\.com[^\s]+)/gi;
+      let fallbackMatch;
+      while ((fallbackMatch = fallbackRegex.exec(text)) !== null) {
+        if (!mediaUrls.includes(fallbackMatch[1])) {
+          mediaUrls.push(fallbackMatch[1]);
+        }
+      }
+      text = text.replace(/(https?:\/\/res\.cloudinary\.com[^\s]+)/gi, '');
+      
+      // 5. Вычищаем остатки пустых тегов
+      text = text.replace(/[MEDIA]/gi, '');
+      text = text.trim();
     } catch(e) {}
     
     let quotedText = null;
@@ -463,7 +481,7 @@ export default function WallPage() {
                         {mediaUrls.map((url, idx) => (
                            <div 
                              key={idx} 
-                             className={`relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : mediaUrls.length === 1 ? 'aspect-[4/5] object-cover' : 'aspect-square'}`}
+                             className={`relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : mediaUrls.length === 1 ? 'aspect-[4/5]' : 'aspect-square'}`}
                            >
                              {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
                                 <video src={url} controls className="absolute inset-0 w-full h-full object-cover" onClick={(e) => e.stopPropagation()} />
