@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRoute, Link, useLocation } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageCircle, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, UserMinus, Crown } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageSquare, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, LogOut, Bell } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -60,7 +60,12 @@ const translations = {
     dismissAdmin: "Разжаловать",
     deleteChat: "Удалить чат",
     leaveChat: "Покинуть чат",
-    forwardedFrom: "Переслано от"
+    forwardedFrom: "Переслано от",
+    messageBtn: "Message",
+    muteBtn: "Звук",
+    leaveBtn: "Leave",
+    mediaTab: "Медиа",
+    membersTab: "Members"
   },
   en: {
     saved: "Saved Messages",
@@ -110,7 +115,12 @@ const translations = {
     dismissAdmin: "Dismiss Admin",
     deleteChat: "Delete Chat",
     leaveChat: "Leave Chat",
-    forwardedFrom: "Forwarded from"
+    forwardedFrom: "Forwarded from",
+    messageBtn: "Message",
+    muteBtn: "Mute",
+    leaveBtn: "Leave",
+    mediaTab: "Media",
+    membersTab: "Members"
   }
 };
 
@@ -125,7 +135,7 @@ function declOfNum(n: number, text_forms: string[], lang: 'ru' | 'en') {
 }
 
 const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
-  if (!timestamp) return lang === 'ru' ? 'недавно' : 'recently';
+  if (!timestamp) return lang === 'ru' ? 'last seen recently' : 'last seen recently';
   const date = new Date(timestamp);
   const now = new Date();
   const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
@@ -258,9 +268,9 @@ export default function ChatPage() {
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
 
-  // ИНТЕГРАЦИЯ НАСТРОЕК (Текст, Фон, Тема)
   const [textSize, setTextSize] = useState(16);
   const [wallpaper, setWallpaper] = useState('');
+  const [profileTab, setProfileTab] = useState<'members' | 'media'>(isGroupOrChannel && !isSavedChat ? 'members' : 'media');
 
   useEffect(() => {
     const savedSize = Number(localStorage.getItem('mesbook_text_size')) || 16;
@@ -364,6 +374,11 @@ export default function ChatPage() {
   
   const isChannel = chatInfo?.participant?.isChannel;
   const isGroup = chatInfo?.participant?.isGroup && !isChannel;
+
+  useEffect(() => {
+    if (isGroup && !isChannel) { setProfileTab('members'); } 
+    else { setProfileTab('media'); }
+  }, [isGroup, isChannel, showProfile]);
 
   useEffect(() => {
     const sendPing = async () => { try { await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {} };
@@ -1031,9 +1046,17 @@ export default function ChatPage() {
       }
     } else {
       subtitleColor = isOnline ? 'text-[#1d1d1f] dark:text-[#f5f5f7] font-medium' : 'text-[#86868b] dark:text-[#98989d]';
-      subtitleText = isOnline ? t.online : `${t.lastSeenAt} ${formatLastSeen(lastSeen, lang)}`;
+      subtitleText = isOnline ? t.online : `${formatLastSeen(lastSeen, lang)}`;
     }
   }
+
+  // --- СБОР МЕДИА ДЛЯ ГАЛЕРЕИ ПРОФИЛЯ ---
+  const chatMedia = messages.reduce((acc: string[], msg: any) => {
+    const { mediaUrls, videoNoteUrl } = parseContent(msg.content);
+    if (mediaUrls && mediaUrls.length > 0) acc.push(...mediaUrls);
+    if (videoNoteUrl) acc.push(videoNoteUrl);
+    return acc;
+  }, []).reverse();
 
   // --- РЕНДЕР: ИНТЕГРАЦИЯ ЦВЕТА И ОБОЕВ ---
   return (
@@ -1087,29 +1110,27 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ПРОФИЛЬ */}
+      {/* --- ОБНОВЛЕННЫЙ ПРЕМИАЛЬНЫЙ ПРОФИЛЬ --- */}
       {showProfile && chatInfo?.participant && (
         <div className="fixed inset-0 z-[150] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out overflow-y-auto">
-          <header className="flex items-center justify-between px-4 pt-12 pb-4 sticky top-0 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-            <div className="flex items-center gap-6">
-              <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
-              <h1 className="text-[20px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.info}</h1>
-            </div>
+          {/* Profile Header */}
+          <header className="flex items-center justify-between px-4 pt-12 pb-2 sticky top-0 bg-[#f5f5f7]/90 dark:bg-[#161618]/90 backdrop-blur-xl z-20">
+            <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-2 -ml-2 transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2.5} /></button>
             {isAdmin && !isEditingChat && (
-              <button onClick={handleEditChatClick} className="p-1 text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform"><Edit3 size={24} /></button>
+              <button onClick={handleEditChatClick} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-2 -mr-2 transition-transform active:scale-95"><Edit2 size={24} strokeWidth={2.5} /></button>
             )}
             {isEditingChat && (
-              <button onClick={handleSaveChatSettings} disabled={isSavingChat} className="p-1 text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform">
+              <button onClick={handleSaveChatSettings} disabled={isSavingChat} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-2 -mr-2 transition-transform active:scale-95">
                 {isSavingChat ? <Loader2 size={24} className="animate-spin" /> : <Check size={26} strokeWidth={2.5} />}
               </button>
             )}
           </header>
           
           {isEditingChat ? (
-            <div className="px-4 pt-8 w-full max-w-lg mx-auto flex flex-col gap-5">
+            <div className="px-4 pt-4 w-full max-w-lg mx-auto flex flex-col gap-5">
               <div className="flex justify-center mb-4">
-                <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-white dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 relative cursor-pointer" onClick={() => editAvatarRef.current?.click()}>
-                  {editChatAvatar && editChatAvatar.length > 5 ? <img src={editChatAvatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <Camera size={36} className="text-[#86868b] dark:text-[#98989d]" />}
+                <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-[#0f172a] dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 relative cursor-pointer" onClick={() => editAvatarRef.current?.click()}>
+                  {editChatAvatar && editChatAvatar.length > 5 ? <img src={editChatAvatar} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <Camera size={36} className="text-white opacity-80" />}
                   {isSavingChat && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
                 </div>
                 <input type="file" accept="image/*" className="hidden" ref={editAvatarRef} onChange={handleEditAvatarUpload} />
@@ -1126,64 +1147,142 @@ export default function ChatPage() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center pt-8 pb-4">
-              <div className="w-[120px] h-[120px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 mb-4">
-                {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? <img src={chatInfo.participant.avatarUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <span className="text-[40px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>}
+            <div className="flex flex-col items-center pt-2 pb-4">
+              <div className="w-[100px] h-[100px] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.05)] bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center overflow-hidden mb-3">
+                {chatInfo.participant.avatarUrl && chatInfo.participant.avatarUrl.length > 5 ? <img src={chatInfo.participant.avatarUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <span className="text-[36px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{chatInfo.participant.displayName?.charAt(0).toUpperCase()}</span>}
               </div>
-              <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 text-center px-4 tracking-tight">{chatInfo.participant.displayName}</h2>
-              {chatInfo.participant.username && <p className="text-[15px] text-[#86868b] dark:text-[#98989d]">{chatInfo.participant.username}</p>}
-              <p className={`mt-1.5 text-[13px] font-medium ${subtitleColor}`}>{subtitleText}</p>
+              <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] px-4 text-center tracking-tight">{chatInfo.participant.displayName}</h2>
+              <p className={`text-[14px] mt-1 text-[#86868b] dark:text-[#98989d]`}>{subtitleText}</p>
               
-              {(chatInfo.participant.description || chatInfo.participant.bio) && (
-                <div className="mt-4 px-6 w-full text-center">
-                  <p className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap bg-white dark:bg-[#222224] p-4 rounded-[16px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
-                    {chatInfo.participant.description || chatInfo.participant.bio}
-                  </p>
+              {/* ACTION BUTTONS */}
+              <div className="flex justify-center gap-2 px-4 mt-6 w-full max-w-lg">
+                <div className="flex flex-col items-center justify-center w-[80px] h-[70px] bg-[#e5e5ea] dark:bg-[#222224] rounded-[16px] cursor-pointer active:scale-95 transition-transform" onClick={() => setShowProfile(false)}>
+                   <MessageSquare size={22} className="mb-1 text-[#1d1d1f] dark:text-[#f5f5f7]" />
+                   <span className="text-[12px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{t.messageBtn}</span>
                 </div>
-              )}
+                <div className="flex flex-col items-center justify-center w-[80px] h-[70px] bg-[#e5e5ea] dark:bg-[#222224] rounded-[16px] cursor-pointer active:scale-95 transition-transform" onClick={() => setIsMuted(!isMuted)}>
+                   <Bell size={22} className={`mb-1 ${isMuted ? 'opacity-50' : ''} text-[#1d1d1f] dark:text-[#f5f5f7]`} />
+                   <span className="text-[12px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{t.muteBtn}</span>
+                </div>
+                {isGroupOrChannel && (
+                   <div className="flex flex-col items-center justify-center w-[80px] h-[70px] bg-[#e5e5ea] dark:bg-[#222224] rounded-[16px] cursor-pointer active:scale-95 transition-transform" onClick={leaveOrDeleteChat}>
+                      <LogOut size={22} className="mb-1 text-[#1d1d1f] dark:text-[#f5f5f7]" />
+                      <span className="text-[12px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{t.leaveBtn}</span>
+                   </div>
+                )}
+              </div>
 
-              {/* СПИСОК УЧАСТНИКОВ И АДМИНОВ */}
-              {isGroupOrChannel && chatMembers.length > 0 && (
-                <div className="mt-6 w-full max-w-lg px-4">
-                   <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden border border-black/5 dark:border-white/5 shadow-sm">
-                      <div className="px-4 py-2 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/50 dark:bg-[#161618]/50">
-                         <span className="text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.members[2]}</span>
-                      </div>
-                      {chatMembers.map(member => (
-                         <div key={member.id} className="flex items-center justify-between p-3 border-b border-black/5 dark:border-white/5 last:border-0">
-                            <div className="flex items-center gap-3 overflow-hidden">
-                               <div className="w-10 h-10 rounded-full bg-[#e5e5ea] dark:bg-[#333336] shrink-0 flex items-center justify-center font-medium overflow-hidden">
-                                  {member.avatarUrl ? <img src={member.avatarUrl} className="w-full h-full object-cover" /> : member.displayName?.charAt(0)}
-                               </div>
-                               <div className="flex flex-col truncate pr-2">
-                                  <span className="text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] truncate flex items-center gap-1">
-                                     {member.displayName}
-                                     {member.role === 'admin' && <Crown size={14} className="text-yellow-500 shrink-0" />}
-                                  </span>
-                                  {member.username && <span className="text-[12px] text-[#86868b] truncate">{member.username}</span>}
-                               </div>
+              {/* INFO BLOCK */}
+              {(!isGroupOrChannel || isChannel) && (
+                <div className="px-4 mt-6 w-full max-w-lg">
+                   <div className="bg-white dark:bg-[#222224] rounded-[20px] p-4 flex flex-col gap-4 shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
+                      {isChannel ? (
+                         chatInfo.participant.description && (
+                            <div className="flex flex-col">
+                               <span className="text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] leading-snug">{chatInfo.participant.description}</span>
+                               <span className="text-[13px] text-[#86868b] dark:text-[#98989d] mt-1">{t.desc}</span>
                             </div>
-                            
-                            {isAdmin && String(member.id) !== String(currentUserId) && (
-                               <button 
-                                 onClick={() => toggleAdmin(member.id, member.role)}
-                                 className={`px-3 py-1.5 rounded-full text-[12px] font-bold tracking-wide transition-colors ${member.role === 'admin' ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20' : 'bg-[#1d1d1f]/5 dark:bg-[#f5f5f7]/10 text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-[#1d1d1f]/10 dark:hover:bg-[#f5f5f7]/20'}`}
-                               >
-                                  {member.role === 'admin' ? t.dismissAdmin : t.makeAdmin}
-                               </button>
+                         )
+                      ) : (
+                         <>
+                            {chatInfo.participant.username && (
+                               <div className="flex flex-col">
+                                  <span className="text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] leading-snug">{chatInfo.participant.username}</span>
+                                  <span className="text-[13px] text-[#86868b] dark:text-[#98989d] mt-1">Никнейм (@username)</span>
+                               </div>
                             )}
-                         </div>
-                      ))}
+                            {chatInfo.participant.bio && (
+                               <div className="flex flex-col">
+                                  <span className="text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] leading-snug">{chatInfo.participant.bio}</span>
+                                  <span className="text-[13px] text-[#86868b] dark:text-[#98989d] mt-1">{t.bio}</span>
+                               </div>
+                            )}
+                            {chatInfo.participant.birthDate && (
+                               <div className="flex flex-col">
+                                  <span className="text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] leading-snug">{new Date(chatInfo.participant.birthDate).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                  <span className="text-[13px] text-[#86868b] dark:text-[#98989d] mt-1">{t.birthday}</span>
+                               </div>
+                            )}
+                         </>
+                      )}
                    </div>
                 </div>
               )}
 
-              {/* УДАЛЕНИЕ ИЛИ ВЫХОД ИЗ ЧАТА */}
-              <div className="mt-8 px-4 w-full max-w-lg mb-10">
-                 <button onClick={leaveOrDeleteChat} className="w-full bg-white dark:bg-[#222224] text-red-500 border border-black/5 dark:border-white/5 rounded-[16px] py-3.5 font-bold text-[15px] hover:bg-red-500/5 transition-colors shadow-sm flex items-center justify-center gap-2">
-                    {isGroupOrChannel ? <UserMinus size={18} /> : <Trash2 size={18} />}
-                    {isGroupOrChannel ? t.leaveChat : t.deleteChat}
-                 </button>
+              {/* TABS */}
+              <div className="w-full max-w-lg mt-6">
+                {isGroup && !isChannel ? (
+                   <div className="flex px-6 gap-6 border-b border-black/5 dark:border-white/5 mb-4">
+                     <button onClick={() => setProfileTab('members')} className={`pb-3 text-[15px] font-medium transition-colors relative ${profileTab === 'members' ? 'text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b]'}`}>
+                        {t.membersTab}
+                        {profileTab === 'members' && <div className="absolute bottom-0 left-0 w-full h-[3px] bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-t-full"></div>}
+                     </button>
+                     <button onClick={() => setProfileTab('media')} className={`pb-3 text-[15px] font-medium transition-colors relative ${profileTab === 'media' ? 'text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b]'}`}>
+                        {t.mediaTab}
+                        {profileTab === 'media' && <div className="absolute bottom-0 left-0 w-full h-[3px] bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-t-full"></div>}
+                     </button>
+                   </div>
+                ) : (
+                   <div className="flex justify-center border-b border-black/5 dark:border-white/5 mb-4 px-6">
+                     <button className={`pb-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] relative`}>
+                        {t.mediaTab}
+                        <div className="absolute bottom-0 left-0 w-full h-[3px] bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-t-full"></div>
+                     </button>
+                   </div>
+                )}
+
+                {/* TAB CONTENT */}
+                <div className="px-4 pb-10 w-full">
+                   {/* MEMBERS LIST */}
+                   {profileTab === 'members' && isGroup && !isChannel && (
+                      <div className="flex flex-col bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden border border-black/5 dark:border-white/5 shadow-sm">
+                         {chatMembers.map(member => (
+                            <div key={member.id} className="flex items-center justify-between p-3 border-b border-black/5 dark:border-white/5 last:border-0">
+                               <div className="flex items-center gap-3 overflow-hidden">
+                                  <div className="w-11 h-11 rounded-full bg-[#e5e5ea] dark:bg-[#333336] shrink-0 flex items-center justify-center font-medium text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] overflow-hidden">
+                                     {member.avatarUrl ? <img src={member.avatarUrl} className="w-full h-full object-cover" /> : member.displayName?.charAt(0)}
+                                  </div>
+                                  <div className="flex flex-col truncate pr-2">
+                                     <span className="text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] truncate flex items-center gap-1.5">
+                                        {member.displayName}
+                                        {member.role === 'admin' && <span className="text-[10px] uppercase font-bold text-[#86868b] dark:text-[#98989d] bg-black/5 dark:bg-white/10 px-1.5 py-0.5 rounded-md">Admin</span>}
+                                     </span>
+                                     <span className="text-[13px] text-[#86868b] truncate">{member.username || 'last seen recently'}</span>
+                                  </div>
+                               </div>
+                               
+                               {isAdmin && String(member.id) !== String(currentUserId) && (
+                                  <button 
+                                    onClick={() => toggleAdmin(member.id, member.role)}
+                                    className={`px-3 py-1.5 rounded-full text-[12px] font-bold tracking-wide transition-colors ${member.role === 'admin' ? 'bg-[#1d1d1f]/5 dark:bg-[#f5f5f7]/10 text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-[#1d1d1f]/10 dark:hover:bg-[#f5f5f7]/20' : 'bg-[#1d1d1f]/5 dark:bg-[#f5f5f7]/10 text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-[#1d1d1f]/10 dark:hover:bg-[#f5f5f7]/20'}`}
+                                  >
+                                     {member.role === 'admin' ? t.dismissAdmin : t.makeAdmin}
+                                  </button>
+                               )}
+                            </div>
+                         ))}
+                      </div>
+                   )}
+
+                   {/* MEDIA GRID */}
+                   {(profileTab === 'media' || !isGroup || isChannel) && (
+                      <div className="grid grid-cols-3 gap-1">
+                         {chatMedia.length === 0 ? (
+                           <div className="col-span-3 text-center py-10 text-[#86868b] font-medium">Нет медиа</div>
+                         ) : (
+                           chatMedia.map((url, i) => (
+                             <div key={i} className="aspect-square bg-[#e5e5ea] dark:bg-[#333336] rounded-[4px] overflow-hidden cursor-pointer active:scale-[0.98] transition-transform" onClick={() => setFullScreenImage(url)}>
+                               {url.match(/\.(mp4|webm)$/) ? (
+                                  <video src={url} className="w-full h-full object-cover pointer-events-none" />
+                               ) : (
+                                  <img src={url} className="w-full h-full object-cover" loading="lazy" />
+                               )}
+                             </div>
+                           ))
+                         )}
+                      </div>
+                   )}
+                </div>
               </div>
             </div>
           )}
@@ -1351,7 +1450,7 @@ export default function ChatPage() {
                       {!isOnlyVideoNote && (
                         <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }} className="w-full flex items-center justify-between px-3 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-b-[24px]">
                           <div className="flex gap-2 items-center">
-                            <MessageCircle size={16} className="text-[#86868b] dark:text-[#98989d]" />
+                            <MessageSquare size={16} className="text-[#86868b] dark:text-[#98989d]" />
                             <span className="text-[13px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
                               {(msg.commentsCount || 0) > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount || 0, t.commentsCount, lang)}` : t.comments}
                             </span>
