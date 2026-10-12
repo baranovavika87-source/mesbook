@@ -141,44 +141,39 @@ export default function WallPage() {
     }
   }, [threadComments]);
 
-  // ПУЛЕНЕПРОБИВАЕМЫЙ ПАРСЕР КОНТЕНТА
+  // НАДЕЖНЫЙ ПАРСЕР ИЗ ЧАТА (chat.tsx)
   const parseContent = (rawText: any) => {
-    if (!rawText || typeof rawText !== 'string') return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
-    
-    let text = rawText;
-    const mediaUrls: string[] = [];
-    
-    try {
-      // 1. Фикс экранированных переносов
-      text = text.replace(/\\n/g, '\n');
-      
-      // 2. Вырезаем маркеры голосовых и кружочков
-      text = text.replace(/[VOICE][\s\S]*?(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/gi, '');
-      text = text.replace(/\[VIDEO_NOTE\][\s\S]*?(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/gi, '');
+    if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false, voiceUrl: null, videoNoteUrl: null, fixedDuration: null };
 
-      // 3. Вытягиваем стандартные [MEDIA] теги (даже если есть пробелы/переносы)
-      const mediaRegex = /[MEDIA][\s\n]*(https?:\/\/[^\s]+)/gi;
-      let match;
+    let text = rawText;
+    let voiceUrl = null;
+    let videoNoteUrl = null;
+    let fixedDuration = null;
+
+    const voiceMatch = /[VOICE]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/.exec(text);
+    if (voiceMatch) {
+      voiceUrl = voiceMatch[1];
+      fixedDuration = voiceMatch[2] ? parseFloat(voiceMatch[2]) : null;
+      text = text.replace(voiceMatch[0], '').trim();
+    }
+
+    const videoNoteMatch = /\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/.exec(text);
+    if (videoNoteMatch) {
+      videoNoteUrl = videoNoteMatch[1];
+      if (!fixedDuration) fixedDuration = videoNoteMatch[2] ? parseFloat(videoNoteMatch[2]) : null;
+      text = text.replace(videoNoteMatch[0], '').trim();
+    }
+
+    const mediaUrls: string[] = [];
+    const mediaRegex = /[MEDIA]\s*(https?:\/\/[^\s]+)/g;
+    let match;
+    try {
       while ((match = mediaRegex.exec(text)) !== null) {
         if (match && match[1]) mediaUrls.push(match[1]);
       }
-      text = text.replace(/[MEDIA][\s\n]*(https?:\/\/[^\s]+)/gi, '');
-
-      // 4. РЕЗЕРВ (Вытягиваем брошенные ссылки Cloudinary, если тег сломался)
-      const fallbackRegex = /(https?:\/\/res\.cloudinary\.com[^\s]+)/gi;
-      let fallbackMatch;
-      while ((fallbackMatch = fallbackRegex.exec(text)) !== null) {
-        if (!mediaUrls.includes(fallbackMatch[1])) {
-          mediaUrls.push(fallbackMatch[1]);
-        }
-      }
-      text = text.replace(/(https?:\/\/res\.cloudinary\.com[^\s]+)/gi, '');
-      
-      // 5. Вычищаем остатки пустых тегов
-      text = text.replace(/[MEDIA]/gi, '');
-      text = text.trim();
+      text = text.replace(mediaRegex, '').trim();
     } catch(e) {}
-    
+
     let quotedText = null;
     try {
       if (text.startsWith('> ')) {
@@ -186,12 +181,12 @@ export default function WallPage() {
         if (parts.length > 0) { quotedText = parts[0].replace('> ', ''); text = parts.slice(1).join('\n\n'); }
       }
     } catch(e) {}
-    
+
     const hasMedia = mediaUrls.length > 0;
     const hasText = !!text.trim() || !!quotedText;
     const isVideo = hasMedia && !!mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
-    
-    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
+
+    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration };
   };
 
   const startEditingPost = (post: any) => {
@@ -421,7 +416,7 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* ШАПКА ПРИЛОЖЕНИЯ (БЕЗ НАСТРОЕК) */}
+      {/* ШАПКА ПРИЛОЖЕНИЯ (Кнопка настроек убрана, как просил) */}
       <header className="flex items-center justify-between px-4 pt-12 pb-4 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl">
         <button onClick={() => loadFeed(false)} className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-medium active:scale-95 transition-all w-[80px] text-left">
            {t.refresh}
@@ -432,7 +427,7 @@ export default function WallPage() {
 
       {/* ОСНОВНАЯ ЛЕНТА */}
       <main className="flex-1 overflow-y-auto pt-4 pb-24 px-4">
-        {/* Строгая фиксация ширины и центрирование (как на скриншоте) */}
+        {/* Строгая фиксация ширины и центрирование */}
         <div className="flex flex-col w-full max-w-[400px] mx-auto">
           {isLoading && posts.length === 0 ? (
             <div className="flex justify-center items-center py-24"><Loader2 size={32} className="animate-spin text-[#86868b] dark:text-[#98989d]" /></div>
@@ -449,17 +444,6 @@ export default function WallPage() {
             posts.map((post) => {
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
               const pReactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
-              
-              let totalLikes = 0;
-              let isLikedByMe = false;
-              // Берем первую реакцию (обычно лайк)
-              const likeKey = pReactionsKeys.includes('❤️') ? '❤️' : (pReactionsKeys.length > 0 ? pReactionsKeys[0] : '❤️');
-              
-              if (post.reactions && post.reactions[likeKey]) {
-                 totalLikes = post.reactions[likeKey].count || 0;
-                 isLikedByMe = post.myReaction === likeKey;
-              }
-
               const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
               return (
@@ -481,7 +465,7 @@ export default function WallPage() {
                         {mediaUrls.map((url, idx) => (
                            <div 
                              key={idx} 
-                             className={`relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : mediaUrls.length === 1 ? 'aspect-[4/5]' : 'aspect-square'}`}
+                             className={`relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : mediaUrls.length === 1 ? 'aspect-[4/5] object-cover' : 'aspect-square'}`}
                            >
                              {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
                                 <video src={url} controls className="absolute inset-0 w-full h-full object-cover" onClick={(e) => e.stopPropagation()} />
@@ -519,16 +503,25 @@ export default function WallPage() {
                       </div>
                     )}
 
-                    {/* ТАБЛЕТКА С ЛАЙКОМ И ВРЕМЯ (В ОДНУ ЛИНИЮ) */}
+                    {/* ЭМОДЗИ (как в чатах) И ВРЕМЯ */}
                     <div className="px-4 pb-3 pt-2 flex justify-between items-center">
-                       <button 
-                         onClick={() => toggleReaction(post.id, '❤️')} 
-                         className="flex items-center gap-1.5 h-[32px] px-3.5 rounded-full bg-black/5 dark:bg-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"
-                       >
-                          <Heart size={16} className={isLikedByMe ? "fill-red-500 text-red-500" : "text-[#86868b] dark:text-[#98989d]"} strokeWidth={isLikedByMe ? 0 : 2.5} />
-                          {totalLikes > 0 && <span className="text-[13px] font-bold ml-0.5">{totalLikes}</span>}
-                       </button>
-                       <span className="text-[12px] font-medium text-[#86868b] dark:text-[#98989d]">{timeStr}</span>
+                       <div className="flex flex-wrap gap-1.5">
+                         {pReactionsKeys.length > 0 ? pReactionsKeys.map(key => {
+                           const rData = post.reactions[key];
+                           const count = typeof rData === 'number' ? rData : (rData?.count || 1);
+                           return (
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, key); }} className={`flex items-center gap-1.5 h-[32px] px-3.5 rounded-full bg-black/5 dark:bg-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 ${post.myReaction === key ? 'border border-black/20 dark:border-white/30' : ''}`}>
+                                <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                                <span className="text-[13px] font-bold ml-0.5 leading-none flex items-center justify-center mt-[1px]">{count}</span>
+                             </button>
+                           );
+                         }) : (
+                           <button onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, '❤️'); }} className="flex items-center gap-1.5 h-[32px] px-3.5 rounded-full bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] transition-transform active:scale-95">
+                              <Heart size={16} strokeWidth={2.5} />
+                           </button>
+                         )}
+                       </div>
+                       <span className="text-[12px] font-medium text-[#86868b] dark:text-[#98989d] shrink-0 ml-2">{timeStr}</span>
                     </div>
 
                     {/* АККУРАТНАЯ ЛИНИЯ КОММЕНТАРИЕВ ВНИЗУ */}
