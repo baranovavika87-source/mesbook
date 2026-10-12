@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, ArrowLeft, Download, Copy, Reply, ChevronRight, Camera, Paperclip, Heart } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, ArrowLeft, Download, Copy, Reply, ChevronRight, Camera, Paperclip, Heart, Eye } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -67,6 +67,8 @@ export default function WallPage() {
   const [isLoading, setIsLoading] = useState(true);
   const currentUserId = getUserId();
   
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('mesbook_user') || '{}'); } catch(e) { return {}; } })();
+
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
 
@@ -141,52 +143,46 @@ export default function WallPage() {
     }
   }, [threadComments]);
 
-  // НАДЕЖНЫЙ ПАРСЕР ИЗ ЧАТА (chat.tsx)
+  // ОРИГИНАЛЬНЫЙ РАБОЧИЙ ПАРСЕР
   const parseContent = (rawText: any) => {
-    if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false, voiceUrl: null, videoNoteUrl: null, fixedDuration: null };
-
-    let text = rawText;
-    let voiceUrl = null;
-    let videoNoteUrl = null;
-    let fixedDuration = null;
-
-    const voiceMatch = /[VOICE]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/.exec(text);
-    if (voiceMatch) {
-      voiceUrl = voiceMatch[1];
-      fixedDuration = voiceMatch[2] ? parseFloat(voiceMatch[2]) : null;
-      text = text.replace(voiceMatch[0], '').trim();
+    if (!rawText || typeof rawText !== 'string') {
+      return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false };
     }
-
-    const videoNoteMatch = /\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/.exec(text);
-    if (videoNoteMatch) {
-      videoNoteUrl = videoNoteMatch[1];
-      if (!fixedDuration) fixedDuration = videoNoteMatch[2] ? parseFloat(videoNoteMatch[2]) : null;
-      text = text.replace(videoNoteMatch[0], '').trim();
-    }
-
+    
     const mediaUrls: string[] = [];
     const mediaRegex = /[MEDIA]\s*(https?:\/\/[^\s]+)/g;
     let match;
+    let text = rawText;
+    
     try {
       while ((match = mediaRegex.exec(text)) !== null) {
-        if (match && match[1]) mediaUrls.push(match[1]);
+        if (match && match[1]) {
+          mediaUrls.push(match[1]);
+        }
       }
-      text = text.replace(mediaRegex, '').trim();
-    } catch(e) {}
-
+      text = text.replace(mediaRegex, '');
+      // Вырезаем кружочки и войсы, чтобы они не лезли в текст
+      text = text.replace(/[VOICE]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/g, '');
+      text = text.replace(/\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/g, '');
+      text = text.trim();
+    } catch (e) {}
+    
     let quotedText = null;
     try {
       if (text.startsWith('> ')) {
         const parts = text.split('\n\n');
-        if (parts.length > 0) { quotedText = parts[0].replace('> ', ''); text = parts.slice(1).join('\n\n'); }
+        if (parts.length > 0) {
+          quotedText = parts[0].replace('> ', '');
+          text = parts.slice(1).join('\n\n');
+        }
       }
-    } catch(e) {}
+    } catch (e) {}
 
     const hasMedia = mediaUrls.length > 0;
-    const hasText = !!text.trim() || !!quotedText;
+    const hasText = !!text || !!quotedText;
     const isVideo = hasMedia && !!mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
-
-    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration };
+    
+    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
   };
 
   const startEditingPost = (post: any) => {
@@ -228,26 +224,6 @@ export default function WallPage() {
       const targetChatId = isComment && activeThread ? activeThread.chatId : posts.find(p => p.id === id)?.chatId;
       if (!targetChatId) return;
       
-      if (!isComment) {
-         setPosts(prev => prev.map(p => {
-           if (p.id !== id) return p;
-           const newR = { ...(p.reactions || {}) };
-           if (p.myReaction === reaction) {
-             if (newR[reaction]) newR[reaction].count = Math.max(0, newR[reaction].count - 1);
-             if (newR[reaction]?.count === 0) delete newR[reaction];
-             return { ...p, reactions: newR, myReaction: null };
-           } else {
-             if (p.myReaction && newR[p.myReaction]) {
-               newR[p.myReaction].count = Math.max(0, newR[p.myReaction].count - 1);
-               if (newR[p.myReaction].count === 0) delete newR[p.myReaction];
-             }
-             if (!newR[reaction]) newR[reaction] = { count: 0, users: [] };
-             newR[reaction].count++;
-             return { ...p, reactions: newR, myReaction: reaction };
-           }
-         }));
-      }
-
       await fetch(`/api/chats/${targetChatId}/messages/${id}/reaction`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
@@ -395,7 +371,7 @@ export default function WallPage() {
       {/* МОДАЛКА РЕДАКТИРОВАНИЯ */}
       {editingPost && (
         <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 ease-out">
-          <div className="bg-white dark:bg-[#222224] w-full max-w-md rounded-[24px] overflow-hidden shadow-[0_4px_25px_rgba(0,0,0,0.1)] border border-black/5 dark:border-white/5">
+          <div className="bg-white dark:bg-[#222224] w-full max-w-md rounded-[24px] overflow-hidden shadow-[0_4px_25px_rgba(0,0,0,0.1)] dark:shadow-none border border-black/5 dark:border-white/5">
             <div className="px-5 py-4 border-b border-black/5 dark:border-white/5 flex justify-between items-center">
               <h3 className="font-bold text-[18px] text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.editPost}</h3>
               <button onClick={() => setEditingPost(null)} className="text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors"><X size={22}/></button>
@@ -410,26 +386,26 @@ export default function WallPage() {
             </div>
             <div className="px-5 py-4 flex gap-3">
               <button onClick={() => setEditingPost(null)} className="flex-1 py-3.5 font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] bg-[#f5f5f7] dark:bg-[#333336] rounded-[16px] active:scale-95 transition-transform">{t.cancel}</button>
-              <button onClick={saveEditedPost} className="flex-1 py-3.5 font-semibold text-[#f5f5f7] dark:text-[#1d1d1f] bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-[16px] active:scale-95 transition-transform">{t.save}</button>
+              <button onClick={saveEditedPost} className="flex-1 py-3.5 font-semibold text-[#f5f5f7] dark:text-[#1d1d1f] bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-[16px] active:scale-95 transition-transform shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">{t.save}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ШАПКА ПРИЛОЖЕНИЯ (Кнопка настроек убрана, как просил) */}
-      <header className="flex items-center justify-between px-4 pt-12 pb-4 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl">
-        <button onClick={() => loadFeed(false)} className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-medium active:scale-95 transition-all w-[80px] text-left">
+      {/* ШАПКА ПРИЛОЖЕНИЯ (БЕЗ НАСТРОЕК) */}
+      <header className="flex justify-between items-center px-4 pt-12 pb-4 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl">
+        <button onClick={() => loadFeed(false)} className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] font-medium active:scale-95 transition-all w-[80px] text-left">
            {t.refresh}
         </button>
-        <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[20px] font-bold tracking-tight absolute left-1/2 -translate-x-1/2">{t.wall}</h1>
+        <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[20px] font-bold absolute left-1/2 -translate-x-1/2 tracking-tight">{t.wall}</h1>
         <div className="w-[80px]"></div>
       </header>
 
       {/* ОСНОВНАЯ ЛЕНТА */}
-      <main className="flex-1 overflow-y-auto pt-4 pb-24 px-4">
-        {/* Строгая фиксация ширины и центрирование */}
+      <main className="flex-1 overflow-y-auto pt-4 pb-4 px-4">
+        {/* Ограничиваем ширину контейнера и выравниваем по центру */}
         <div className="flex flex-col w-full max-w-[400px] mx-auto">
-          {isLoading && posts.length === 0 ? (
+          {isLoading ? (
             <div className="flex justify-center items-center py-24"><Loader2 size={32} className="animate-spin text-[#86868b] dark:text-[#98989d]" /></div>
           ) : posts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-32 px-6 text-center">
@@ -445,10 +421,13 @@ export default function WallPage() {
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
               const pReactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
               const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+              
+              // Для эстетики просмотров (если нет в БД)
+              const viewsCount = post.views || '1.2K'; 
 
               return (
-                <div key={post.id} className="w-full relative mb-6 animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out">
-                  <div className="w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_4px_20px_rgba(0,0,0,0.04)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden">
+                <div key={post.id} className="w-full relative mb-6 z-10 animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out">
+                  <div className="w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_4px_20px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden">
                     
                     {/* ТОНКИЙ ЗАГОЛОВОК КАНАЛА */}
                     <div className="px-4 py-3 bg-white dark:bg-[#222224]">
@@ -459,7 +438,7 @@ export default function WallPage() {
                        </Link>
                     </div>
                     
-                    {/* СЕТКА МЕДИА ВО ВСЮ ШИРИНУ КАРТОЧКИ */}
+                    {/* СЕТКА МЕДИА ВО ВСЮ ШИРИНУ */}
                     {hasMedia && (
                       <div className={`w-full grid gap-[1px] bg-black/5 dark:bg-white/5 ${mediaUrls.length === 1 ? 'grid-cols-1' : mediaUrls.length === 2 ? 'grid-cols-2' : mediaUrls.length === 3 ? 'grid-cols-2' : 'grid-cols-2'}`}>
                         {mediaUrls.map((url, idx) => (
@@ -484,6 +463,7 @@ export default function WallPage() {
                                   onMouseLeave={clearPhotoTimer}
                                   onClick={(e) => handlePhotoClick(e, post, 'post')}
                                   onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
+                                  onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
                                 />
                              )}
                            </div>
@@ -503,8 +483,8 @@ export default function WallPage() {
                       </div>
                     )}
 
-                    {/* ЭМОДЗИ (как в чатах) И ВРЕМЯ */}
-                    <div className="px-4 pb-3 pt-2 flex justify-between items-center">
+                    {/* ЭМОДЗИ, ПРОСМОТРЫ И ВРЕМЯ (В ОДНУ ЛИНИЮ ВНИЗУ) */}
+                    <div className="px-4 pb-3 pt-2 flex justify-between items-end">
                        <div className="flex flex-wrap gap-1.5">
                          {pReactionsKeys.length > 0 ? pReactionsKeys.map(key => {
                            const rData = post.reactions[key];
@@ -521,7 +501,14 @@ export default function WallPage() {
                            </button>
                          )}
                        </div>
-                       <span className="text-[12px] font-medium text-[#86868b] dark:text-[#98989d] shrink-0 ml-2">{timeStr}</span>
+                       
+                       <div className="flex items-center gap-2 text-[11px] font-medium text-[#86868b] dark:text-[#98989d] pb-1 shrink-0 ml-2">
+                          <div className="flex items-center gap-1">
+                             <Eye size={13} strokeWidth={2.5} />
+                             <span>{viewsCount}</span>
+                          </div>
+                          <span>{timeStr}</span>
+                       </div>
                     </div>
 
                     {/* АККУРАТНАЯ ЛИНИЯ КОММЕНТАРИЕВ ВНИЗУ */}
