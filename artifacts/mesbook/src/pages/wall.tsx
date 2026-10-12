@@ -143,16 +143,16 @@ export default function WallPage() {
 
   // НАДЕЖНЫЙ ПАРСЕР ИЗ ЧАТА
   const parseContent = (rawText: any) => {
-    if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false };
+    if (!rawText || typeof rawText !== 'string') return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
     
     let text = rawText;
     
     // Убираем маркеры голосовых и кружочков, если они случайно попали в ленту
-    text = text.replace(/[VOICE]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/g, '');
-    text = text.replace(/\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/g, '');
+    text = text.replace(/[VOICE]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/gi, '');
+    text = text.replace(/\[VIDEO_NOTE\]\s*(https?:\/\/[^\s]+)(?:\s*D:([\d.]+))?/gi, '');
 
     const mediaUrls: string[] = [];
-    const mediaRegex = /[MEDIA]\s*(https?:\/\/[^\s]+)/g;
+    const mediaRegex = /[MEDIA]\s*(https?:\/\/[^\s]+)/gi;
     let match;
     try {
       while ((match = mediaRegex.exec(text)) !== null) {
@@ -409,12 +409,12 @@ export default function WallPage() {
            {t.refresh}
         </button>
         <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[20px] font-bold tracking-tight absolute left-1/2 -translate-x-1/2">{t.wall}</h1>
-        <div className="w-[80px]"></div> {/* Пустой блок для идеального центрирования заголовка */}
+        <div className="w-[80px]"></div>
       </header>
 
       {/* ОСНОВНАЯ ЛЕНТА */}
       <main className="flex-1 overflow-y-auto pt-4 pb-24 px-4">
-        {/* Строгая фиксация ширины и центрирование (как на скриншоте 3) */}
+        {/* Строгая фиксация ширины и центрирование (как на скриншоте) */}
         <div className="flex flex-col w-full max-w-[400px] mx-auto">
           {isLoading && posts.length === 0 ? (
             <div className="flex justify-center items-center py-24"><Loader2 size={32} className="animate-spin text-[#86868b] dark:text-[#98989d]" /></div>
@@ -463,7 +463,7 @@ export default function WallPage() {
                         {mediaUrls.map((url, idx) => (
                            <div 
                              key={idx} 
-                             className={`relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : mediaUrls.length === 1 ? 'aspect-[4/5]' : 'aspect-square'}`}
+                             className={`relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : mediaUrls.length === 1 ? 'aspect-[4/5] object-cover' : 'aspect-square'}`}
                            >
                              {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
                                 <video src={url} controls className="absolute inset-0 w-full h-full object-cover" onClick={(e) => e.stopPropagation()} />
