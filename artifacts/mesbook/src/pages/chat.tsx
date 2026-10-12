@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRoute, Link, useLocation } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageSquare, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, LogOut, Bell } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageSquare, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, LogOut, Bell, Image as ImageIcon } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -24,8 +24,10 @@ const translations = {
     channel: "Канал",
     personalChannel: "Личный Канал",
     birthday: "День рождения",
-    online: "В сети",
-    lastSeenAt: "Был(а)",
+    online: "в сети",
+    lastSeenAt: "был(а)",
+    yesterdayAt: "вчера в",
+    todayAt: "в",
     recently: "недавно",
     group: "Группа",
     subs: ['подписчик', 'подписчика', 'подписчиков'],
@@ -61,11 +63,13 @@ const translations = {
     deleteChat: "Удалить чат",
     leaveChat: "Покинуть чат",
     forwardedFrom: "Переслано от",
-    messageBtn: "Message",
+    writeBtn: "Написать",
     muteBtn: "Звук",
     leaveBtn: "Leave",
     mediaTab: "Медиа",
-    membersTab: "Members"
+    membersTab: "Members",
+    sendMedia: "Отправить фото",
+    addCaption: "Добавить подпись..."
   },
   en: {
     saved: "Saved Messages",
@@ -79,8 +83,10 @@ const translations = {
     channel: "Channel",
     personalChannel: "Personal Channel",
     birthday: "Birthday",
-    online: "Online",
-    lastSeenAt: "Last seen",
+    online: "online",
+    lastSeenAt: "last seen",
+    yesterdayAt: "yesterday at",
+    todayAt: "at",
     recently: "recently",
     group: "Group",
     subs: ['subscriber', 'subscribers'],
@@ -116,11 +122,13 @@ const translations = {
     deleteChat: "Delete Chat",
     leaveChat: "Leave Chat",
     forwardedFrom: "Forwarded from",
-    messageBtn: "Message",
+    writeBtn: "Write",
     muteBtn: "Mute",
     leaveBtn: "Leave",
     mediaTab: "Media",
-    membersTab: "Members"
+    membersTab: "Members",
+    sendMedia: "Send Photos",
+    addCaption: "Add a caption..."
   }
 };
 
@@ -135,21 +143,25 @@ function declOfNum(n: number, text_forms: string[], lang: 'ru' | 'en') {
 }
 
 const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
-  if (!timestamp) return lang === 'ru' ? 'last seen recently' : 'last seen recently';
+  if (!timestamp) return lang === 'ru' ? 'был(а) недавно' : 'last seen recently';
   const date = new Date(timestamp);
   const now = new Date();
+  
   const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
 
   const timeStr = date.toLocaleTimeString(lang === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' });
-  if (isToday) return lang === 'ru' ? `сегодня в ${timeStr}` : `today at ${timeStr}`;
+  
+  if (isToday) return lang === 'ru' ? `в ${timeStr}` : `at ${timeStr}`;
   if (isYesterday) return lang === 'ru' ? `вчера в ${timeStr}` : `yesterday at ${timeStr}`;
-  const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+  
+  const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
   let dateStr = date.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', options);
   if (lang === 'ru') dateStr = dateStr.replace('.', '');
-  return lang === 'ru' ? `${dateStr} в ${timeStr}` : `${dateStr} at ${timeStr}`;
+  
+  return lang === 'ru' ? `был(а) ${dateStr} в ${timeStr}` : `last seen ${dateStr} at ${timeStr}`;
 };
 
 const isMsgRead = (msg: any, isSavedChat: boolean) => {
@@ -271,6 +283,12 @@ export default function ChatPage() {
   const [textSize, setTextSize] = useState(16);
   const [wallpaper, setWallpaper] = useState('');
   const [profileTab, setProfileTab] = useState<'members' | 'media'>(isGroupOrChannel && !isSavedChat ? 'members' : 'media');
+
+  // Состояние для мультизагрузки фото с подписью
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
+  const [mediaCaption, setMediaCaption] = useState('');
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
 
   useEffect(() => {
     const savedSize = Number(localStorage.getItem('mesbook_text_size')) || 16;
@@ -764,19 +782,50 @@ export default function ChatPage() {
     } catch (error) {}
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploading(true);
-    const formData = new FormData(); formData.append('file', file); formData.append('upload_preset', 'mesogram-cloud'); 
+  // МУЛЬТИЗАГРУЗКА ФОТО (Выбор нескольких файлов)
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    
+    setSelectedFiles(files);
+    const previews = files.map(file => URL.createObjectURL(file));
+    setMediaPreviews(previews);
+    setMediaCaption('');
+  };
+
+  const handleConfirmMediaUpload = async () => {
+    if (selectedFiles.length === 0) return;
+    setIsUploadingMedia(true);
+    
     try {
-      const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.secure_url) { 
-        sendDirectMessage(`[MEDIA] ${data.secure_url}`);
+      const uploadedUrls: string[] = [];
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', 'mesogram-cloud');
+        
+        const res = await fetch('https://api.cloudinary.com/v1_1/wrwmuyjl/auto/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.secure_url) {
+          uploadedUrls.push(data.secure_url);
+        }
       }
-    } catch (err: any) {} 
-    finally { setIsUploading(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
+
+      if (uploadedUrls.length > 0) {
+        let finalContent = uploadedUrls.map(url => `[MEDIA] ${url}`).join('\n');
+        if (mediaCaption.trim()) {
+          finalContent += `\n\n${mediaCaption.trim()}`;
+        }
+        sendDirectMessage(finalContent);
+      }
+    } catch (err) {} 
+    finally {
+      setIsUploadingMedia(false);
+      setSelectedFiles([]);
+      setMediaPreviews([]);
+      setMediaCaption('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleCommentFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1046,11 +1095,10 @@ export default function ChatPage() {
       }
     } else {
       subtitleColor = isOnline ? 'text-[#1d1d1f] dark:text-[#f5f5f7] font-medium' : 'text-[#86868b] dark:text-[#98989d]';
-      subtitleText = isOnline ? t.online : `${formatLastSeen(lastSeen, lang)}`;
+      subtitleText = isOnline ? t.online : formatLastSeen(lastSeen, lang);
     }
   }
 
-  // --- СБОР МЕДИА ДЛЯ ГАЛЕРЕИ ПРОФИЛЯ ---
   const chatMedia = messages.reduce((acc: string[], msg: any) => {
     const { mediaUrls, videoNoteUrl } = parseContent(msg.content);
     if (mediaUrls && mediaUrls.length > 0) acc.push(...mediaUrls);
@@ -1058,7 +1106,6 @@ export default function ChatPage() {
     return acc;
   }, []).reverse();
 
-  // --- РЕНДЕР: ИНТЕГРАЦИЯ ЦВЕТА И ОБОЕВ ---
   return (
     <div 
       className={`flex flex-col h-[100dvh] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out ${!wallpaper ? 'bg-[#f5f5f7] dark:bg-[#161618]' : ''}`}
@@ -1066,6 +1113,47 @@ export default function ChatPage() {
       onClick={() => setContextMenu(null)}
     >
       
+      {/* МОДАЛКА ПРЕДПРОСМОТРА МУЛЬТИЗАГРУЗКИ ФОТО */}
+      {selectedFiles.length > 0 && (
+        <div className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-md flex flex-col justify-end animate-in fade-in duration-200">
+           <div className="bg-white dark:bg-[#222224] w-full rounded-t-[28px] overflow-hidden flex flex-col max-h-[85vh] animate-in slide-in-from-bottom duration-300 border-t border-black/5 dark:border-white/5 shadow-2xl">
+              <div className="p-4 border-b border-black/5 dark:border-white/5 flex justify-between items-center">
+                 <span className="font-semibold text-[17px] text-[#1d1d1f] dark:text-[#f5f5f7]">{t.sendMedia} ({selectedFiles.length})</span>
+                 <button onClick={() => { setSelectedFiles([]); setMediaPreviews([]); }} className="p-1 active:scale-95 text-[#86868b]"><X size={22}/></button>
+              </div>
+              
+              <div className="p-4 overflow-x-auto flex gap-3 scrollbar-hide">
+                 {mediaPreviews.map((src, idx) => (
+                    <div key={idx} className="w-[100px] h-[100px] rounded-[16px] overflow-hidden shrink-0 relative bg-black/10 border border-black/5 dark:border-white/5">
+                       <img src={src} className="w-full h-full object-cover" />
+                       <button onClick={() => {
+                          setSelectedFiles(p => p.filter((_, i) => i !== idx));
+                          setMediaPreviews(p => p.filter((_, i) => i !== idx));
+                       }} className="absolute top-1 right-1 w-6 h-6 bg-black/60 text-white rounded-full flex items-center justify-center text-[12px]">✕</button>
+                    </div>
+                 ))}
+              </div>
+
+              <div className="px-4 pb-4">
+                 <input 
+                   type="text" 
+                   value={mediaCaption} 
+                   onChange={e => setMediaCaption(e.target.value)} 
+                   placeholder={t.addCaption} 
+                   className="w-full bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-[16px] px-4 py-3 text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none"
+                 />
+              </div>
+
+              <div className="p-4 pt-0">
+                 <button onClick={handleConfirmMediaUpload} disabled={isUploadingMedia} className="w-full py-4 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-white dark:text-[#1d1d1f] font-semibold rounded-[18px] text-[16px] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg">
+                    {isUploadingMedia ? <Loader2 size={20} className="animate-spin" /> : <ArrowUp size={20} strokeWidth={2.5} />}
+                    Отправить
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
       {/* ПЛАВАЮЩЕЕ ОКОШКО ДЛЯ ЗАПИСИ КРУЖОЧКОВ ПО ЦЕНТРУ */}
       {recordingType === 'video' && (
          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[240px] h-[240px] rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200 bg-black">
@@ -1110,10 +1198,9 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* --- ОБНОВЛЕННЫЙ ПРЕМИАЛЬНЫЙ ПРОФИЛЬ --- */}
+      {/* ПРОФИЛЬ */}
       {showProfile && chatInfo?.participant && (
         <div className="fixed inset-0 z-[150] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out overflow-y-auto">
-          {/* Profile Header */}
           <header className="flex items-center justify-between px-4 pt-12 pb-2 sticky top-0 bg-[#f5f5f7]/90 dark:bg-[#161618]/90 backdrop-blur-xl z-20">
             <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-2 -ml-2 transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2.5} /></button>
             {isAdmin && !isEditingChat && (
@@ -1154,12 +1241,14 @@ export default function ChatPage() {
               <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] px-4 text-center tracking-tight">{chatInfo.participant.displayName}</h2>
               <p className={`text-[14px] mt-1 text-[#86868b] dark:text-[#98989d]`}>{subtitleText}</p>
               
-              {/* ACTION BUTTONS */}
+              {/* ACTION BUTTONS (Убрана кнопка Message/Написать для каналов) */}
               <div className="flex justify-center gap-2 px-4 mt-6 w-full max-w-lg">
-                <div className="flex flex-col items-center justify-center w-[80px] h-[70px] bg-[#e5e5ea] dark:bg-[#222224] rounded-[16px] cursor-pointer active:scale-95 transition-transform" onClick={() => setShowProfile(false)}>
-                   <MessageSquare size={22} className="mb-1 text-[#1d1d1f] dark:text-[#f5f5f7]" />
-                   <span className="text-[12px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{t.messageBtn}</span>
-                </div>
+                {!isChannel && (
+                  <div className="flex flex-col items-center justify-center w-[80px] h-[70px] bg-[#e5e5ea] dark:bg-[#222224] rounded-[16px] cursor-pointer active:scale-95 transition-transform" onClick={() => setShowProfile(false)}>
+                     <MessageSquare size={22} className="mb-1 text-[#1d1d1f] dark:text-[#f5f5f7]" />
+                     <span className="text-[12px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{t.writeBtn}</span>
+                  </div>
+                )}
                 <div className="flex flex-col items-center justify-center w-[80px] h-[70px] bg-[#e5e5ea] dark:bg-[#222224] rounded-[16px] cursor-pointer active:scale-95 transition-transform" onClick={() => setIsMuted(!isMuted)}>
                    <Bell size={22} className={`mb-1 ${isMuted ? 'opacity-50' : ''} text-[#1d1d1f] dark:text-[#f5f5f7]`} />
                    <span className="text-[12px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{t.muteBtn}</span>
@@ -1233,7 +1322,6 @@ export default function ChatPage() {
 
                 {/* TAB CONTENT */}
                 <div className="px-4 pb-10 w-full">
-                   {/* MEMBERS LIST */}
                    {profileTab === 'members' && isGroup && !isChannel && (
                       <div className="flex flex-col bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden border border-black/5 dark:border-white/5 shadow-sm">
                          {chatMembers.map(member => (
@@ -1254,7 +1342,7 @@ export default function ChatPage() {
                                {isAdmin && String(member.id) !== String(currentUserId) && (
                                   <button 
                                     onClick={() => toggleAdmin(member.id, member.role)}
-                                    className={`px-3 py-1.5 rounded-full text-[12px] font-bold tracking-wide transition-colors ${member.role === 'admin' ? 'bg-[#1d1d1f]/5 dark:bg-[#f5f5f7]/10 text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-[#1d1d1f]/10 dark:hover:bg-[#f5f5f7]/20' : 'bg-[#1d1d1f]/5 dark:bg-[#f5f5f7]/10 text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-[#1d1d1f]/10 dark:hover:bg-[#f5f5f7]/20'}`}
+                                    className="px-3 py-1.5 rounded-full text-[12px] font-bold tracking-wide transition-colors bg-[#1d1d1f]/5 dark:bg-[#f5f5f7]/10 text-[#1d1d1f] dark:text-[#f5f5f7]"
                                   >
                                      {member.role === 'admin' ? t.dismissAdmin : t.makeAdmin}
                                   </button>
@@ -1264,7 +1352,6 @@ export default function ChatPage() {
                       </div>
                    )}
 
-                   {/* MEDIA GRID */}
                    {(profileTab === 'media' || !isGroup || isChannel) && (
                       <div className="grid grid-cols-3 gap-1">
                          {chatMedia.length === 0 ? (
@@ -1307,7 +1394,6 @@ export default function ChatPage() {
            </div>
         </div>
         
-        {/* ПЛАШКА ЗАКРЕПА */}
         {pinnedMessage && (
            <div className="mt-3 mx-2 bg-[#f5f5f7] dark:bg-[#161618] rounded-[10px] p-2 flex items-center gap-3 cursor-pointer border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7]" onClick={() => {
                const el = document.getElementById(`msg-${pinnedMessage.id}`);
@@ -1344,13 +1430,11 @@ export default function ChatPage() {
               const mReactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
               const isMsgUploading = msg.id === uploadingMsgId; 
 
-              // КАНАЛЫ
               if (isChannel) {
                 return (
                   <div key={msg.id} id={`msg-${msg.id}`} className="w-full relative mb-5 z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out">
                     {showDate && (
                       <div className="flex justify-center w-full my-4 relative z-0">
-                        {/* ИСПРАВЛЕНИЕ: Полупрозрачная плашка даты если есть фон */}
                         <span className={`${wallpaper ? 'bg-black/30 text-white backdrop-blur-md' : 'bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d]'} text-[11px] font-bold px-3 py-1 rounded-full capitalize`}>
                           {currentDateStr}
                         </span>
@@ -1374,10 +1458,7 @@ export default function ChatPage() {
                                   e.stopPropagation();
                                   setExpandedVideoMsgId(expandedVideoMsgId === msg.id ? null : msg.id);
                                }}>
-                                  <video 
-                                    src={videoNoteUrl} autoPlay loop muted playsInline 
-                                    className={`w-full h-full rounded-full object-cover`} 
-                                  />
+                                  <video src={videoNoteUrl} autoPlay loop muted playsInline className={`w-full h-full rounded-full object-cover`} />
                                   {expandedVideoMsgId !== msg.id && (
                                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
                                         {timeStr}
@@ -1416,7 +1497,6 @@ export default function ChatPage() {
                           {hasText && (
                             <div className="px-5 pt-3.5 pb-2.5">
                                {quotedText && <div className="mb-1.5 pl-2.5 border-l-[3px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]" style={{ fontSize: `${Math.max(11, textSize - 3)}px` }}>{quotedText}</div>}
-                               {/* ИСПРАВЛЕНИЕ: Интеграция textSize */}
                                <div className="leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]" style={{ fontSize: `${textSize}px` }}>
                                  {text}
                                  {(!voiceUrl && !videoNoteUrl) && (
@@ -1463,7 +1543,6 @@ export default function ChatPage() {
                 );
               }
 
-              // ГРУППЫ И ЛИЧНЫЕ ЧАТЫ (ПУЗЫРИ)
               return (
                 <div key={msg.id} id={`msg-${msg.id}`} className={`flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
                   {showDate && (
@@ -1503,10 +1582,7 @@ export default function ChatPage() {
                                   e.stopPropagation();
                                   setExpandedVideoMsgId(expandedVideoMsgId === msg.id ? null : msg.id);
                                }}>
-                                  <video 
-                                    src={videoNoteUrl} autoPlay loop muted playsInline 
-                                    className={`w-full h-full rounded-full object-cover`} 
-                                  />
+                                  <video src={videoNoteUrl} autoPlay loop muted playsInline className={`w-full h-full rounded-full object-cover`} />
                                   {expandedVideoMsgId !== msg.id && (
                                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2.5 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
                                         {timeStr}
@@ -1557,7 +1633,6 @@ export default function ChatPage() {
                                )}
                                <div className="leading-[1.35] break-words whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>
                                  {text}
-                                 
                                  {(!voiceUrl && !videoNoteUrl) && (
                                    <span className="float-right inline-flex items-center gap-1 text-[10px] opacity-60 ml-3 mt-1.5 pointer-events-none select-none relative top-[2px]">
                                      {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
@@ -1603,7 +1678,7 @@ export default function ChatPage() {
         </div>
       </main>
 
-      {/* МОДАЛКА КОММЕНТАРИЕВ ДЛЯ КАНАЛОВ */}
+      {/* МОДАЛКА КОММЕНТАРИЕВ */}
       {activeThread && (
         <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={() => setContextMenu(null)}>
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
@@ -1613,33 +1688,30 @@ export default function ChatPage() {
             </div>
           </header>
           
-          <div ref={commentsScrollRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10" style={wallpaper ? { background: wallpaper.startsWith('#') ? wallpaper : `url(${wallpaper}) center/cover fixed` } : {}}>
+          <div ref={commentsScrollRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10">
             <div className="bg-white dark:bg-[#222224] p-4 rounded-[20px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none mb-2 border border-black/5 dark:border-white/5 flex flex-col">
-              <span className="font-semibold text-[14px] text-[#86868b] dark:text-[#98989d] mb-1 block">{activeThread.senderName || t.companion}</span>
-              {parseContent(activeThread.content).hasMedia && (
+              <span className="font-semibold text-[14px] text-[#86868b] dark:text-[#98989d] mb-1 block">{activeThread.channelName}</span>
+              {activeThreadContent?.hasMedia && (
                 <div className="flex gap-2 overflow-x-auto my-2">
-                  {parseContent(activeThread.content).mediaUrls.map((url: string) => (
+                  {activeThreadContent.mediaUrls.map((url: string) => (
                     <img key={url} src={url} className="h-[80px] w-auto rounded-[8px] object-cover border border-black/5 dark:border-white/5" />
                   ))}
                 </div>
               )}
-              {parseContent(activeThread.content).hasText && (
-                <p className="text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>{parseContent(activeThread.content).text}</p>
+              {activeThreadContent?.hasText && (
+                <p className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap">{activeThreadContent.text}</p>
               )}
             </div>
             
             {threadComments.length === 0 ? (
-               <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium bg-black/5 dark:bg-white/5 p-2 rounded-xl inline-block mx-auto">{t.noComments}</div>
+               <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
             ) : (
                threadComments.map((c) => {
-                 const isMe = String(c.senderId) === String(currentUserId);
-                 const { text, quotedText, hasMedia, mediaUrls, hasText, voiceUrl, videoNoteUrl, fixedDuration } = parseContent(c.content);
-                 const isOnlyVideoNote = videoNoteUrl && !hasText && !hasMedia && !voiceUrl;
+                 const { text, quotedText, hasMedia, mediaUrls, hasText } = parseContent(c.content);
                  const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
-                 const timeStr = new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
                  return (
-                   <div key={c.id} className={`relative flex flex-col mb-2 z-10`}>
+                   <div key={c.id} className="relative flex flex-col mb-2 z-10">
                      <div 
                         className="flex gap-3 items-start cursor-pointer" 
                         onClick={(e) => openGlobalMenu(e, c, 'comment')}
@@ -1648,58 +1720,33 @@ export default function ChatPage() {
                        <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
                          {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName?.charAt(0).toUpperCase() || 'U'}
                        </div>
-                       <div className={isOnlyVideoNote ? `relative flex flex-col flex-1 bg-transparent` : `flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5`}>
-                         {!isOnlyVideoNote && <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>}
-                         {quotedText && <div className={`mb-1.5 pl-2.5 border-l-[3px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`} style={{ fontSize: `${Math.max(11, textSize - 3)}px` }}>{quotedText}</div>}
+                       <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
+                         <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
                          
-                         {videoNoteUrl && (
-                           <div className={`${isOnlyVideoNote ? '' : 'p-1'} flex justify-start`}>
-                              <div className={`relative inline-block w-[160px] h-[160px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === c.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
-                              onClick={(e) => {
-                                 e.stopPropagation();
-                                 setExpandedVideoMsgId(expandedVideoMsgId === c.id ? null : c.id);
-                              }}>
-                                <video src={videoNoteUrl} autoPlay loop muted playsInline className={`w-full h-full rounded-full object-cover`} />
-                                {expandedVideoMsgId !== c.id && (
-                                   <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
-                                      {timeStr}
-                                   </div>
-                                )}
-                              </div>
-                           </div>
-                         )}
-                         
-                         {voiceUrl && (
-                           <div className={`${hasText ? 'pb-1' : ''}`}>
-                              <VoicePlayer url={voiceUrl} isMe={false} timeStr={timeStr} readStatus={true} isSaved={false} fixedDuration={fixedDuration} />
-                           </div>
+                         {quotedText && (
+                           <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
                          )}
 
                          {hasMedia && (
                              <img 
                                src={mediaUrls[0]} 
-                               className={`max-h-[200px] w-auto object-cover ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
+                               className={`max-h-[200px] w-auto object-cover pointer-events-none ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
                                style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
                                onTouchStart={(e) => handleTouchStartPhoto(e, mediaUrls[0])} 
                                onMouseDown={(e) => handleTouchStartPhoto(e, mediaUrls[0])}
                                onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                               onClick={(e) => {
-                                 e.stopPropagation();
-                                 if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
-                                 openGlobalMenu(e, c, 'comment');
-                               }}
+                               onClick={(e) => handlePhotoClick(e, c, 'comment')}
                                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, c, 'comment'); }}
                              />
                          )}
-                         {hasText && <span className="text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug" style={{ fontSize: `${Math.max(12, textSize - 1)}px` }}>{text}</span>}
-                         
-                         {(!voiceUrl && !videoNoteUrl) && (
-                           <span className="text-[11px] text-[#86868b] dark:text-[#98989d] mt-1.5 text-right">{timeStr}</span>
+                         {hasText && (
+                             <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{text}</span>
                          )}
+                         <span className="text-[11px] text-[#86868b] dark:text-[#98989d] mt-1.5 text-right">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                        </div>
                      </div>
 
-                     {cReactionsKeys.length > 0 && !isOnlyVideoNote && (
+                     {cReactionsKeys.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1 justify-start pl-12">
                           {cReactionsKeys.map(key => {
                              const rData = c.reactions[key];
@@ -1713,7 +1760,9 @@ export default function ChatPage() {
                                    <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                      {firstUser.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser.name?.charAt(0).toUpperCase() || 'U'}
                                    </div>
-                                 ) : <span className="pl-1"></span>}
+                                 ) : (
+                                   <span className="pl-1"></span>
+                                 )}
                                  <span className="text-[13px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
                                  {count > 1 && <span className={`text-[11px] font-bold leading-none flex items-center justify-center mt-[1px] pl-1 ${c.myReaction === key ? 'text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{count}</span>}
                                </button>
@@ -1749,7 +1798,7 @@ export default function ChatPage() {
                 placeholder={t.commentPlaceholder} 
               />
               <button type="submit" disabled={!commentContent.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 shadow-[0_2px_10px_rgba(0,0,0,0.1)] dark:shadow-none">
-                <ArrowUp size={20} strokeWidth={2.5} />
+                <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
               </button>
             </form>
           </div>
@@ -1791,7 +1840,7 @@ export default function ChatPage() {
                </div>
             ) : (
               <form onSubmit={handleSend} className="p-3 flex items-center gap-2 pb-6">
-                <input type="file" accept="image/*,video/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
+                <input type="file" accept="image/*,video/*" multiple className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
                 <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors">{isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}</button>
                 <input ref={inputRef} className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-[20px] px-4 py-2 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px]" value={content} onChange={(e) => { setContent(e.target.value); if (Date.now() - lastTypingTime.current > 2000) { lastTypingTime.current = Date.now(); socket?.emit('typing', { chatId, name: currentUser?.displayName }); } }} placeholder={t.messagePlaceholder} />
                 
@@ -1835,13 +1884,13 @@ export default function ChatPage() {
          if (safeY < 0) safeY = 20;
          
          const isMe = String(contextMenu.item.senderId) === String(currentUserId);
-         const { hasText, hasMedia, voiceUrl, videoNoteUrl } = parseContent(contextMenu.item.content);
+         const { hasText } = parseContent(contextMenu.item.content);
          
          const showReply = contextMenu.type === 'comment' || !isChannel;
          const showCopy = hasText;
          const showForward = contextMenu.type === 'message';
          const showPin = contextMenu.type === 'message' && (isAdmin || !isGroupOrChannel);
-         const showEdit = isMe && !hasMedia && !voiceUrl && !videoNoteUrl && contextMenu.type === 'message';
+         const showEdit = isMe && contextMenu.type === 'message';
          const showDelete = isMe || isAdmin;
 
          if (!showReply && !showCopy && !showEdit && !showDelete && !showForward && !showPin) return null;
