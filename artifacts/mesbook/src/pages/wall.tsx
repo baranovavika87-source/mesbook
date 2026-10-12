@@ -141,7 +141,7 @@ export default function WallPage() {
     }
   }, [threadComments]);
 
-  // УЛЬТИМАТИВНЫЙ ПАРСЕР
+  // БЕЗОПАСНЫЙ ПАРСЕР (Не "съедает" буквы)
   const parseContent = (rawText: any) => {
     if (!rawText || typeof rawText !== 'string') {
       return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
@@ -151,7 +151,7 @@ export default function WallPage() {
     const mediaUrls: string[] = [];
     
     try {
-      // 1. Вытаскиваем любые ссылки Cloudinary или стандартные медиа, независимо от пробелов и переносов
+      // 1. Вытаскиваем любые ссылки Cloudinary или стандартные медиа
       const linkRegex = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mov))|(https?:\/\/res\.cloudinary\.com[^\s]+)/gi;
       let match;
       while ((match = linkRegex.exec(text)) !== null) {
@@ -161,12 +161,18 @@ export default function WallPage() {
         }
       }
       
-      // 2. Жестко вычищаем текст от ссылок и мусорных тегов
+      // 2. Жестко вырезаем сами ссылки из текста, чтобы они не отображались
       text = text.replace(linkRegex, '');
-      text = text.replace(/[MEDIA]/gi, '');
-      text = text.replace(/[VOICE]/gi, '');
-      text = text.replace(/\[VIDEO_NOTE\]/gi, '');
-      text = text.replace(/D:[\d.]+/g, '');
+
+      // 3. Безопасное удаление тегов без регулярных выражений! (Избегаем бага с пропажей букв)
+      text = text.split('[MEDIA]').join('');
+      text = text.split('[media]').join('');
+      text = text.split('[VOICE]').join('');
+      text = text.split('[VIDEO_NOTE]').join('');
+      text = text.replace(/D:[\d.]+/g, ''); // Удаляем время кружочков (D:12.3)
+      
+      // 4. Очищаем переносы
+      text = text.replace(/\\n/g, '\n').replace(/\\r/g, '');
       text = text.trim();
     } catch(e) {}
     
@@ -415,7 +421,7 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* ШАПКА ПРИЛОЖЕНИЯ (БЕЗ НАСТРОЕК) */}
+      {/* ШАПКА ПРИЛОЖЕНИЯ (Кнопка настроек убрана) */}
       <header className="flex items-center justify-between px-4 pt-12 pb-4 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl">
         <button onClick={() => loadFeed(false)} className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-medium active:scale-95 transition-all w-[80px] text-left">
            {t.refresh}
@@ -443,6 +449,17 @@ export default function WallPage() {
             posts.map((post) => {
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
               const pReactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
+              
+              let totalLikes = 0;
+              let isLikedByMe = false;
+              // Берем первую реакцию (обычно лайк)
+              const likeKey = pReactionsKeys.includes('❤️') ? '❤️' : (pReactionsKeys.length > 0 ? pReactionsKeys[0] : '❤️');
+              
+              if (post.reactions && post.reactions[likeKey]) {
+                 totalLikes = post.reactions[likeKey].count || 0;
+                 isLikedByMe = post.myReaction === likeKey;
+              }
+
               const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
               return (
