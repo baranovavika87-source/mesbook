@@ -480,7 +480,7 @@ export default function WallPage() {
       )}
 
       {/* ШАПКА */}
-      <header className="flex justify-between items-center px-5 pt-12 pb-3.5 bg-white/80 dark:bg-[#1c1c1e]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 backdrop-blur-xl">
+      <header className="flex justify-between items-center px-5 pt-12 pb-3.5 bg-white/80 dark:bg-[#161618]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 backdrop-blur-xl">
         <button onClick={() => loadFeed(false)} className="text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] text-[15px] font-medium active:scale-95 transition-all w-[80px] text-left">
           {t.refresh}
         </button>
@@ -651,7 +651,7 @@ export default function WallPage() {
                          <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
                          
                          {quotedText && (
-                           <div className="mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>
+                           <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
                          )}
 
                          {hasMedia && (
@@ -676,6 +676,7 @@ export default function WallPage() {
                        </div>
                      </div>
 
+                     {/* Реакции в комментариях */}
                      {cReactionsKeys.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1 justify-start pl-12">
                           {cReactionsKeys.map(key => {
@@ -735,7 +736,7 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* КОНТЕКСТНОЕ МЕНЮ */}
+      {/* ГЛОБАЛЬНОЕ МЕНЮ ПО КООРДИНАТАМ */}
       {contextMenu && (() => {
          const menuWidth = 220; 
          const menuHeight = 250;
@@ -791,8 +792,7 @@ export default function WallPage() {
          );
       })()}
 
-      {/* НИЖНЯЯ НАВИГАЦИЯ */}
-      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         <Link href="/">
           <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
             <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
