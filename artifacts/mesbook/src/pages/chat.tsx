@@ -1045,20 +1045,27 @@ export default function ChatPage() {
     }
 
     const mediaUrls: string[] = [];
-    const mediaRegex = /\[MEDIA\]\s*(https?:\/\/[^\s]+)/g;
-    let match;
     try {
-      while ((match = mediaRegex.exec(text)) !== null) {
-        if (match && match[1]) mediaUrls.push(match[1]);
+      const linkRegex = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mov))|(https?:\/\/res\.cloudinary\.com[^\s]+)/gi;
+      let match;
+      while ((match = linkRegex.exec(text)) !== null) {
+        const url = match[1] || match[2];
+        if (url && !mediaUrls.includes(url)) {
+           mediaUrls.push(url);
+        }
       }
-      text = text.replace(mediaRegex, '').trim();
+      text = text.replace(linkRegex, '');
+      text = text.split('[MEDIA]').join('');
+      text = text.split('[media]').join('');
+      text = text.replace(/\\n/g, '\n').replace(/\\r/g, '');
+      text = text.trim();
     } catch(e) {}
     
     let quotedText = null;
     try {
       if (text.startsWith('> ')) {
         const parts = text.split('\n\n');
-        if (parts.length > 0) { quotedText = parts[0].replace('> ', ''); text = parts.slice(1).join('\n\n'); }
+        if (parts.length > 0) { quotedText = parts[0].replace('> ', ''); text = parts.slice(1).join('\n\n').trim(); }
       }
     } catch(e) {}
     
@@ -1358,7 +1365,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      <header className="px-3 pt-10 pb-3 border-b border-black/5 dark:border-white/5 flex flex-col bg-white/90 dark:bg-[#161618]/90 backdrop-blur-xl relative z-10 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+      <header className="px-3 pt-10 pb-2 border-b border-black/5 dark:border-white/5 flex flex-col bg-[#f5f5f7]/90 dark:bg-[#161618]/90 backdrop-blur-xl relative z-20 shadow-sm">
         <div className="flex items-center gap-3">
            <Link href="/"><a className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
            <div className="flex items-center gap-3.5 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
@@ -1366,7 +1373,7 @@ export default function ChatPage() {
                <div className={`w-full h-full rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-black/5 dark:border-white/5 ${isSavedChat ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
                  {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : displayName.charAt(0).toUpperCase()}
                </div>
-               {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#161618] rounded-full z-10"></div>}
+               {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-[#f5f5f7] dark:border-[#161618] rounded-full z-10"></div>}
              </div>
              <div className="flex flex-col">
                <h2 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] leading-tight truncate pr-2 tracking-tight">{displayName}</h2>
@@ -1375,19 +1382,24 @@ export default function ChatPage() {
            </div>
         </div>
         
+        {/* ТОНКАЯ ЛИНИЯ ЗАКРЕПЛЕННОГО СООБЩЕНИЯ В ШАПКЕ */}
         {pinnedMessage && (
-           <div className="mt-3 mx-2 bg-[#f5f5f7] dark:bg-[#222224] rounded-[10px] p-2 flex items-center gap-3 cursor-pointer border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7]" onClick={() => {
-               const el = document.getElementById(`msg-${pinnedMessage.id}`);
-               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-           }}>
-              <div className="flex flex-col flex-1 truncate">
-                 <span className="text-[11px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] uppercase tracking-wide">{t.pinnedMsg}</span>
-                 <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate mt-0.5">{parseContent(pinnedMessage.content).text || t.photo}</span>
-              </div>
-              {isAdmin && (
-                <button onClick={(e) => { e.stopPropagation(); togglePin(pinnedMessage); }} className="p-1.5 text-[#86868b] active:scale-95"><X size={16} /></button>
-              )}
-           </div>
+          <div 
+            className="mt-2.5 -mx-3 px-3 py-1.5 flex items-center gap-2 cursor-pointer border-t border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            onClick={() => {
+                const el = document.getElementById(`msg-${pinnedMessage.id}`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }}
+          >
+             <div className="w-[2.5px] h-[32px] bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full shrink-0"></div>
+             <div className="flex flex-col flex-1 truncate py-0.5">
+                <span className="text-[12px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-none mb-1 uppercase tracking-wide">{t.pinnedMsg}</span>
+                <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate leading-none">{parseContent(pinnedMessage.content).text || t.photo}</span>
+             </div>
+             {isAdmin && (
+               <button onClick={(e) => { e.stopPropagation(); togglePin(pinnedMessage); }} className="p-2 text-[#86868b] active:scale-95 shrink-0"><X size={18} /></button>
+             )}
+          </div>
         )}
       </header>
 
@@ -1421,7 +1433,7 @@ export default function ChatPage() {
                       </div>
                     )}
                     <div 
-                      className={isOnlyVideoNote ? `w-full flex justify-center cursor-pointer` : `w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-lg border border-black/5 dark:border-white/5 flex flex-col cursor-pointer overflow-hidden`}
+                      className={isOnlyVideoNote ? `w-full flex justify-center cursor-pointer` : `w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col cursor-pointer overflow-hidden`}
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
@@ -1455,22 +1467,29 @@ export default function ChatPage() {
                           )}
 
                           {hasMedia && (
-                            <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-[1px]' : ''}`}>
-                              {mediaUrls.map((url, idx) => (
-                                 isVideo 
-                                   ? <video key={idx} src={url} controls className="w-full h-auto max-h-[500px] object-cover" onClick={(e) => e.stopPropagation()} />
-                                   : <img 
-                                        key={idx} src={url} loading="lazy" decoding="async" 
-                                        className={`w-full h-auto max-h-[500px] object-cover ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : mediaUrls.length === 1 ? 'aspect-[4/5]' : 'aspect-square'}`} 
-                                        style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                                        onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
-                                        onMouseDown={(e) => handleTouchStartPhoto(e, url)}
-                                        onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                                        onClick={(e) => handlePhotoClick(e, msg, 'message')}
-                                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
-                                        onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
-                                     />
-                              ))}
+                            <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[2px] bg-black/5 dark:bg-white/5' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                              {mediaUrls.map((url: string, idx: number) => {
+                                 const isSingle = mediaUrls.length === 1;
+                                 const itemClass = isSingle ? 'relative w-full flex justify-center' : `relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`;
+                                 const imgClass = isSingle ? 'w-full h-auto max-h-[400px] object-cover' : 'absolute inset-0 w-full h-full object-cover';
+                                 return (
+                                   <div key={idx} className={itemClass}>
+                                     {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
+                                        <video src={url} controls className={imgClass} onClick={(e) => e.stopPropagation()} />
+                                     ) : (
+                                        <img 
+                                          src={url} loading="lazy" decoding="async" className={imgClass} 
+                                          style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+                                          onTouchStart={(e) => handleTouchStartPhoto(e, url)} onMouseDown={(e) => handleTouchStartPhoto(e, url)}
+                                          onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
+                                          onClick={(e) => handlePhotoClick(e, msg, 'message')}
+                                          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
+                                          onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
+                                        />
+                                     )}
+                                   </div>
+                                 );
+                              })}
                             </div>
                           )}
                           
@@ -1496,7 +1515,6 @@ export default function ChatPage() {
                            {mReactionsKeys.map(key => {
                              const rData = msg.reactions[key];
                              const count = typeof rData === 'number' ? rData : (rData?.count || 1);
-                             
                              return (
                                <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }} className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full border transition-transform hover:scale-105 active:scale-95 ${msg.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
                                  <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
@@ -1580,23 +1598,29 @@ export default function ChatPage() {
                           )}
 
                           {hasMedia && (
-                            <div className={`relative w-full flex justify-center bg-black/5 dark:bg-white/5 ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-[1px]' : ''}`}>
-                              {mediaUrls.map((url, idx) => (
-                                 isVideo 
-                                   ? <video key={idx} src={url} controls className={`w-full h-auto max-h-[300px] object-cover`} onClick={(e) => e.stopPropagation()} />
-                                   : <img 
-                                        key={idx} src={url} loading="lazy" decoding="async" 
-                                        className={`w-full h-auto max-h-[300px] object-cover ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : mediaUrls.length === 1 ? 'aspect-[4/5]' : 'aspect-square'}`} 
-                                        style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                                        onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
-                                        onMouseDown={(e) => handleTouchStartPhoto(e, url)}
-                                        onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                                        onClick={(e) => handlePhotoClick(e, msg, 'message')}
-                                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
-                                        onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
-                                     />
-                              ))}
-                              
+                            <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[1px] bg-black/5 dark:bg-white/5' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                              {mediaUrls.map((url: string, idx: number) => {
+                                 const isSingle = mediaUrls.length === 1;
+                                 const itemClass = isSingle ? 'relative w-full flex justify-center' : `relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`;
+                                 const imgClass = isSingle ? 'w-full h-auto max-h-[300px] object-cover' : 'absolute inset-0 w-full h-full object-cover';
+                                 return (
+                                   <div key={idx} className={itemClass}>
+                                     {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
+                                        <video src={url} controls className={imgClass} onClick={(e) => e.stopPropagation()} />
+                                     ) : (
+                                        <img 
+                                          src={url} loading="lazy" decoding="async" className={imgClass} 
+                                          style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+                                          onTouchStart={(e) => handleTouchStartPhoto(e, url)} onMouseDown={(e) => handleTouchStartPhoto(e, url)}
+                                          onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
+                                          onClick={(e) => handlePhotoClick(e, msg, 'message')}
+                                          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
+                                          onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
+                                        />
+                                     )}
+                                   </div>
+                                 );
+                              })}
                               {(!hasText && !voiceUrl && !videoNoteUrl) && (
                                 <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
                                    {timeStr}
@@ -1613,7 +1637,6 @@ export default function ChatPage() {
                                )}
                                <div className="leading-[1.35] break-words whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>
                                  {text}
-                                 
                                  {(!voiceUrl && !videoNoteUrl) && (
                                    <span className={`float-right inline-flex items-center gap-1 text-[10px] ml-3 mt-1.5 pointer-events-none select-none relative top-[2px] ${isMe ? 'opacity-60 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
                                      {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
@@ -1689,7 +1712,7 @@ export default function ChatPage() {
                        <span className="font-mono text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-semibold tracking-wide">{formatMsTime(recordingMs)}</span>
                     </div>
                  </div>
-                 <button onClick={() => stopRecording(false)} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-white dark:text-[#1d1d1f] flex items-center justify-center active:scale-95 transition-transform"><ArrowUp size={20} strokeWidth={2.5} /></button>
+                 <button onClick={() => stopRecording(false)} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center active:scale-95 transition-transform"><ArrowUp size={20} strokeWidth={2.5} /></button>
                </div>
             ) : (
               <form onSubmit={handleSend} className="p-3 flex items-center gap-2 pb-6">
@@ -1713,14 +1736,14 @@ export default function ChatPage() {
                      </div>
                   </button>
                 ) : (
-                  <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-white dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ArrowUp size={20} strokeWidth={2.5} /></button>
+                  <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ArrowUp size={20} strokeWidth={2.5} /></button>
                 )}
               </form>
             )
           ) : isLoadingRole ? (
             <div className="flex items-center gap-2 px-3 py-3 pb-6 opacity-50"><div className="w-[38px] h-[38px] rounded-full bg-black/5 dark:bg-white/5 animate-pulse"></div><div className="flex-1 h-[38px] rounded-full bg-black/5 dark:bg-white/5 animate-pulse"></div><div className="w-[38px] h-[38px] rounded-full bg-black/5 dark:bg-white/5 animate-pulse"></div></div>
           ) : !isMember ? (
-            <div className="flex items-center justify-center pt-2 pb-6 px-4"><button onClick={joinChat} className="w-full py-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-white dark:text-[#1d1d1f] font-semibold rounded-[16px] text-[15px]">{isChannel ? t.subscribe : t.joinGroup}</button></div>
+            <div className="flex items-center justify-center pt-2 pb-6 px-4"><button onClick={joinChat} className="w-full py-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] font-semibold rounded-[16px] text-[15px]">{isChannel ? t.subscribe : t.joinGroup}</button></div>
           ) : (
             <div className="flex items-center justify-center pt-2 pb-6"><button onClick={() => setIsMuted(!isMuted)} className="text-[#86868b] text-[15px] font-medium">{isMuted ? t.unmute : t.mute}</button></div>
           )}
@@ -1751,7 +1774,7 @@ export default function ChatPage() {
 
          return (
            <div className="fixed inset-0 z-[9999]" onClick={() => setContextMenu(null)} onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}>
-             <div className="absolute flex flex-col gap-2 animate-in zoom-in-[0.95] fade-in duration-200" style={{ top: safeY, left: safeX }} onClick={e => e.stopPropagation()}>
+             <div className="absolute flex flex-col gap-2 animate-in zoom-in-[0.95] fade-in duration-200" style={{ top: safeY ? safeY : 0, left: safeX }} onClick={e => e.stopPropagation()}>
                 <div className="flex gap-1.5 p-2 bg-white/95 dark:bg-[#222224]/95 backdrop-blur-xl rounded-full shadow-lg border border-black/5 dark:border-white/5">
                    {FAST_REACTIONS.map(emoji => (
                      <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(contextMenu.id, emoji, contextMenu.type === 'comment'); }} className="w-8 h-8 flex items-center justify-center text-[20px] rounded-full hover:scale-125 transition-transform active:scale-95">{emoji}</button>
