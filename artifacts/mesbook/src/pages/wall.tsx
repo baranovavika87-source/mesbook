@@ -528,28 +528,29 @@ export default function WallPage() {
                     
                     {/* ФОТО / ВИДЕО ВО ВСЮ ШИРИНУ КАРТОЧКИ */}
                     {hasMedia && (
-                      <div className={`relative w-full bg-[#f5f5f7] dark:bg-[#161618] ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-[1px]' : 'flex justify-center'}`}>
-                        {mediaUrls.map((url, idx) => (
-                           isVideo 
-                             ? <video key={idx} src={url} controls className="w-full h-auto max-h-[420px] object-cover" onClick={(e) => e.stopPropagation()} />
-                             : <img 
-                                  key={idx} 
-                                  src={url} 
-                                  loading="lazy" 
-                                  decoding="async" 
-                                  className={`w-full h-auto max-h-[420px] object-cover ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : mediaUrls.length > 1 ? 'aspect-square' : ''}`} 
-                                  style={{ WebkitTouchCallout: 'none', userSelect: 'none' }} 
-                                  onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
-                                  onMouseDown={(e) => handleTouchStartPhoto(e, url)} 
-                                  onTouchEnd={clearPhotoTimer} 
-                                  onTouchMove={clearPhotoTimer} 
-                                  onMouseUp={clearPhotoTimer} 
-                                  onMouseLeave={clearPhotoTimer}
-                                  onClick={(e) => handlePhotoClick(e, post, 'post')}
-                                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
-                                  onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
-                               />
-                        ))}
+                      <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[2px] bg-black/5 dark:bg-white/5' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                        {mediaUrls.map((url: string, idx: number) => {
+                           const isSingle = mediaUrls.length === 1;
+                           const itemClass = isSingle ? 'relative w-full flex justify-center' : `relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`;
+                           const imgClass = isSingle ? 'w-full h-auto max-h-[420px] object-cover' : 'absolute inset-0 w-full h-full object-cover';
+                           return (
+                             <div key={idx} className={itemClass}>
+                               {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
+                                  <video src={url} controls className={imgClass} onClick={(e) => e.stopPropagation()} />
+                               ) : (
+                                  <img 
+                                    src={url} loading="lazy" decoding="async" className={imgClass} 
+                                    style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+                                    onTouchStart={(e) => handleTouchStartPhoto(e, url)} onMouseDown={(e) => handleTouchStartPhoto(e, url)}
+                                    onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
+                                    onClick={(e) => handlePhotoClick(e, post, 'post')}
+                                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
+                                    onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
+                                  />
+                               )}
+                             </div>
+                           );
+                        })}
                       </div>
                     )}
                     
@@ -736,7 +737,7 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* ГЛОБАЛЬНОЕ МЕНЮ ПО КООРДИНАТАМ */}
+      {/* КОНТЕКСТНОЕ МЕНЮ */}
       {contextMenu && (() => {
          const menuWidth = 220; 
          const menuHeight = 250;
@@ -792,7 +793,7 @@ export default function WallPage() {
          );
       })()}
 
-      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         <Link href="/">
           <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
             <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
