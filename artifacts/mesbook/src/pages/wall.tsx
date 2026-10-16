@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, ArrowLeft, Download, Copy, Reply, ChevronRight, Camera, Paperclip, Heart } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, ArrowLeft, Download, Copy, Reply, ChevronRight, Paperclip, Heart } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
+
+const NL = String.fromCharCode(10);
+const CR = String.fromCharCode(13);
+const DOUBLE_NL = NL + NL;
 
 const getUserId = () => {
   try {
@@ -27,6 +31,7 @@ const translations = {
     copy: "Копировать",
     editAction: "Изменить",
     deleteAction: "Удалить",
+    photo: "Фотография",
     commentsCount: ['комментарий', 'комментария', 'комментариев'],
     editPost: "Редактировать запись",
     cancel: "Отмена",
@@ -44,6 +49,7 @@ const translations = {
     copy: "Copy",
     editAction: "Edit",
     deleteAction: "Delete",
+    photo: "Photo",
     commentsCount: ['comment', 'comments', 'comments'],
     editPost: "Edit post",
     cancel: "Cancel",
@@ -62,11 +68,38 @@ function declOfNum(n: number, text_forms: string[], lang: 'ru' | 'en') {
   return text_forms[2];
 }
 
+const isMediaUrl = (word: string) => {
+  const lower = word.toLowerCase();
+  if (!lower.startsWith('http://') && !lower.startsWith('https://')) return false;
+  return (
+    lower.includes('cloudinary.com') ||
+    lower.includes('/upload/') ||
+    lower.endsWith('.jpg') ||
+    lower.endsWith('.jpeg') ||
+    lower.endsWith('.png') ||
+    lower.endsWith('.webp') ||
+    lower.endsWith('.gif') ||
+    lower.endsWith('.mp4') ||
+    lower.endsWith('.webm') ||
+    lower.endsWith('.mov')
+  );
+};
+
+const stripQuotedPrefix = (raw: string) => {
+  if (!raw || typeof raw !== 'string') return '';
+  const normalized = raw.split(CR).join('');
+  if (normalized.startsWith('> ')) {
+    const parts = normalized.split(DOUBLE_NL);
+    return parts.slice(1).join(DOUBLE_NL);
+  }
+  return normalized;
+};
+
 export default function WallPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const currentUserId = getUserId();
-  
+
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
 
@@ -141,56 +174,79 @@ export default function WallPage() {
     }
   }, [threadComments]);
 
-  // БЕЗОПАСНЫЙ ПАРСЕР (Не "съедает" буквы)
   const parseContent = (rawText: any) => {
     if (!rawText || typeof rawText !== 'string') {
       return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false };
     }
-    
-    let text = rawText;
-    const mediaUrls: string[] = [];
-    
-    try {
-      // 1. Вытаскиваем любые ссылки Cloudinary или стандартные медиа
-      const linkRegex = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|mp4|webm|mov))|(https?:\/\/res\.cloudinary\.com[^\s]+)/gi;
-      let match;
-      while ((match = linkRegex.exec(text)) !== null) {
-        const url = match[1] || match[2];
-        if (url && !mediaUrls.includes(url)) {
-           mediaUrls.push(url);
-        }
-      }
-      
-      // 2. Жестко вырезаем сами ссылки из текста, чтобы они не отображались
-      text = text.replace(linkRegex, '');
 
-      // 3. Безопасное удаление тегов без регулярных выражений! (Избегаем бага с пропажей букв)
-      text = text.split('[MEDIA]').join('');
-      text = text.split('[media]').join('');
-      text = text.split('[VOICE]').join('');
-      text = text.split('[VIDEO_NOTE]').join('');
-      text = text.replace(/D:[\d.]+/g, ''); // Удаляем время кружочков (D:12.3)
-      
-      // 4. Очищаем переносы
-      text = text.replace(/\\n/g, '\n').replace(/\\r/g, '');
-      text = text.trim();
-    } catch(e) {}
-    
-    let quotedText = null;
+    let text = rawText.split(CR).join('');
+    const mediaUrls: string[] = [];
+
+    try {
+      const lines = text.split(NL);
+      const cleanLines: string[] = [];
+
+      for (const line of lines) {
+        const words = line.split(' ');
+        const cleanWords: string[] = [];
+
+        for (const word of words) {
+          const trimmed = word.trim();
+          if (!trimmed) continue;
+
+          if (
+            trimmed === '[MEDIA]' ||
+            trimmed === '[media]' ||
+            trimmed === '[VOICE]' ||
+            trimmed === '[VIDEO_NOTE]' ||
+            trimmed === '[]'
+          ) {
+            continue;
+          }
+
+          if (trimmed.startsWith('[MEDIA]http')) {
+            const url = trimmed.slice(7).trim();
+            if (url && !mediaUrls.includes(url)) mediaUrls.push(url);
+            continue;
+          }
+
+          if (isMediaUrl(trimmed)) {
+            if (!mediaUrls.includes(trimmed)) mediaUrls.push(trimmed);
+            continue;
+          }
+
+          cleanWords.push(word);
+        }
+
+        const joinedLine = cleanWords.join(' ').trim();
+        if (joinedLine) cleanLines.push(joinedLine);
+      }
+
+      text = cleanLines.join(NL).trim();
+    } catch (e) {}
+
+    let quotedText: string | null = null;
     try {
       if (text.startsWith('> ')) {
-        const parts = text.split('\n\n');
+        const parts = text.split(DOUBLE_NL);
         if (parts.length > 0) {
-          quotedText = parts[0].replace('> ', '');
-          text = parts.slice(1).join('\n\n').trim();
+          quotedText = parts[0].slice(2).trim();
+          text = parts.slice(1).join(DOUBLE_NL).trim();
         }
       }
-    } catch(e) {}
+    } catch (e) {}
 
     const hasMedia = mediaUrls.length > 0;
-    const hasText = !!text || !!quotedText;
-    const isVideo = hasMedia && !!mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
-    
+    const hasText = Boolean(text) || Boolean(quotedText);
+    const firstUrl = mediaUrls[0] ? mediaUrls[0].toLowerCase() : '';
+    const isVideo =
+      hasMedia &&
+      (firstUrl.endsWith('.mp4') ||
+        firstUrl.endsWith('.webm') ||
+        firstUrl.endsWith('.mov') ||
+        firstUrl.endsWith('.ogg') ||
+        firstUrl.includes('/video/upload/'));
+
     return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo };
   };
 
@@ -272,7 +328,9 @@ export default function WallPage() {
     if (!commentContent.trim() || !activeThread) return;
     
     const tempContent = commentContent.trim();
-    const finalContent = commentReplyingTo ? `> ${commentReplyingTo.content.replace(/^> .*\n\n/, '')}\n\n${tempContent}` : tempContent;
+    const finalContent = commentReplyingTo
+      ? `> ${stripQuotedPrefix(commentReplyingTo.content)}${DOUBLE_NL}${tempContent}`
+      : tempContent;
     
     setCommentContent('');
     setCommentReplyingTo(null);
@@ -377,7 +435,7 @@ export default function WallPage() {
       return; 
     }
     openGlobalMenu(e, item, type);
-  }
+  };
 
   const activeThreadContent = activeThread ? parseContent(activeThread.content) : null;
 
@@ -400,7 +458,7 @@ export default function WallPage() {
       {/* МОДАЛКА РЕДАКТИРОВАНИЯ */}
       {editingPost && (
         <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 ease-out">
-          <div className="bg-white dark:bg-[#222224] w-full max-w-md rounded-[24px] overflow-hidden shadow-[0_4px_25px_rgba(0,0,0,0.1)] border border-black/5 dark:border-white/5">
+          <div className="bg-white dark:bg-[#222224] w-full max-w-md rounded-[24px] overflow-hidden shadow-[0_4px_25px_rgba(0,0,0,0.1)] dark:shadow-none border border-black/5 dark:border-white/5">
             <div className="px-5 py-4 border-b border-black/5 dark:border-white/5 flex justify-between items-center">
               <h3 className="font-bold text-[18px] text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.editPost}</h3>
               <button onClick={() => setEditingPost(null)} className="text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors"><X size={22}/></button>
@@ -421,27 +479,28 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* ШАПКА ПРИЛОЖЕНИЯ (Кнопка настроек убрана) */}
-      <header className="flex items-center justify-between px-4 pt-12 pb-4 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-xl">
-        <button onClick={() => loadFeed(false)} className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-medium active:scale-95 transition-all w-[80px] text-left">
-           {t.refresh}
+      {/* ШАПКА */}
+      <header className="flex justify-between items-center px-5 pt-12 pb-3.5 bg-white/80 dark:bg-[#1c1c1e]/80 sticky top-0 z-10 border-b border-black/5 dark:border-white/5 backdrop-blur-xl">
+        <button onClick={() => loadFeed(false)} className="text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] text-[15px] font-medium active:scale-95 transition-all w-[80px] text-left">
+          {t.refresh}
         </button>
-        <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[20px] font-bold tracking-tight absolute left-1/2 -translate-x-1/2">{t.wall}</h1>
+        <h1 className="text-[#1d1d1f] dark:text-[#f5f5f7] text-[18px] font-semibold absolute left-1/2 -translate-x-1/2 tracking-tight">
+          {t.wall}
+        </h1>
         <div className="w-[80px]"></div>
       </header>
 
-      {/* ОСНОВНАЯ ЛЕНТА */}
-      <main className="flex-1 overflow-y-auto pt-4 pb-24 px-4">
-        {/* Строгая фиксация ширины и центрирование */}
-        <div className="flex flex-col w-full max-w-[400px] mx-auto">
-          {isLoading && posts.length === 0 ? (
+      {/* ЛЕНТА ПОСТОВ С БОЛЬШИМИ ОТСТУПАМИ ОТ КРАЕВ ЭКРАНА */}
+      <main className="flex-1 overflow-y-auto pt-5 pb-20">
+        <div className="flex flex-col w-[78%] max-w-[300px] mx-auto">
+          {isLoading ? (
             <div className="flex justify-center items-center py-24"><Loader2 size={32} className="animate-spin text-[#86868b] dark:text-[#98989d]" /></div>
           ) : posts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-32 px-6 text-center">
+            <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
               <div className="w-16 h-16 bg-white dark:bg-[#222224] rounded-full flex items-center justify-center mb-5 shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-black/5 dark:border-white/5">
                 <Users size={28} className="text-[#86868b] dark:text-[#98989d]" />
               </div>
-              <p className="text-[#86868b] dark:text-[#98989d] text-[15px] font-medium max-w-[250px] leading-relaxed">
+              <p className="text-[#86868b] dark:text-[#98989d] text-[14px] font-medium leading-relaxed">
                 {t.emptyDesc}
               </p>
             </div>
@@ -449,48 +508,36 @@ export default function WallPage() {
             posts.map((post) => {
               const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo } = parseContent(post.content);
               const pReactionsKeys = post.reactions ? Object.keys(post.reactions) : [];
-              
-              let totalLikes = 0;
-              let isLikedByMe = false;
-              // Берем первую реакцию (обычно лайк)
-              const likeKey = pReactionsKeys.includes('❤️') ? '❤️' : (pReactionsKeys.length > 0 ? pReactionsKeys[0] : '❤️');
-              
-              if (post.reactions && post.reactions[likeKey]) {
-                 totalLikes = post.reactions[likeKey].count || 0;
-                 isLikedByMe = post.myReaction === likeKey;
-              }
-
               const timeStr = post.createdAt ? new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
               return (
-                <div key={post.id} className="w-full relative mb-6 animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out">
-                  <div className="w-full bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_4px_20px_rgba(0,0,0,0.04)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col overflow-hidden">
-                    
-                    {/* ТОНКИЙ ЗАГОЛОВОК КАНАЛА */}
-                    <div className="px-4 py-3 bg-white dark:bg-[#222224]">
+                <div key={post.id} className="w-full relative mb-5 z-10 animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out">
+                  <div 
+                    className="w-full bg-white dark:bg-[#222224] rounded-[22px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col cursor-pointer overflow-hidden"
+                    onClick={(e) => openGlobalMenu(e, post, 'post')}
+                    onContextMenu={(e) => openGlobalMenu(e, post, 'post')}
+                  >
+                    {/* КОМПАКТНАЯ СТРОКА НАЗВАНИЯ КАНАЛА СВЕРХУ */}
+                    <div className="px-4 py-2.5 bg-white dark:bg-[#222224] flex items-center">
                        <Link href={`/chat/${post.chatId}`}>
-                          <a className="font-bold text-[12px] uppercase tracking-wider text-[#1d1d1f] dark:text-[#f5f5f7] opacity-80 hover:opacity-100 transition-opacity truncate block">
+                          <a className="font-medium text-[13px] text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight hover:opacity-80 transition-opacity truncate">
                             {post.channelName}
                           </a>
                        </Link>
                     </div>
                     
-                    {/* СЕТКА МЕДИА ВО ВСЮ ШИРИНУ */}
+                    {/* ФОТО / ВИДЕО ВО ВСЮ ШИРИНУ КАРТОЧКИ */}
                     {hasMedia && (
-                      <div className={`w-full grid gap-[1px] bg-black/5 dark:bg-white/5 ${mediaUrls.length === 1 ? 'grid-cols-1' : mediaUrls.length === 2 ? 'grid-cols-2' : mediaUrls.length === 3 ? 'grid-cols-2' : 'grid-cols-2'}`}>
+                      <div className={`relative w-full bg-[#f5f5f7] dark:bg-[#161618] ${mediaUrls.length > 1 ? 'grid grid-cols-2 gap-[1px]' : 'flex justify-center'}`}>
                         {mediaUrls.map((url, idx) => (
-                           <div 
-                             key={idx} 
-                             className={`relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : mediaUrls.length === 1 ? 'aspect-[4/5] object-cover' : 'aspect-square'}`}
-                           >
-                             {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
-                                <video src={url} controls className="absolute inset-0 w-full h-full object-cover" onClick={(e) => e.stopPropagation()} />
-                             ) : (
-                                <img 
+                           isVideo 
+                             ? <video key={idx} src={url} controls className="w-full h-auto max-h-[420px] object-cover" onClick={(e) => e.stopPropagation()} />
+                             : <img 
+                                  key={idx} 
                                   src={url} 
                                   loading="lazy" 
                                   decoding="async" 
-                                  className="absolute inset-0 w-full h-full object-cover" 
+                                  className={`w-full h-auto max-h-[420px] object-cover ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : mediaUrls.length > 1 ? 'aspect-square' : ''}`} 
                                   style={{ WebkitTouchCallout: 'none', userSelect: 'none' }} 
                                   onTouchStart={(e) => handleTouchStartPhoto(e, url)} 
                                   onMouseDown={(e) => handleTouchStartPhoto(e, url)} 
@@ -501,63 +548,55 @@ export default function WallPage() {
                                   onClick={(e) => handlePhotoClick(e, post, 'post')}
                                   onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
                                   onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
-                                />
-                             )}
-                           </div>
+                               />
                         ))}
                       </div>
                     )}
                     
                     {/* ТЕКСТ ПОСТА */}
                     {hasText && (
-                      <div className="px-4 pt-3 pb-1" onClick={(e) => openGlobalMenu(e, post, 'post')} onContextMenu={(e) => openGlobalMenu(e, post, 'post')}>
+                      <div className="px-3.5 pt-2.5 pb-1">
                          {quotedText && (
-                           <div className="mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>
+                           <div className="mb-1.5 pl-2.5 border-l-[2px] text-[12px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>
                          )}
-                         <div className="text-[15px] leading-relaxed break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
+                         <div className="text-[14px] leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]">
                            {text}
                          </div>
                       </div>
                     )}
 
-                    {/* ЭМОДЗИ И ВРЕМЯ (БЕЗ ПРОСМОТРОВ) */}
-                    <div className="px-4 pb-3 pt-2 flex justify-between items-end">
+                    {/* РЕАКЦИИ СЛЕВА И ВРЕМЯ СПРАВА ВНИЗУ ПОСТА */}
+                    <div className="px-3.5 py-2 flex items-center justify-between gap-2">
                        <div className="flex flex-wrap gap-1.5">
                          {pReactionsKeys.length > 0 ? pReactionsKeys.map(key => {
                            const rData = post.reactions[key];
                            const count = typeof rData === 'number' ? rData : (rData?.count || 1);
+                           
                            return (
-                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, key); }} className={`flex items-center gap-1.5 h-[32px] px-3.5 rounded-full bg-black/5 dark:bg-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 ${post.myReaction === key ? 'border border-black/20 dark:border-white/30' : ''}`}>
-                                <span className="text-[14px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
-                                <span className="text-[13px] font-bold ml-0.5 leading-none flex items-center justify-center mt-[1px]">{count}</span>
+                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, key); }} className={`flex items-center justify-center gap-1.5 h-[26px] px-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
+                               <span className="text-[13px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
+                               <span className={`text-[12px] font-semibold leading-none flex items-center justify-center mt-[1px] ${post.myReaction === key ? 'text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{count}</span>
                              </button>
                            );
                          }) : (
-                           <button onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, '❤️'); }} className="flex items-center gap-1.5 h-[32px] px-3.5 rounded-full bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#98989d] transition-transform active:scale-95">
-                              <Heart size={16} strokeWidth={2.5} />
+                           <button onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, '❤️'); }} className="flex items-center justify-center h-[26px] px-2.5 rounded-full bg-[#f5f5f7] dark:bg-[#333336] border border-black/5 dark:border-white/5 text-[#86868b] dark:text-[#98989d] transition-transform active:scale-95">
+                             <Heart size={13} strokeWidth={2} />
                            </button>
                          )}
                        </div>
-                       
-                       <div className="flex items-center text-[11px] font-medium text-[#86868b] dark:text-[#98989d] pb-1 shrink-0 ml-2">
-                          <span>{timeStr}</span>
-                       </div>
+                       <span className="text-[11px] font-medium text-[#86868b] dark:text-[#98989d] shrink-0">{timeStr}</span>
                     </div>
 
-                    {/* АККУРАТНАЯ ЛИНИЯ КОММЕНТАРИЕВ ВНИЗУ */}
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setActiveThread(post); loadComments(post.chatId, post.id); }} 
-                      className="w-full flex items-center justify-between px-4 py-3 border-t border-black/5 dark:border-white/5 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
-                    >
-                      <div className="flex gap-2.5 items-center">
-                        <MessageCircle size={18} className="text-[#86868b] dark:text-[#98989d]" />
-                        <span className="text-[14px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+                    {/* КОМПАКТНАЯ СТРОКА КОММЕНТАРИЕВ */}
+                    <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); loadComments(post.chatId, post.id); }} className="w-full flex items-center justify-between px-3.5 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04]">
+                      <div className="flex gap-2 items-center">
+                        <MessageCircle size={15} className="text-[#86868b] dark:text-[#98989d]" />
+                        <span className="text-[12px] font-medium text-[#86868b] dark:text-[#98989d]">
                           {post.commentsCount > 0 ? `${post.commentsCount} ${declOfNum(post.commentsCount, t.commentsCount, lang)}` : t.comments}
                         </span>
                       </div>
-                      <ChevronRight size={18} className="text-[#86868b] dark:text-[#98989d]" />
+                      <ChevronRight size={15} className="text-[#86868b] dark:text-[#98989d]" />
                     </button>
-
                   </div>
                 </div>
               );
@@ -612,7 +651,7 @@ export default function WallPage() {
                          <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
                          
                          {quotedText && (
-                           <div className={`mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]`}>{quotedText}</div>
+                           <div className="mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>
                          )}
 
                          {hasMedia && (
@@ -637,7 +676,6 @@ export default function WallPage() {
                        </div>
                      </div>
 
-                     {/* Реакции в комментариях */}
                      {cReactionsKeys.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1 justify-start pl-12">
                           {cReactionsKeys.map(key => {
@@ -697,7 +735,7 @@ export default function WallPage() {
         </div>
       )}
 
-      {/* ГЛОБАЛЬНОЕ МЕНЮ ПО КООРДИНАТАМ */}
+      {/* КОНТЕКСТНОЕ МЕНЮ */}
       {contextMenu && (() => {
          const menuWidth = 220; 
          const menuHeight = 250;
@@ -714,7 +752,6 @@ export default function WallPage() {
          const showReply = contextMenu.type === 'comment';
          const showCopy = hasText;
          const showEdit = isMe && contextMenu.type === 'post';
-         
          const showDelete = isMe;
 
          if (!showReply && !showCopy && !showEdit && !showDelete) return null;
@@ -754,7 +791,8 @@ export default function WallPage() {
          );
       })()}
 
-      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+      {/* НИЖНЯЯ НАВИГАЦИЯ */}
+      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         <Link href="/">
           <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
             <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
