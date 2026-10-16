@@ -319,7 +319,8 @@ export default function ChatPage() {
   const [isCommentUploading, setIsCommentUploading] = useState(false);
   const [commentReplyingTo, setCommentReplyingTo] = useState<any>(null);
   
-  const [pinnedMessage, setPinnedMessage] = useState<any>(null);
+  const [pinnedMessages, setPinnedMessages] = useState<any[]>([]);
+  const [activePinnedIndex, setActivePinnedIndex] = useState(0);
   const [forwardingMsg, setForwardingMsg] = useState<any>(null);
   const [chatListForForward, setChatListForForward] = useState<any[]>([]);
   
@@ -484,7 +485,12 @@ export default function ChatPage() {
       if (msgRes.ok) {
         const data = await msgRes.json();
         setMessages(Array.isArray(data.messages) ? data.messages : []);
-        if (data.pinnedMessage) setPinnedMessage(data.pinnedMessage);
+        if (data.pinnedMessage) {
+           setPinnedMessages(prev => {
+              if (prev.find(m => m.id === data.pinnedMessage.id)) return prev;
+              return [...prev, data.pinnedMessage];
+           });
+        }
       }
     } catch (e) {}
     
@@ -837,8 +843,16 @@ export default function ChatPage() {
 
   const togglePin = async (msg: any) => {
     setContextMenu(null);
-    const isPinned = pinnedMessage?.id === msg.id;
-    setPinnedMessage(isPinned ? null : msg);
+    const isPinned = pinnedMessages.some(m => m.id === msg.id);
+    if (isPinned) {
+       setPinnedMessages(prev => prev.filter(m => m.id !== msg.id));
+       if (activePinnedIndex >= pinnedMessages.length - 1) {
+           setActivePinnedIndex(Math.max(0, pinnedMessages.length - 2));
+       }
+    } else {
+       setPinnedMessages(prev => [...prev, msg]);
+       setActivePinnedIndex(pinnedMessages.length);
+    }
     try {
        await fetch(`/api/chats/${chatId}/pin`, { 
          method: 'POST', 
@@ -1023,7 +1037,7 @@ export default function ChatPage() {
   };
 
   const parseContent = (rawText: any) => {
-    if (!rawText || typeof rawText !== 'string') return { text: String(rawText || ''), quotedText: null, mediaUrls: [], hasMedia: false, hasText: !!rawText, isVideo: false, voiceUrl: null, videoNoteUrl: null, fixedDuration: null };
+    if (!rawText || typeof rawText !== 'string') return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false, voiceUrl: null, videoNoteUrl: null, fixedDuration: null };
     
     let text = rawText;
     let voiceUrl = null;
@@ -1070,7 +1084,7 @@ export default function ChatPage() {
     } catch(e) {}
     
     const hasMedia = mediaUrls.length > 0;
-    const hasText = !!text.trim() || !!quotedText;
+    const hasText = !!text || !!quotedText;
     const isVideo = hasMedia && !!mediaUrls[0] && (mediaUrls[0].match(/\.(mp4|webm|mov|ogg)$/i) || mediaUrls[0].includes('/video/upload/'));
     
     return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration };
@@ -1382,22 +1396,28 @@ export default function ChatPage() {
            </div>
         </div>
         
-        {/* ТОНКАЯ ЛИНИЯ ЗАКРЕПЛЕННОГО СООБЩЕНИЯ В ШАПКЕ */}
-        {pinnedMessage && (
+        {/* ТОНКАЯ ЛИНИЯ ЗАКРЕПЛЕННЫХ СООБЩЕНИЙ В ШАПКЕ */}
+        {pinnedMessages.length > 0 && (
           <div 
             className="mt-2.5 -mx-3 px-3 py-1.5 flex items-center gap-2 cursor-pointer border-t border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             onClick={() => {
-                const el = document.getElementById(`msg-${pinnedMessage.id}`);
+                const el = document.getElementById(`msg-${pinnedMessages[activePinnedIndex].id}`);
                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (pinnedMessages.length > 1) {
+                    setActivePinnedIndex((prev) => (prev + 1) % pinnedMessages.length);
+                }
             }}
           >
              <div className="w-[2.5px] h-[32px] bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full shrink-0"></div>
              <div className="flex flex-col flex-1 truncate py-0.5">
-                <span className="text-[12px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-none mb-1 uppercase tracking-wide">{t.pinnedMsg}</span>
-                <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate leading-none">{parseContent(pinnedMessage.content).text || t.photo}</span>
+                <div className="flex items-center gap-2">
+                   <span className="text-[12px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-none mb-1 uppercase tracking-wide">{t.pinnedMsg}</span>
+                   {pinnedMessages.length > 1 && <span className="text-[10px] text-[#86868b] dark:text-[#98989d] bg-black/5 dark:bg-white/10 px-1.5 rounded-full leading-tight mb-1">{activePinnedIndex + 1}/{pinnedMessages.length}</span>}
+                </div>
+                <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate leading-none">{parseContent(pinnedMessages[activePinnedIndex].content).text || t.photo}</span>
              </div>
              {isAdmin && (
-               <button onClick={(e) => { e.stopPropagation(); togglePin(pinnedMessage); }} className="p-2 text-[#86868b] active:scale-95 shrink-0"><X size={18} /></button>
+               <button onClick={(e) => { e.stopPropagation(); togglePin(pinnedMessages[activePinnedIndex]); }} className="p-2 text-[#86868b] active:scale-95 shrink-0"><X size={18} /></button>
              )}
           </div>
         )}
@@ -1551,7 +1571,7 @@ export default function ChatPage() {
                     </div>
                   )}
                   
-                  <div className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} relative`}>
+                  <div className={`flex flex-col max-w-[85%] sm:max-w-[380px] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} relative`}>
                     
                     {isGroup && !isMe && msg.senderName && !isOnlyVideoNote && (
                       <span className="text-[13px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] ml-2 mb-1">
@@ -1562,7 +1582,7 @@ export default function ChatPage() {
                     <div 
                       className={isOnlyVideoNote 
                         ? `relative flex flex-col cursor-pointer bg-transparent`
-                        : `shadow-sm relative flex flex-col min-w-[60px] max-w-[300px] cursor-pointer overflow-hidden ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`
+                        : `shadow-sm relative flex flex-col min-w-[60px] w-full cursor-pointer overflow-hidden ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`
                       }
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
@@ -1598,11 +1618,11 @@ export default function ChatPage() {
                           )}
 
                           {hasMedia && (
-                            <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[1px] bg-black/5 dark:bg-white/5' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                            <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[2px] bg-black/5 dark:bg-white/5' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                               {mediaUrls.map((url: string, idx: number) => {
                                  const isSingle = mediaUrls.length === 1;
                                  const itemClass = isSingle ? 'relative w-full flex justify-center' : `relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`;
-                                 const imgClass = isSingle ? 'w-full h-auto max-h-[300px] object-cover' : 'absolute inset-0 w-full h-full object-cover';
+                                 const imgClass = isSingle ? 'w-full h-auto max-h-[400px] object-cover' : 'absolute inset-0 w-full h-full object-cover';
                                  return (
                                    <div key={idx} className={itemClass}>
                                      {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
@@ -1621,6 +1641,7 @@ export default function ChatPage() {
                                    </div>
                                  );
                               })}
+                              
                               {(!hasText && !voiceUrl && !videoNoteUrl) && (
                                 <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
                                    {timeStr}
@@ -1637,6 +1658,7 @@ export default function ChatPage() {
                                )}
                                <div className="leading-[1.35] break-words whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>
                                  {text}
+                                 
                                  {(!voiceUrl && !videoNoteUrl) && (
                                    <span className={`float-right inline-flex items-center gap-1 text-[10px] ml-3 mt-1.5 pointer-events-none select-none relative top-[2px] ${isMe ? 'opacity-60 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
                                      {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
@@ -1712,7 +1734,7 @@ export default function ChatPage() {
                        <span className="font-mono text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px] font-semibold tracking-wide">{formatMsTime(recordingMs)}</span>
                     </div>
                  </div>
-                 <button onClick={() => stopRecording(false)} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center active:scale-95 transition-transform"><ArrowUp size={20} strokeWidth={2.5} /></button>
+                 <button onClick={() => stopRecording(false)} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-white dark:text-[#1d1d1f] flex items-center justify-center active:scale-95 transition-transform"><ArrowUp size={20} strokeWidth={2.5} /></button>
                </div>
             ) : (
               <form onSubmit={handleSend} className="p-3 flex items-center gap-2 pb-6">
@@ -1736,14 +1758,14 @@ export default function ChatPage() {
                      </div>
                   </button>
                 ) : (
-                  <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ArrowUp size={20} strokeWidth={2.5} /></button>
+                  <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-white dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ArrowUp size={20} strokeWidth={2.5} /></button>
                 )}
               </form>
             )
           ) : isLoadingRole ? (
             <div className="flex items-center gap-2 px-3 py-3 pb-6 opacity-50"><div className="w-[38px] h-[38px] rounded-full bg-black/5 dark:bg-white/5 animate-pulse"></div><div className="flex-1 h-[38px] rounded-full bg-black/5 dark:bg-white/5 animate-pulse"></div><div className="w-[38px] h-[38px] rounded-full bg-black/5 dark:bg-white/5 animate-pulse"></div></div>
           ) : !isMember ? (
-            <div className="flex items-center justify-center pt-2 pb-6 px-4"><button onClick={joinChat} className="w-full py-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] font-semibold rounded-[16px] text-[15px]">{isChannel ? t.subscribe : t.joinGroup}</button></div>
+            <div className="flex items-center justify-center pt-2 pb-6 px-4"><button onClick={joinChat} className="w-full py-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-white dark:text-[#1d1d1f] font-semibold rounded-[16px] text-[15px]">{isChannel ? t.subscribe : t.joinGroup}</button></div>
           ) : (
             <div className="flex items-center justify-center pt-2 pb-6"><button onClick={() => setIsMuted(!isMuted)} className="text-[#86868b] text-[15px] font-medium">{isMuted ? t.unmute : t.mute}</button></div>
           )}
@@ -1770,11 +1792,11 @@ export default function ChatPage() {
 
          if (!showReply && !showCopy && !showEdit && !showDelete && !showForward && !showPin) return null;
 
-         const isPinned = pinnedMessage?.id === contextMenu.item.id;
+         const isPinned = pinnedMessages.some(m => m.id === contextMenu.item.id);
 
          return (
            <div className="fixed inset-0 z-[9999]" onClick={() => setContextMenu(null)} onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}>
-             <div className="absolute flex flex-col gap-2 animate-in zoom-in-[0.95] fade-in duration-200" style={{ top: safeY ? safeY : 0, left: safeX }} onClick={e => e.stopPropagation()}>
+             <div className="absolute flex flex-col gap-2 animate-in zoom-in-[0.95] fade-in duration-200" style={{ top: safeY, left: safeX }} onClick={e => e.stopPropagation()}>
                 <div className="flex gap-1.5 p-2 bg-white/95 dark:bg-[#222224]/95 backdrop-blur-xl rounded-full shadow-lg border border-black/5 dark:border-white/5">
                    {FAST_REACTIONS.map(emoji => (
                      <button key={emoji} onClick={(e) => { e.stopPropagation(); toggleReaction(contextMenu.id, emoji, contextMenu.type === 'comment'); }} className="w-8 h-8 flex items-center justify-center text-[20px] rounded-full hover:scale-125 transition-transform active:scale-95">{emoji}</button>
