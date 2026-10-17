@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, User, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2, ArrowLeft, Camera } from 'lucide-react';
+import { Search, MessageSquare, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2, ArrowLeft, Camera, Mic, Image as ImageIcon, Video } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
+
+const NL = String.fromCharCode(10);
+const CR = String.fromCharCode(13);
+const DOUBLE_NL = NL + NL;
 
 const getUserId = () => {
   try {
@@ -43,12 +47,16 @@ const translations = {
     descPlaceholderGroup: "Дополнительное описание группы",
     descPlaceholderChannel: "Дополнительное описание канала",
     photo: "Фотография",
+    video: "Видео",
+    voiceMsg: "Голосовое сообщение",
+    videoNoteMsg: "Видеосообщение",
     noMessages: "Нет сообщений",
     companion: "Собеседник",
     errorLogin: "Ошибка входа",
     errorNet: "Ошибка сети",
     isTyping: "печатает...",
-    areTyping: "печатают..."
+    areTyping: "печатают...",
+    cancel: "Отмена"
   },
   en: {
     chats: "Chats",
@@ -78,20 +86,124 @@ const translations = {
     descPlaceholderGroup: "Optional group description",
     descPlaceholderChannel: "Optional channel description",
     photo: "Photo",
+    video: "Video",
+    voiceMsg: "Voice message",
+    videoNoteMsg: "Video message",
     noMessages: "No messages",
     companion: "Companion",
     errorLogin: "Login error",
     errorNet: "Network error",
     isTyping: "is typing...",
-    areTyping: "are typing..."
+    areTyping: "are typing...",
+    cancel: "Cancel"
   }
+};
+
+const isMediaLink = (word: string) => {
+  const lower = word.toLowerCase();
+  if (!lower.startsWith('http://') && !lower.startsWith('https://')) return false;
+  return (
+    lower.includes('cloudinary.com') ||
+    lower.includes('/upload/') ||
+    lower.endsWith('.jpg') ||
+    lower.endsWith('.jpeg') ||
+    lower.endsWith('.png') ||
+    lower.endsWith('.webp') ||
+    lower.endsWith('.gif') ||
+    lower.endsWith('.mp4') ||
+    lower.endsWith('.webm') ||
+    lower.endsWith('.mov')
+  );
+};
+
+const parseLastMessagePreview = (rawMsg: any, t: any) => {
+  if (!rawMsg || typeof rawMsg !== 'string') {
+    return { kind: 'empty', text: t.noMessages };
+  }
+
+  let text = rawMsg.split(CR).join('').trim();
+
+  // Убираем цитату ответа (> ...), если за ней идет само сообщение
+  if (text.startsWith('> ')) {
+    const parts = text.split(DOUBLE_NL);
+    if (parts.length > 1) {
+      text = parts.slice(1).join(DOUBLE_NL).trim();
+    } else {
+      text = text.slice(2).trim();
+    }
+  }
+
+  const hasVoice = text.includes('[VOICE]');
+  const hasVideoNote = text.includes('[VIDEO_NOTE]');
+  const hasMediaTag = text.includes('[MEDIA]') || text.includes('[media]');
+
+  const words = text.split(NL).join(' ').split(' ');
+  const cleanWords: string[] = [];
+  let detectedMediaUrl = '';
+
+  for (const w of words) {
+    const trimmed = w.trim();
+    if (!trimmed) continue;
+    if (
+      trimmed === '[VOICE]' ||
+      trimmed === '[VIDEO_NOTE]' ||
+      trimmed === '[MEDIA]' ||
+      trimmed === '[media]' ||
+      trimmed === '[]'
+    ) {
+      continue;
+    }
+    if (trimmed.startsWith('D:') && trimmed.length <= 8) {
+      continue;
+    }
+    if (trimmed.startsWith('[MEDIA]http')) {
+      detectedMediaUrl = trimmed.slice(7);
+      continue;
+    }
+    if (isMediaLink(trimmed)) {
+      detectedMediaUrl = trimmed;
+      continue;
+    }
+    cleanWords.push(trimmed);
+  }
+
+  const cleanText = cleanWords.join(' ').trim();
+
+  if (hasVoice) {
+    return { kind: 'voice', text: cleanText || t.voiceMsg };
+  }
+  if (hasVideoNote) {
+    return { kind: 'video_note', text: cleanText || t.videoNoteMsg };
+  }
+  if (hasMediaTag || detectedMediaUrl) {
+    const lowerUrl = detectedMediaUrl.toLowerCase();
+    const isVid = lowerUrl.endsWith('.mp4') || lowerUrl.endsWith('.webm') || lowerUrl.endsWith('.mov') || lowerUrl.includes('/video/upload/');
+    if (isVid) {
+      return { kind: 'video', text: cleanText || t.video };
+    }
+    return { kind: 'photo', text: cleanText || t.photo };
+  }
+
+  return { kind: 'text', text: cleanText || t.noMessages };
+};
+
+const formatChatListTime = (timeRaw: any, lang: 'ru' | 'en') => {
+  if (!timeRaw) return '';
+  const d = new Date(timeRaw);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const isToday = d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  if (isToday) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  return d.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit' });
 };
 
 export default function ChatsPage() {
   const [search, setSearch] = useState('');
   const currentUserId = getUserId();
   
-  const [lang, setLang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
+  const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
   
   const [chats, setChats] = useState<any[]>(() => {
@@ -111,6 +223,7 @@ export default function ChatsPage() {
   const [channelDesc, setChannelDesc] = useState('');
   const [modalAvatarUrl, setModalAvatarUrl] = useState('');
   const [isUploadingModalAvatar, setIsUploadingModalAvatar] = useState(false);
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [currentUser, setCurrentUser] = useState<any>(() => {
@@ -157,8 +270,8 @@ export default function ChatsPage() {
   }, [currentUserId]);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'dark') {
+    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('mesbook_theme');
+    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       setIsDark(true);
       document.documentElement.classList.add('dark');
     } else {
@@ -232,7 +345,7 @@ export default function ChatsPage() {
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
     const diff = touchStartX.current - e.changedTouches[0].clientX;
-    if (diff > 70) setIsSidebarOpen(true);
+    if (diff < -70 && touchStartX.current < 50) setIsSidebarOpen(true);
     touchStartX.current = null;
   };
 
@@ -279,36 +392,49 @@ export default function ChatsPage() {
     if (html.classList.contains('dark')) {
       html.classList.remove('dark');
       localStorage.setItem('theme', 'light');
+      localStorage.setItem('mesbook_theme', 'light');
       setIsDark(false);
     } else {
       html.classList.add('dark');
       localStorage.setItem('theme', 'dark');
+      localStorage.setItem('mesbook_theme', 'dark');
       setIsDark(true);
     }
   };
 
-  const handleCreateGroupOrChannel = async () => {
+  const handleCreateGroupOrChannel = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const name = modalType === 'group' ? groupName.trim() : channelName.trim();
-    if (!name) return;
+    if (!name || isCreatingChat) return;
 
+    setIsCreatingChat(true);
     try {
       const res = await fetch('/api/chats/create', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + currentUserId, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description: channelDesc, isGroup: modalType === 'group', isChannel: modalType === 'channel', avatarUrl: modalAvatarUrl })
+        body: JSON.stringify({
+          name,
+          description: channelDesc.trim(),
+          isGroup: modalType === 'group',
+          isChannel: modalType === 'channel',
+          avatarUrl: modalAvatarUrl
+        })
       });
       if (res.ok) {
         const data = await res.json();
-        setLocation('/chat/' + data.id);
+        setGroupName('');
+        setChannelName('');
+        setChannelDesc('');
+        setModalAvatarUrl('');
+        setModalType(null);
+        setIsSidebarOpen(false);
+        await loadChats();
+        if (data && data.id) {
+          setLocation('/chat/' + data.id);
+        }
       }
     } catch (e) {}
-
-    setGroupName('');
-    setChannelName('');
-    setChannelDesc('');
-    setModalAvatarUrl('');
-    setModalType(null);
-    setIsSidebarOpen(false);
+    setIsCreatingChat(false);
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -384,31 +510,29 @@ export default function ChatsPage() {
     const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 15000) : false;
     const timeRaw = chat.lastMessageAt || chat.lastMessageTime;
     
-    const isLastMessageMine = chat.lastMessageSenderId === currentUserId;
-    
-    // ИСПРАВЛЕНИЕ 1: Жесткая привязка к статусу, без хардкода для групп
+    const isLastMessageMine = String(chat.lastMessageSenderId) === String(currentUserId);
     const isLastMessageRead = chat.lastMessageRead === 1 || chat.lastMessageRead === true || chat.lastMessageRead === '1';
 
     const typingNames = chat.typing || [];
     const isTyping = typingNames.length > 0;
     
-    let lastMessageText = chat.lastMessage?.startsWith('[MEDIA]') ? t.photo : (chat.lastMessage || t.noMessages);
+    const parsedPreview = parseLastMessagePreview(chat.lastMessage, t);
+    let typingText = '';
     
     if (isTyping) {
        if (typingNames.length === 1) {
-          lastMessageText = participant.isGroup || participant.isChannel ? `${typingNames[0]} ${t.isTyping}` : t.isTyping;
+          typingText = participant.isGroup || participant.isChannel ? `${typingNames[0]} ${t.isTyping}` : t.isTyping;
        } else {
-          lastMessageText = `${typingNames.length} ${t.areTyping}`;
+          typingText = `${typingNames.length} ${t.areTyping}`;
        }
     }
 
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
-        {/* ИСПРАВЛЕНИЕ 2: Линии во всю длину */}
-        <a className={`flex items-stretch px-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-[#222224] ${isLast ? '' : 'border-b border-black/10 dark:border-white/10'}`}>
-          <div className="py-3 flex items-center shrink-0">
-            <div className="relative w-[52px] h-[52px]">
-              <div className={`w-full h-full rounded-full flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 ${isSaved ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
+        <a className="flex items-center px-4 active:bg-black/[0.05] dark:active:bg-white/[0.05] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-[#161618] relative">
+          <div className="py-2.5 flex items-center shrink-0">
+            <div className="relative w-[54px] h-[54px]">
+              <div className={`w-full h-full rounded-full flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 ${isSaved ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
                 {isSaved ? (
                   <Bookmark size={24} fill="currentColor" />
                 ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
@@ -416,47 +540,58 @@ export default function ChatsPage() {
                     src={participant.avatarUrl} 
                     alt="Avatar" 
                     className="w-full h-full object-cover" 
-                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=2c2c2e&color=f5f5f7&size=120`; }} 
                   />
                 ) : (
-                  <span className="text-[20px] font-medium">{participant.displayName?.charAt(0) || "U"}</span>
+                  <span className="text-[20px] font-semibold">{(participant.displayName || 'U').charAt(0).toUpperCase()}</span>
                 )}
               </div>
               {isOnline && !participant.isGroup && !participant.isChannel && !isSaved && (
-                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>
+                <div className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#161618] rounded-full z-10"></div>
               )}
             </div>
           </div>
           
-          <div className="ml-3.5 py-3 flex-1 overflow-hidden flex flex-col justify-center">
-            <div className="flex justify-between items-baseline mb-0.5">
-              <h3 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] truncate pr-2 tracking-tight">
+          <div className={`ml-3.5 py-3 flex-1 overflow-hidden flex flex-col justify-center min-h-[72px] ${isLast ? '' : 'border-b border-black/[0.06] dark:border-white/[0.06]'}`}>
+            <div className="flex justify-between items-baseline mb-1">
+              <h3 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] truncate pr-2 tracking-tight leading-snug">
                 {isSaved ? t.saved : (participant.displayName || t.companion)}
               </h3>
-              {timeRaw && (
-                <span className="text-[13px] shrink-0 font-medium text-[#86868b] dark:text-[#98989d]">
-                  {new Date(timeRaw).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              )}
+              <div className="flex items-center gap-1 shrink-0">
+                {chat.lastMessage && !isTyping && (isSaved || (isLastMessageMine && !participant.isChannel)) && (
+                  <div className="flex -space-x-1.5 items-center text-[#1d1d1f] dark:text-[#f5f5f7] opacity-80 mr-0.5">
+                    <Check size={14} strokeWidth={2.2} />
+                    {(isSaved || isLastMessageRead) && <Check size={14} strokeWidth={2.2} />}
+                  </div>
+                )}
+                {timeRaw && (
+                  <span className="text-[12px] font-medium text-[#86868b] dark:text-[#71717a]">
+                    {formatChatListTime(timeRaw, lang)}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <p className={`text-[15px] truncate pr-2 ${isTyping ? 'text-[#1d1d1f] dark:text-[#f5f5f7] font-medium' : 'text-[#86868b] dark:text-[#98989d]'}`}>
-                {lastMessageText}
-              </p>
-              {chat.lastMessage && !isTyping && (
-                <div className="flex -space-x-1 shrink-0 items-center opacity-60">
-                  {isSaved ? (
-                    <><Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" /><Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" /></>
-                  ) : isLastMessageMine && !participant.isChannel ? (
-                    <>
-                      <Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />
-                      {isLastMessageRead && <Check size={14} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />}
-                    </>
-                  ) : chat.unreadCount > 0 ? (
-                    <div className="bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] text-[11px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ml-1 opacity-100">
-                      {chat.unreadCount}
-                    </div>
-                  ) : null}
+
+            <div className="flex items-center justify-between gap-2">
+              {isTyping ? (
+                <p className="text-[15px] truncate text-[#1d1d1f] dark:text-[#f5f5f7] font-medium leading-snug">
+                  {typingText}
+                </p>
+              ) : (
+                <div className="flex items-center gap-1.5 overflow-hidden pr-2 text-[#86868b] dark:text-[#a1a1aa]">
+                  {parsedPreview.kind === 'voice' && <Mic size={15} className="shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] opacity-80" />}
+                  {parsedPreview.kind === 'video_note' && <Camera size={15} className="shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] opacity-80" />}
+                  {parsedPreview.kind === 'photo' && <ImageIcon size={15} className="shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] opacity-80" />}
+                  {parsedPreview.kind === 'video' && <Video size={15} className="shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] opacity-80" />}
+                  <p className="text-[15px] truncate leading-snug">
+                    {parsedPreview.text}
+                  </p>
+                </div>
+              )}
+
+              {!isTyping && !isSaved && (!isLastMessageMine || participant.isChannel) && chat.unreadCount > 0 && (
+                <div className="bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] text-[12px] font-bold px-1.5 h-[20px] rounded-full min-w-[20px] flex items-center justify-center shrink-0">
+                  {chat.unreadCount}
                 </div>
               )}
             </div>
@@ -472,33 +607,33 @@ export default function ChatsPage() {
     
     return (
       <Link key={user.id} href={'/chat/' + user.id}>
-        {/* ИСПРАВЛЕНИЕ 2: Линии во всю длину */}
         <a 
           onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
-          className={`flex items-stretch px-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-[#222224] ${isLast ? '' : 'border-b border-black/10 dark:border-white/10'}`}
+          className="flex items-center px-4 active:bg-black/[0.05] dark:active:bg-white/[0.05] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-[#161618]"
         >
-          <div className="py-3 flex items-center shrink-0">
-            <div className="relative w-[52px] h-[52px]">
-              <div className="w-full h-full rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5">
+          <div className="py-2.5 flex items-center shrink-0">
+            <div className="relative w-[50px] h-[50px]">
+              <div className="w-full h-full rounded-full bg-[#e5e5ea] dark:bg-[#2c2c2e] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5">
                 {user.avatarUrl && user.avatarUrl.length > 5 ? (
                   <img 
                     src={user.avatarUrl} 
                     alt="Avatar" 
                     className="w-full h-full object-cover" 
-                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=2c2c2e&color=f5f5f7&size=120`; }} 
                   />
                 ) : (
-                  <span className="text-[#1d1d1f] dark:text-[#f5f5f7] font-medium text-[20px]">{user.displayName?.charAt(0) || "U"}</span>
+                  <span className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[18px]">{(user.displayName || 'U').charAt(0).toUpperCase()}</span>
                 )}
               </div>
               {isOnline && (
-                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>
+                <div className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#161618] rounded-full z-10"></div>
               )}
             </div>
           </div>
           
-          <div className="ml-3.5 py-3 flex-1 flex items-center justify-between">
+          <div className={`ml-3.5 py-3.5 flex-1 flex flex-col justify-center ${isLast ? '' : 'border-b border-black/[0.06] dark:border-white/[0.06]'}`}>
             <span className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] tracking-tight">{user.displayName}</span>
+            {user.username && <span className="text-[13px] text-[#86868b] dark:text-[#71717a]">{user.username}</span>}
           </div>
         </a>
       </Link>
@@ -507,37 +642,39 @@ export default function ChatsPage() {
 
   return (
     <div 
-      className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative overflow-hidden font-sans selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20"
+      className="flex h-[100dvh] flex-col bg-white dark:bg-[#161618] transition-colors duration-300 relative overflow-hidden font-sans selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Затемнение фона при открытом сайдбаре */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/20 dark:bg-black/40 z-40 transition-opacity backdrop-blur-sm"
+          className="fixed inset-0 bg-black/40 z-40 transition-opacity backdrop-blur-sm animate-in fade-in duration-200"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      <div className={`fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-[#f5f5f7] dark:bg-[#161618] z-50 transform transition-transform duration-300 ease-out flex flex-col border-r border-black/5 dark:border-white/5 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-6 pb-5 flex justify-between items-start relative bg-white dark:bg-[#222224] shadow-[0_2px_20px_rgba(0,0,0,0.02)] border-b border-black/5 dark:border-white/5">
+      {/* Боковое меню (Sidebar) */}
+      <div className={`fixed top-0 left-0 h-full w-[82%] max-w-[310px] bg-[#f5f5f7] dark:bg-[#161618] z-50 transform transition-transform duration-300 ease-out flex flex-col border-r border-black/5 dark:border-white/5 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-6 pt-12 pb-5 flex justify-between items-start relative bg-white dark:bg-[#222224] border-b border-black/5 dark:border-white/5">
           <div className="flex flex-col">
-            <div className="w-[64px] h-[64px] bg-[#e5e5ea] dark:bg-[#333336] rounded-full flex items-center justify-center text-[24px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] mb-3 overflow-hidden border border-black/5 dark:border-white/5">
+            <div className="w-[60px] h-[60px] bg-[#e5e5ea] dark:bg-[#333336] rounded-full flex items-center justify-center text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] mb-3 overflow-hidden border border-black/5 dark:border-white/5">
               {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
                 <img 
                   src={currentUser.avatarUrl} 
                   alt="Avatar" 
                   className="w-full h-full object-cover" 
-                  onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+                  onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=2c2c2e&color=f5f5f7&size=120`; }} 
                 />
               ) : (
                 currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"
               )}
             </div>
-            <h2 className="text-[18px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight tracking-tight">
+            <h2 className="text-[17px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight tracking-tight">
               {currentUser?.displayName || 'Игорь'}
             </h2>
             <p className="text-[14px] text-[#86868b] dark:text-[#98989d] mt-0.5">
-              {currentUser?.username || '@игорь'}
+              {currentUser?.username || '@user'}
             </p>
           </div>
 
@@ -545,13 +682,12 @@ export default function ChatsPage() {
             onClick={toggleTheme} 
             className="p-2.5 rounded-full bg-[#f5f5f7] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 border border-black/5 dark:border-white/5"
           >
-            {isDark ? <Sun size={20} /> : <Moon size={20} />}
+            {isDark ? <Sun size={19} /> : <Moon size={19} />}
           </button>
         </div>
 
-        <div className="flex flex-col py-4 overflow-y-auto flex-1 gap-4 px-4">
-          
-          <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
+        <div className="flex flex-col py-4 overflow-y-auto flex-1 gap-3.5 px-3.5">
+          <div className="bg-white dark:bg-[#222224] rounded-[18px] overflow-hidden border border-black/5 dark:border-white/5">
             {sortedAccounts.length > 1 && (
               <div className="flex flex-col">
                 {sortedAccounts.map(acc => {
@@ -560,73 +696,72 @@ export default function ChatsPage() {
                     <button 
                       key={acc.id} 
                       onClick={() => !isActive && switchAccount(acc)} 
-                      className={`flex items-center gap-3 px-4 py-3.5 transition-colors w-full text-left border-b border-black/5 dark:border-white/5 last:border-0 ${isActive ? 'cursor-default' : 'active:bg-black/[0.02] dark:active:bg-white/[0.02]'}`}
+                      className={`flex items-center gap-3 px-4 py-3 transition-colors w-full text-left border-b border-black/5 dark:border-white/5 last:border-0 ${isActive ? 'cursor-default' : 'active:bg-black/[0.04] dark:active:bg-white/[0.04]'}`}
                     >
-                      <div className="w-9 h-9 bg-[#e5e5ea] dark:bg-[#333336] rounded-full flex items-center justify-center overflow-hidden shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] font-medium text-[13px] border border-black/5 dark:border-white/5">
-                        {acc.avatarUrl && acc.avatarUrl.length > 5 ? <img src={acc.avatarUrl} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(acc.displayName || 'U')}&background=random&color=fff&size=120`; }} /> : acc.displayName?.charAt(0).toUpperCase()}
+                      <div className="w-8 h-8 bg-[#e5e5ea] dark:bg-[#333336] rounded-full flex items-center justify-center overflow-hidden shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[13px] border border-black/5 dark:border-white/5">
+                        {acc.avatarUrl && acc.avatarUrl.length > 5 ? <img src={acc.avatarUrl} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(acc.displayName || 'U')}&background=2c2c2e&color=f5f5f7&size=120`; }} /> : acc.displayName?.charAt(0).toUpperCase()}
                       </div>
-                      <span className={`text-[16px] tracking-tight flex-1 truncate ${isActive ? 'font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]' : 'font-medium text-[#86868b] dark:text-[#98989d]'}`}>
+                      <span className={`text-[15px] tracking-tight flex-1 truncate ${isActive ? 'font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]' : 'font-medium text-[#86868b] dark:text-[#98989d]'}`}>
                         {acc.displayName}
                       </span>
-                      {isActive && <Check size={18} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />}
+                      {isActive && <Check size={17} className="text-[#1d1d1f] dark:text-[#f5f5f7]" />}
                     </button>
                   );
                 })}
               </div>
             )}
             <button 
-              onClick={() => setShowAddAccountModal(true)} 
-              className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors w-full text-left"
+              onClick={() => { setIsSidebarOpen(false); setShowAddAccountModal(true); }} 
+              className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.04] dark:active:bg-white/[0.04] transition-colors w-full text-left"
             >
-              <UserPlus size={22} className="text-[#86868b] dark:text-[#98989d]" />
-              <span className="text-[16px] font-medium tracking-tight">{t.addAccount}</span>
+              <UserPlus size={20} className="text-[#86868b] dark:text-[#98989d]" />
+              <span className="text-[15px] font-medium tracking-tight">{t.addAccount}</span>
             </button>
           </div>
 
-          <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none flex flex-col border border-black/5 dark:border-white/5">
+          <div className="bg-white dark:bg-[#222224] rounded-[18px] overflow-hidden flex flex-col border border-black/5 dark:border-white/5">
             <button 
-              onClick={() => setModalType('group')} 
-              className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors w-full text-left border-b border-black/5 dark:border-white/5"
+              onClick={() => { setIsSidebarOpen(false); setModalType('group'); }} 
+              className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.04] dark:active:bg-white/[0.04] transition-colors w-full text-left border-b border-black/5 dark:border-white/5"
             >
-              <Users size={22} className="text-[#86868b] dark:text-[#98989d]" />
-              <span className="text-[16px] font-medium tracking-tight">{t.createGroup}</span>
+              <Users size={20} className="text-[#86868b] dark:text-[#98989d]" />
+              <span className="text-[15px] font-medium tracking-tight">{t.createGroup}</span>
             </button>
             <button 
-              onClick={() => setModalType('channel')} 
-              className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors w-full text-left"
+              onClick={() => { setIsSidebarOpen(false); setModalType('channel'); }} 
+              className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.04] dark:active:bg-white/[0.04] transition-colors w-full text-left"
             >
-              <Volume2 size={22} className="text-[#86868b] dark:text-[#98989d]" />
-              <span className="text-[16px] font-medium tracking-tight">{t.createChannel}</span>
+              <Volume2 size={20} className="text-[#86868b] dark:text-[#98989d]" />
+              <span className="text-[15px] font-medium tracking-tight">{t.createChannel}</span>
             </button>
           </div>
 
-          <div className="bg-white dark:bg-[#222224] rounded-[20px] overflow-hidden shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none flex flex-col border border-black/5 dark:border-white/5">
+          <div className="bg-white dark:bg-[#222224] rounded-[18px] overflow-hidden flex flex-col border border-black/5 dark:border-white/5">
             <Link href="/chat/saved">
-              <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors border-b border-black/5 dark:border-white/5">
-                <Bookmark size={22} className="text-[#86868b] dark:text-[#98989d]" />
-                <span className="text-[16px] font-medium tracking-tight">{t.saved}</span>
+              <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.04] dark:active:bg-white/[0.04] transition-colors border-b border-black/5 dark:border-white/5">
+                <Bookmark size={20} className="text-[#86868b] dark:text-[#98989d]" />
+                <span className="text-[15px] font-medium tracking-tight">{t.saved}</span>
               </a>
             </Link>
             
             <Link href="/settings">
-              <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.02] dark:active:bg-white/[0.02] transition-colors">
-                <Settings size={22} className="text-[#86868b] dark:text-[#98989d]" />
-                <span className="text-[16px] font-medium tracking-tight">{t.settings}</span>
+              <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.04] dark:active:bg-white/[0.04] transition-colors">
+                <Settings size={20} className="text-[#86868b] dark:text-[#98989d]" />
+                <span className="text-[15px] font-medium tracking-tight">{t.settings}</span>
               </a>
             </Link>
           </div>
-
         </div>
       </div>
 
       {/* Экран поиска */}
       {isSearchOpen ? (
-        <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#161618]">
-          <header className="px-4 pt-12 pb-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl relative z-10 flex flex-col shadow-[0_1px_10px_rgba(0,0,0,0.02)] border-b border-black/5 dark:border-white/5">
+        <div className="flex flex-col h-full bg-white dark:bg-[#161618] animate-in fade-in duration-150">
+          <header className="px-4 pt-12 pb-3 bg-white/90 dark:bg-[#161618]/90 backdrop-blur-xl relative z-10 flex flex-col border-b border-black/[0.06] dark:border-white/[0.06]">
             <div className="flex items-center gap-3 h-10">
               <button 
                 onClick={() => { setIsSearchOpen(false); setSearch(''); }} 
-                className="text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform p-1"
+                className="text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform p-1 -ml-1"
               >
                 <ArrowLeft size={24} />
               </button>
@@ -636,32 +771,37 @@ export default function ChatsPage() {
                 placeholder={t.search}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[16px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b]"
+                className="flex-1 bg-[#f5f5f7] dark:bg-[#222224] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b]"
               />
+              {search && (
+                <button onClick={() => setSearch('')} className="p-1 text-[#86868b] active:scale-95">
+                  <X size={18} />
+                </button>
+              )}
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto pt-4 px-4 pb-20">
+          <main className="flex-1 overflow-y-auto pb-20">
             {search.length < 2 && searchResults.length === 0 && (
-              <div className="text-center py-20 text-[#86868b] dark:text-[#98989d]">
+              <div className="text-center py-24 text-[#86868b] dark:text-[#98989d]">
                  <Search size={40} className="mx-auto mb-3 opacity-30" />
                  <p className="text-[15px]">{t.startTyping}</p>
               </div>
             )}
 
             {search.length >= 2 && (
-              <div className="flex flex-col gap-5">
+              <div className="flex flex-col">
                 {searchResults.length > 0 && (
-                  <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden flex flex-col border border-black/5 dark:border-white/5">
-                    <div className="px-5 py-2 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/50 dark:bg-black/10">
+                  <div className="flex flex-col">
+                    <div className="px-4 py-2 bg-[#f5f5f7] dark:bg-[#222224]">
                       <span className="text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.globalSearch}</span>
                     </div>
                     {searchResults.map(renderGlobalUserCard)}
                   </div>
                 )}
                 {filteredChats.length > 0 && (
-                  <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden flex flex-col border border-black/5 dark:border-white/5">
-                    <div className="px-5 py-2 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/50 dark:bg-black/10">
+                  <div className="flex flex-col">
+                    <div className="px-4 py-2 bg-[#f5f5f7] dark:bg-[#222224]">
                       <span className="text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.yourChats}</span>
                     </div>
                     {filteredChats.map(renderChatCard)}
@@ -669,7 +809,7 @@ export default function ChatsPage() {
                 )}
                 
                 {searchResults.length === 0 && filteredChats.length === 0 && (
-                   <div className="text-center py-20 text-[#86868b] dark:text-[#98989d]">
+                   <div className="text-center py-24 text-[#86868b] dark:text-[#98989d]">
                       <Search size={40} className="mx-auto mb-3 opacity-30" />
                       <p className="text-[15px]">{t.nothingFound}</p>
                    </div>
@@ -680,61 +820,65 @@ export default function ChatsPage() {
         </div>
       ) : (
         <>
-          {/* Главный экран со списком чатов */}
-          <header className="px-5 pt-12 pb-3 relative z-10 bg-[#f5f5f7] dark:bg-[#161618]">
-            <div className="flex justify-between items-center h-full mb-2">
+          {/* Главная шапка приложения */}
+          <header className="px-4 pt-12 pb-3 sticky top-0 z-10 bg-white/90 dark:bg-[#161618]/90 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.06]">
+            <div className="flex justify-between items-center relative">
               <button 
                 onClick={() => setIsSidebarOpen(true)}
-                className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
+                className="w-[36px] h-[36px] shrink-0 rounded-full bg-[#e5e5ea] dark:bg-[#2c2c2e] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 active:scale-95 transition-transform"
               >
                 {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
                   <img 
                     src={currentUser.avatarUrl} 
                     alt="Avatar" 
                     className="w-full h-full object-cover" 
-                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=random&color=fff&size=120`; }} 
+                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=2c2c2e&color=f5f5f7&size=120`; }} 
                   />
                 ) : (
-                  <span className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[15px]">{currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"}</span>
+                  <span className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[15px]">
+                    {currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"}
+                  </span>
                 )}
               </button>
               
-              <h1 className="text-[24px] font-black uppercase tracking-[0.2em] bg-gradient-to-r from-gray-900 to-gray-500 dark:from-white dark:to-gray-400 bg-clip-text text-transparent drop-shadow-sm ml-2">
+              <h1 className="text-[20px] font-black uppercase tracking-[0.22em] text-[#1d1d1f] dark:text-[#f5f5f7] absolute left-1/2 -translate-x-1/2 select-none">
                 MESO
               </h1>
               
               <button 
                 onClick={() => setIsSearchOpen(true)}
-                className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform"
+                className="w-[36px] h-[36px] shrink-0 flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform"
               >
-                <Search size={22} strokeWidth={2.5} />
+                <Search size={21} strokeWidth={2.2} />
               </button>
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto px-4 pb-6">
-            <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden flex flex-col border border-black/5 dark:border-white/5">
+          {/* Edge-to-Edge список чатов */}
+          <main className="flex-1 overflow-y-auto">
+            <div className="flex flex-col w-full">
               {filteredChats.map(renderChatCard)}
             </div>
 
             {filteredChats.length === 0 && (
-              <div className="text-center py-24 text-[#86868b] dark:text-[#98989d]">
-                <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
-                <p className="text-[16px] font-medium tracking-tight">{t.noChats}</p>
+              <div className="text-center py-28 text-[#86868b] dark:text-[#98989d]">
+                <MessageSquare size={44} className="mx-auto mb-3 opacity-20" />
+                <p className="text-[15px] font-medium tracking-tight">{t.noChats}</p>
               </div>
             )}
           </main>
 
-          <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#222224]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+          {/* Нижняя панель навигации */}
+          <nav className="border-t border-black/[0.06] dark:border-white/[0.06] flex justify-around p-3 bg-white/90 dark:bg-[#161618]/90 backdrop-blur-xl z-10 pb-6">
             <Link href="/">
               <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95">
-                <MessageSquare size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
+                <MessageSquare size={25} className="mb-1" fill="currentColor" strokeWidth={1.5} />
                 <span className="text-[11px] font-semibold tracking-wide">{t.chats}</span>
               </a>
             </Link>
             <Link href="/wall">
               <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
-                <Users size={26} className="mb-1" strokeWidth={1.5} />
+                <Users size={25} className="mb-1" strokeWidth={1.5} />
                 <span className="text-[11px] font-semibold tracking-wide">{t.wall}</span>
               </a>
             </Link>
@@ -742,10 +886,83 @@ export default function ChatsPage() {
         </>
       )}
 
+      {/* Модальное окно создания Группы или Канала */}
+      {modalType && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setModalType(null)}>
+          <div className="bg-[#f5f5f7] dark:bg-[#1c1c1e] rounded-[24px] w-full max-w-sm p-6 shadow-2xl border border-black/5 dark:border-white/5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-[18px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">
+                {modalType === 'group' ? t.createGroup : t.createChannel}
+              </h3>
+              <button onClick={() => setModalType(null)} className="p-1 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] rounded-full transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateGroupOrChannel} className="flex flex-col gap-4">
+              <div className="flex justify-center my-1">
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-[84px] h-[84px] rounded-full bg-white dark:bg-[#2c2c2e] border border-black/5 dark:border-white/5 flex items-center justify-center overflow-hidden cursor-pointer relative active:scale-95 transition-transform shadow-sm"
+                >
+                  {modalAvatarUrl ? (
+                    <img src={modalAvatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <Camera size={28} className="text-[#86868b] dark:text-[#98989d]" />
+                  )}
+                  {isUploadingModalAvatar && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <Loader2 size={22} className="text-white animate-spin" />
+                    </div>
+                  )}
+                </div>
+                <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleAvatarUpload} />
+              </div>
+
+              <div className="bg-white dark:bg-[#2c2c2e] rounded-[16px] overflow-hidden border border-black/5 dark:border-white/5">
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder={modalType === 'group' ? t.groupName : t.channelName}
+                  value={modalType === 'group' ? groupName : channelName}
+                  onChange={(e) => modalType === 'group' ? setGroupName(e.target.value) : setChannelName(e.target.value)}
+                  className="w-full bg-transparent border-b border-black/5 dark:border-white/5 px-4 py-3.5 text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] outline-none"
+                />
+                <textarea
+                  rows={3}
+                  placeholder={modalType === 'group' ? t.descPlaceholderGroup : t.descPlaceholderChannel}
+                  value={channelDesc}
+                  onChange={(e) => setChannelDesc(e.target.value)}
+                  className="w-full bg-transparent px-4 py-3 text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex gap-2.5 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setModalType(null)}
+                  className="flex-1 py-3.5 bg-[#e5e5ea] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold rounded-[16px] transition-transform active:scale-95 text-[15px]"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingChat || isUploadingModalAvatar || !(modalType === 'group' ? groupName.trim() : channelName.trim())}
+                  className="flex-1 py-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] font-semibold rounded-[16px] transition-transform active:scale-95 flex items-center justify-center disabled:opacity-50 text-[15px]"
+                >
+                  {isCreatingChat ? <Loader2 size={18} className="animate-spin" /> : t.create}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно добавления аккаунта */}
       {showAddAccountModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#f5f5f7] dark:bg-[#161618] rounded-[24px] w-full max-w-sm p-6 shadow-2xl border border-black/5 dark:border-white/5">
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowAddAccountModal(false)}>
+          <div className="bg-[#f5f5f7] dark:bg-[#1c1c1e] rounded-[24px] w-full max-w-sm p-6 shadow-2xl border border-black/5 dark:border-white/5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-5">
               <h3 className="text-[18px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">
                 {isLoginMode ? t.loginAcc : t.newAcc}
               </h3>
@@ -754,13 +971,13 @@ export default function ChatsPage() {
               </button>
             </div>
             
-            <div className="flex bg-[#e5e5ea] dark:bg-[#333336] rounded-[12px] p-1 mb-6">
-               <button type="button" onClick={() => setIsLoginMode(true)} className={`flex-1 py-2 text-[14px] font-medium rounded-[10px] transition-colors ${isLoginMode ? 'bg-white dark:bg-[#222224] shadow-sm text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{t.login}</button>
-               <button type="button" onClick={() => setIsLoginMode(false)} className={`flex-1 py-2 text-[14px] font-medium rounded-[10px] transition-colors ${!isLoginMode ? 'bg-white dark:bg-[#222224] shadow-sm text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{t.create}</button>
+            <div className="flex bg-[#e5e5ea] dark:bg-[#2c2c2e] rounded-[12px] p-1 mb-5">
+               <button type="button" onClick={() => setIsLoginMode(true)} className={`flex-1 py-2 text-[14px] font-medium rounded-[10px] transition-colors ${isLoginMode ? 'bg-white dark:bg-[#1c1c1e] shadow-sm text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{t.login}</button>
+               <button type="button" onClick={() => setIsLoginMode(false)} className={`flex-1 py-2 text-[14px] font-medium rounded-[10px] transition-colors ${!isLoginMode ? 'bg-white dark:bg-[#1c1c1e] shadow-sm text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{t.create}</button>
             </div>
 
             <form onSubmit={handleAddAccountSubmit} className="space-y-4">
-              <div className="bg-white dark:bg-[#222224] rounded-[16px] overflow-hidden shadow-sm border border-black/5 dark:border-white/5">
+              <div className="bg-white dark:bg-[#2c2c2e] rounded-[16px] overflow-hidden shadow-sm border border-black/5 dark:border-white/5">
                 {!isLoginMode && (
                   <input type="text" placeholder={t.namePlaceholder} value={newName} onChange={e => setNewName(e.target.value)} className="w-full bg-transparent border-b border-black/5 dark:border-white/5 px-4 py-3.5 text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] outline-none transition-colors" />
                 )}
