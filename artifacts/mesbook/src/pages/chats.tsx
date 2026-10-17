@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, Plus, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2, ArrowLeft, Camera, Mic, Image as ImageIcon, Video } from 'lucide-react';
+import { Search, MessageSquare, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2, ArrowLeft, Camera, Mic, Image as ImageIcon, Video } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -123,7 +123,6 @@ const parseLastMessagePreview = (rawMsg: any, t: any) => {
 
   let text = rawMsg.split(CR).join('').trim();
 
-  // Убираем цитату ответа (> ...), если за ней идет само сообщение
   if (text.startsWith('> ')) {
     const parts = text.split(DOUBLE_NL);
     if (parts.length > 1) {
@@ -529,10 +528,11 @@ export default function ChatsPage() {
 
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
-        <a className="flex items-center px-4 active:bg-black/[0.05] dark:active:bg-white/[0.05] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-[#161618] relative">
-          <div className="py-2.5 flex items-center shrink-0">
+        {/* Тонкие линии идут от самого начала до самого конца экрана */}
+        <a className={`flex items-center px-4 active:bg-black/[0.05] dark:active:bg-white/[0.05] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-[#222224] relative ${isLast ? '' : 'border-b border-black/[0.07] dark:border-white/[0.07]'}`}>
+          <div className="py-3 flex items-center shrink-0">
             <div className="relative w-[54px] h-[54px]">
-              <div className={`w-full h-full rounded-full flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 ${isSaved ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
+              <div className={`w-full h-full rounded-full flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 ${isSaved ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
                 {isSaved ? (
                   <Bookmark size={24} fill="currentColor" />
                 ) : participant.avatarUrl && participant.avatarUrl.length > 5 ? (
@@ -540,19 +540,19 @@ export default function ChatsPage() {
                     src={participant.avatarUrl} 
                     alt="Avatar" 
                     className="w-full h-full object-cover" 
-                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=2c2c2e&color=f5f5f7&size=120`; }} 
+                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.displayName || 'U')}&background=333336&color=f5f5f7&size=120`; }} 
                   />
                 ) : (
                   <span className="text-[20px] font-semibold">{(participant.displayName || 'U').charAt(0).toUpperCase()}</span>
                 )}
               </div>
               {isOnline && !participant.isGroup && !participant.isChannel && !isSaved && (
-                <div className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#161618] rounded-full z-10"></div>
+                <div className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>
               )}
             </div>
           </div>
           
-          <div className={`ml-3.5 py-3 flex-1 overflow-hidden flex flex-col justify-center min-h-[72px] ${isLast ? '' : 'border-b border-black/[0.06] dark:border-white/[0.06]'}`}>
+          <div className="ml-3.5 py-3 flex-1 overflow-hidden flex flex-col justify-center min-h-[74px]">
             <div className="flex justify-between items-baseline mb-1">
               <h3 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] truncate pr-2 tracking-tight leading-snug">
                 {isSaved ? t.saved : (participant.displayName || t.companion)}
@@ -565,7 +565,7 @@ export default function ChatsPage() {
                   </div>
                 )}
                 {timeRaw && (
-                  <span className="text-[12px] font-medium text-[#86868b] dark:text-[#71717a]">
+                  <span className="text-[12px] font-medium text-[#86868b] dark:text-[#8e8e93]">
                     {formatChatListTime(timeRaw, lang)}
                   </span>
                 )}
@@ -609,31 +609,31 @@ export default function ChatsPage() {
       <Link key={user.id} href={'/chat/' + user.id}>
         <a 
           onClick={() => sessionStorage.setItem('chat_name_' + user.id, user.displayName)}
-          className="flex items-center px-4 active:bg-black/[0.05] dark:active:bg-white/[0.05] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-[#161618]"
+          className={`flex items-center px-4 active:bg-black/[0.05] dark:active:bg-white/[0.05] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-[#222224] ${isLast ? '' : 'border-b border-black/[0.07] dark:border-white/[0.07]'}`}
         >
-          <div className="py-2.5 flex items-center shrink-0">
+          <div className="py-3 flex items-center shrink-0">
             <div className="relative w-[50px] h-[50px]">
-              <div className="w-full h-full rounded-full bg-[#e5e5ea] dark:bg-[#2c2c2e] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5">
+              <div className="w-full h-full rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5">
                 {user.avatarUrl && user.avatarUrl.length > 5 ? (
                   <img 
                     src={user.avatarUrl} 
                     alt="Avatar" 
                     className="w-full h-full object-cover" 
-                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=2c2c2e&color=f5f5f7&size=120`; }} 
+                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=333336&color=f5f5f7&size=120`; }} 
                   />
                 ) : (
                   <span className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[18px]">{(user.displayName || 'U').charAt(0).toUpperCase()}</span>
                 )}
               </div>
               {isOnline && (
-                <div className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#161618] rounded-full z-10"></div>
+                <div className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-white dark:border-[#222224] rounded-full z-10"></div>
               )}
             </div>
           </div>
           
-          <div className={`ml-3.5 py-3.5 flex-1 flex flex-col justify-center ${isLast ? '' : 'border-b border-black/[0.06] dark:border-white/[0.06]'}`}>
+          <div className="ml-3.5 py-3.5 flex-1 flex flex-col justify-center">
             <span className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] tracking-tight">{user.displayName}</span>
-            {user.username && <span className="text-[13px] text-[#86868b] dark:text-[#71717a]">{user.username}</span>}
+            {user.username && <span className="text-[13px] text-[#86868b] dark:text-[#8e8e93]">{user.username}</span>}
           </div>
         </a>
       </Link>
@@ -642,11 +642,10 @@ export default function ChatsPage() {
 
   return (
     <div 
-      className="flex h-[100dvh] flex-col bg-white dark:bg-[#161618] transition-colors duration-300 relative overflow-hidden font-sans selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20"
+      className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 relative overflow-hidden font-sans selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Затемнение фона при открытом сайдбаре */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/40 z-40 transition-opacity backdrop-blur-sm animate-in fade-in duration-200"
@@ -654,7 +653,7 @@ export default function ChatsPage() {
         />
       )}
 
-      {/* Боковое меню (Sidebar) */}
+      {/* Боковое меню */}
       <div className={`fixed top-0 left-0 h-full w-[82%] max-w-[310px] bg-[#f5f5f7] dark:bg-[#161618] z-50 transform transition-transform duration-300 ease-out flex flex-col border-r border-black/5 dark:border-white/5 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 pt-12 pb-5 flex justify-between items-start relative bg-white dark:bg-[#222224] border-b border-black/5 dark:border-white/5">
           <div className="flex flex-col">
@@ -664,7 +663,7 @@ export default function ChatsPage() {
                   src={currentUser.avatarUrl} 
                   alt="Avatar" 
                   className="w-full h-full object-cover" 
-                  onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=2c2c2e&color=f5f5f7&size=120`; }} 
+                  onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=333336&color=f5f5f7&size=120`; }} 
                 />
               ) : (
                 currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "U"
@@ -699,7 +698,7 @@ export default function ChatsPage() {
                       className={`flex items-center gap-3 px-4 py-3 transition-colors w-full text-left border-b border-black/5 dark:border-white/5 last:border-0 ${isActive ? 'cursor-default' : 'active:bg-black/[0.04] dark:active:bg-white/[0.04]'}`}
                     >
                       <div className="w-8 h-8 bg-[#e5e5ea] dark:bg-[#333336] rounded-full flex items-center justify-center overflow-hidden shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[13px] border border-black/5 dark:border-white/5">
-                        {acc.avatarUrl && acc.avatarUrl.length > 5 ? <img src={acc.avatarUrl} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(acc.displayName || 'U')}&background=2c2c2e&color=f5f5f7&size=120`; }} /> : acc.displayName?.charAt(0).toUpperCase()}
+                        {acc.avatarUrl && acc.avatarUrl.length > 5 ? <img src={acc.avatarUrl} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(acc.displayName || 'U')}&background=333336&color=f5f5f7&size=120`; }} /> : acc.displayName?.charAt(0).toUpperCase()}
                       </div>
                       <span className={`text-[15px] tracking-tight flex-1 truncate ${isActive ? 'font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]' : 'font-medium text-[#86868b] dark:text-[#98989d]'}`}>
                         {acc.displayName}
@@ -756,8 +755,8 @@ export default function ChatsPage() {
 
       {/* Экран поиска */}
       {isSearchOpen ? (
-        <div className="flex flex-col h-full bg-white dark:bg-[#161618] animate-in fade-in duration-150">
-          <header className="px-4 pt-12 pb-3 bg-white/90 dark:bg-[#161618]/90 backdrop-blur-xl relative z-10 flex flex-col border-b border-black/[0.06] dark:border-white/[0.06]">
+        <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#161618] animate-in fade-in duration-150">
+          <header className="px-4 pt-12 pb-3 bg-[#f5f5f7]/90 dark:bg-[#161618]/90 backdrop-blur-xl relative z-10 flex flex-col">
             <div className="flex items-center gap-3 h-10">
               <button 
                 onClick={() => { setIsSearchOpen(false); setSearch(''); }} 
@@ -771,7 +770,7 @@ export default function ChatsPage() {
                 placeholder={t.search}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 bg-[#f5f5f7] dark:bg-[#222224] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b]"
+                className="flex-1 bg-white dark:bg-[#222224] border border-black/5 dark:border-white/5 rounded-full px-4 py-2 outline-none text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b]"
               />
               {search && (
                 <button onClick={() => setSearch('')} className="p-1 text-[#86868b] active:scale-95">
@@ -781,7 +780,7 @@ export default function ChatsPage() {
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto pb-20">
+          <main className="flex-1 overflow-y-auto pt-2 pb-20">
             {search.length < 2 && searchResults.length === 0 && (
               <div className="text-center py-24 text-[#86868b] dark:text-[#98989d]">
                  <Search size={40} className="mx-auto mb-3 opacity-30" />
@@ -790,18 +789,18 @@ export default function ChatsPage() {
             )}
 
             {search.length >= 2 && (
-              <div className="flex flex-col">
+              <div className="flex flex-col gap-4">
                 {searchResults.length > 0 && (
-                  <div className="flex flex-col">
-                    <div className="px-4 py-2 bg-[#f5f5f7] dark:bg-[#222224]">
+                  <div className="bg-white dark:bg-[#222224] rounded-[28px] overflow-hidden flex flex-col border-y border-black/[0.05] dark:border-white/[0.05] shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-none">
+                    <div className="px-4 py-2 border-b border-black/[0.06] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02]">
                       <span className="text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.globalSearch}</span>
                     </div>
                     {searchResults.map(renderGlobalUserCard)}
                   </div>
                 )}
                 {filteredChats.length > 0 && (
-                  <div className="flex flex-col">
-                    <div className="px-4 py-2 bg-[#f5f5f7] dark:bg-[#222224]">
+                  <div className="bg-white dark:bg-[#222224] rounded-[28px] overflow-hidden flex flex-col border-y border-black/[0.05] dark:border-white/[0.05] shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-none">
+                    <div className="px-4 py-2 border-b border-black/[0.06] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02]">
                       <span className="text-[11px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.yourChats}</span>
                     </div>
                     {filteredChats.map(renderChatCard)}
@@ -820,19 +819,19 @@ export default function ChatsPage() {
         </div>
       ) : (
         <>
-          {/* Главная шапка приложения */}
-          <header className="px-4 pt-12 pb-3 sticky top-0 z-10 bg-white/90 dark:bg-[#161618]/90 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.06]">
+          {/* Главная шапка с новым минималистичным логотипом MESO */}
+          <header className="px-4 pt-12 pb-3.5 sticky top-0 z-10 bg-[#f5f5f7]/85 dark:bg-[#161618]/85 backdrop-blur-2xl">
             <div className="flex justify-between items-center relative">
               <button 
                 onClick={() => setIsSidebarOpen(true)}
-                className="w-[36px] h-[36px] shrink-0 rounded-full bg-[#e5e5ea] dark:bg-[#2c2c2e] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 active:scale-95 transition-transform"
+                className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#e5e5ea] dark:bg-[#222224] flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/5 active:scale-95 transition-transform shadow-sm"
               >
                 {currentUser?.avatarUrl && currentUser.avatarUrl.length > 5 ? (
                   <img 
                     src={currentUser.avatarUrl} 
                     alt="Avatar" 
                     className="w-full h-full object-cover" 
-                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=2c2c2e&color=f5f5f7&size=120`; }} 
+                    onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=333336&color=f5f5f7&size=120`; }} 
                   />
                 ) : (
                   <span className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-[15px]">
@@ -841,26 +840,32 @@ export default function ChatsPage() {
                 )}
               </button>
               
-              <h1 className="text-[20px] font-black uppercase tracking-[0.22em] text-[#1d1d1f] dark:text-[#f5f5f7] absolute left-1/2 -translate-x-1/2 select-none">
-                MESO
-              </h1>
+              {/* Минималистичный необычный логотип MESO */}
+              <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white/70 dark:bg-[#222224]/80 border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] select-none">
+                <span className="w-1.5 h-1.5 rotate-45 bg-[#1d1d1f] dark:bg-[#f5f5f7] opacity-80" />
+                <div className="text-[15px] tracking-[0.28em] uppercase text-[#1d1d1f] dark:text-[#f5f5f7] flex items-center leading-none">
+                  <span className="font-light opacity-75">me</span>
+                  <span className="font-extrabold">so</span>
+                </div>
+                <span className="w-1.5 h-1.5 rounded-full bg-[#1d1d1f]/30 dark:bg-[#f5f5f7]/30" />
+              </div>
               
               <button 
                 onClick={() => setIsSearchOpen(true)}
-                className="w-[36px] h-[36px] shrink-0 flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform"
+                className="w-[38px] h-[38px] shrink-0 rounded-full bg-white/60 dark:bg-[#222224]/60 border border-black/5 dark:border-white/5 flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-90 transition-transform"
               >
-                <Search size={21} strokeWidth={2.2} />
+                <Search size={19} strokeWidth={2.2} />
               </button>
             </div>
           </header>
 
-          {/* Edge-to-Edge список чатов */}
-          <main className="flex-1 overflow-y-auto">
-            <div className="flex flex-col w-full">
-              {filteredChats.map(renderChatCard)}
-            </div>
-
-            {filteredChats.length === 0 && (
+          {/* Список чатов: без боковых отступов, закругленный сверху и снизу, с линиями во всю ширину */}
+          <main className="flex-1 overflow-y-auto pb-6">
+            {filteredChats.length > 0 ? (
+              <div className="w-full bg-white dark:bg-[#222224] rounded-[28px] shadow-[0_4px_24px_rgba(0,0,0,0.03)] dark:shadow-none overflow-hidden flex flex-col border-y border-black/[0.06] dark:border-white/[0.06]">
+                {filteredChats.map(renderChatCard)}
+              </div>
+            ) : (
               <div className="text-center py-28 text-[#86868b] dark:text-[#98989d]">
                 <MessageSquare size={44} className="mx-auto mb-3 opacity-20" />
                 <p className="text-[15px] font-medium tracking-tight">{t.noChats}</p>
@@ -868,20 +873,22 @@ export default function ChatsPage() {
             )}
           </main>
 
-          {/* Нижняя панель навигации */}
-          <nav className="border-t border-black/[0.06] dark:border-white/[0.06] flex justify-around p-3 bg-white/90 dark:bg-[#161618]/90 backdrop-blur-xl z-10 pb-6">
-            <Link href="/">
-              <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95">
-                <MessageSquare size={25} className="mb-1" fill="currentColor" strokeWidth={1.5} />
-                <span className="text-[11px] font-semibold tracking-wide">{t.chats}</span>
-              </a>
-            </Link>
-            <Link href="/wall">
-              <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
-                <Users size={25} className="mb-1" strokeWidth={1.5} />
-                <span className="text-[11px] font-semibold tracking-wide">{t.wall}</span>
-              </a>
-            </Link>
+          {/* Нижняя матовая панель с переключением пузырями */}
+          <nav className="border-t border-black/[0.06] dark:border-white/[0.06] px-6 pt-2 pb-6 bg-white/75 dark:bg-[#161618]/75 backdrop-blur-2xl z-20">
+            <div className="max-w-[280px] mx-auto bg-black/[0.04] dark:bg-white/[0.04] p-1 rounded-full flex items-center gap-1 border border-black/[0.04] dark:border-white/[0.05] backdrop-blur-xl">
+              <Link href="/">
+                <a className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full bg-white/90 dark:bg-[#2c2c2e]/95 text-[#1d1d1f] dark:text-[#f5f5f7] shadow-[0_2px_12px_rgba(0,0,0,0.08)] dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] border border-black/[0.04] dark:border-white/[0.08] backdrop-blur-xl transition-all duration-300 ease-out active:scale-90 animate-in zoom-in-95">
+                  <MessageSquare size={19} fill="currentColor" strokeWidth={1.8} />
+                  <span className="text-[13px] font-semibold tracking-tight">{t.chats}</span>
+                </a>
+              </Link>
+              <Link href="/wall">
+                <a className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] active:bg-black/[0.05] dark:active:bg-white/[0.06] transition-all duration-300 ease-out active:scale-90">
+                  <Users size={19} strokeWidth={1.8} />
+                  <span className="text-[13px] font-medium tracking-tight">{t.wall}</span>
+                </a>
+              </Link>
+            </div>
           </nav>
         </>
       )}
