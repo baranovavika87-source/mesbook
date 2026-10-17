@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRoute, Link, useLocation } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageSquare, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, LogOut, Bell, Send, Eye } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageSquare, MessageCircle, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, LogOut, Bell, Send, Eye } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -1444,7 +1444,7 @@ export default function ChatPage() {
               const mReactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
               const isMsgUploading = msg.id === uploadingMsgId; 
               
-              // Если это канал, ИЛИ мы хотим выровнять как в канале (все по левой стороне)
+              // Для каналов выравниваем по левому краю
               const isLeftAligned = isChannel || !isMe;
 
               return (
@@ -1468,7 +1468,7 @@ export default function ChatPage() {
                     <div 
                       className={isOnlyVideoNote 
                         ? `relative flex flex-col cursor-pointer bg-transparent`
-                        : `shadow-sm relative flex flex-col min-w-[60px] w-full cursor-pointer overflow-hidden ${!isLeftAligned ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`
+                        : `shadow-sm relative flex flex-col min-w-[60px] w-fit max-w-full cursor-pointer overflow-hidden ${!isLeftAligned ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`
                       }
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                       onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
@@ -1481,14 +1481,14 @@ export default function ChatPage() {
                         <>
                           {videoNoteUrl && (
                             <div className={`${isOnlyVideoNote ? '' : 'p-1.5'} flex justify-center`}>
-                               <div className={`relative inline-block w-[220px] h-[220px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
+                               <div className={`relative inline-block w-[240px] h-[240px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`} 
                                onClick={(e) => {
                                   e.stopPropagation();
                                   setExpandedVideoMsgId(expandedVideoMsgId === msg.id ? null : msg.id);
                                }}>
                                   <video src={videoNoteUrl} autoPlay loop muted playsInline className={`w-full h-full rounded-full object-cover`} />
                                   {expandedVideoMsgId !== msg.id && (
-                                     <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2.5 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
+                                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
                                         {timeStr}
                                         {!isLeftAligned && <div className="flex -space-x-1 ml-0.5"><Check size={10} strokeWidth={3}/>{(isMsgRead(msg, isSavedChat)) ? <Check size={10} strokeWidth={3}/> : null}</div>}
                                      </div>
@@ -1503,9 +1503,9 @@ export default function ChatPage() {
                             </div>
                           )}
 
-                          {/* КОМПАКТНАЯ СЕТКА МЕДИА ВО ВСЮ ШИРИНУ ПУЗЫРЯ */}
+                          {/* КОМПАКТНАЯ СЕТКА МЕДИА ДЛЯ ПУЗЫРЕЙ */}
                           {hasMedia && (
-                            <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[2px] bg-black/5 dark:bg-white/5' : 'flex justify-center bg-transparent'}`}>
+                            <div className={`relative overflow-hidden w-[260px] sm:w-[320px] max-w-full ${mediaUrls.length > 1 ? 'grid gap-[2px] bg-black/5 dark:bg-white/5' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                               {mediaUrls.map((url: string, idx: number) => {
                                  const isSingle = mediaUrls.length === 1;
                                  const itemClass = isSingle ? 'relative w-full flex justify-center' : `relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`;
@@ -1532,8 +1532,6 @@ export default function ChatPage() {
                               {/* Время поверх фото, если текста нет */}
                               {(!hasText && !voiceUrl && !videoNoteUrl) && (
                                 <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
-                                   {isChannel && <Eye size={10} strokeWidth={2.5} />}
-                                   {isChannel && <span>{msg.views || '1.2K'}</span>}
                                    {timeStr}
                                    {!isLeftAligned && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5}/>{(isMsgRead(msg, isSavedChat)) ? <Check size={11} strokeWidth={2.5}/> : null}</div>}
                                 </div>
@@ -1549,12 +1547,10 @@ export default function ChatPage() {
                                <div className="leading-[1.35] break-words whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>
                                  {text}
                                  
-                                 {/* Время и просмотры после текста */}
+                                 {/* Время и галочки после текста */}
                                  {(!voiceUrl && !videoNoteUrl) && (
                                    <span className={`float-right inline-flex items-center gap-1 text-[10px] ml-3 mt-1.5 pointer-events-none select-none relative top-[2px] ${!isLeftAligned ? 'opacity-60 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
                                      {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
-                                     {isChannel && <Eye size={10} strokeWidth={2.5} />}
-                                     {isChannel && <span>{msg.views || '1.2K'}</span>}
                                      {timeStr}
                                      {!isLeftAligned && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5}/>{(isMsgRead(msg, isSavedChat)) ? <Check size={12} strokeWidth={2.5}/> : null}</div>}
                                    </span>
@@ -1593,7 +1589,7 @@ export default function ChatPage() {
                     
                     {/* Кнопка комментариев для каналов */}
                     {isChannel && !isOnlyVideoNote && (
-                      <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }} className="w-full flex items-center justify-between px-2 py-1.5 mt-1 border border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-full transition-colors">
+                      <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }} className="w-full flex items-center justify-between px-3 py-2 mt-1 border border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-full transition-colors">
                         <div className="flex gap-2 items-center">
                           <MessageCircle size={15} className="text-[#86868b] dark:text-[#98989d]" />
                           <span className="text-[12px] font-medium text-[#86868b] dark:text-[#98989d]">
@@ -1682,8 +1678,10 @@ export default function ChatPage() {
 
       {/* КОНТЕКСТНОЕ МЕНЮ */}
       {contextMenu && (() => {
-         const menuWidth = 220; const menuHeight = 280;
-         let safeX = contextMenu.x; let safeY = contextMenu.y;
+         const menuWidth = 220; 
+         const menuHeight = 250;
+         let safeX = contextMenu.x; 
+         let safeY = contextMenu.y;
          
          if (safeX + menuWidth > window.innerWidth) safeX = window.innerWidth - menuWidth - 10;
          if (safeY + menuHeight > window.innerHeight) safeY = safeY - menuHeight;
@@ -1692,16 +1690,12 @@ export default function ChatPage() {
          const isMe = String(contextMenu.item.senderId) === String(currentUserId);
          const { hasText } = parseContent(contextMenu.item.content);
          
-         const showReply = contextMenu.type === 'comment' || !isChannel;
+         const showReply = contextMenu.type === 'comment';
          const showCopy = hasText;
-         const showForward = contextMenu.type === 'message';
-         const showPin = contextMenu.type === 'message' && (isAdmin || !isGroupOrChannel);
-         const showEdit = isMe && contextMenu.type === 'message';
-         const showDelete = isMe || isAdmin;
+         const showEdit = isMe && contextMenu.type === 'post';
+         const showDelete = isMe;
 
-         if (!showReply && !showCopy && !showEdit && !showDelete && !showForward && !showPin) return null;
-
-         const isPinned = pinnedMessages.some(m => m.id === contextMenu.item.id);
+         if (!showReply && !showCopy && !showEdit && !showDelete) return null;
 
          return (
            <div className="fixed inset-0 z-[9999]" onClick={() => setContextMenu(null)} onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}>
@@ -1713,28 +1707,45 @@ export default function ChatPage() {
                 </div>
                 <div className="flex flex-col bg-white/95 dark:bg-[#222224]/95 backdrop-blur-xl rounded-[20px] shadow-lg border border-black/5 dark:border-white/5 overflow-hidden w-full">
                    {showReply && (
-                     <button onClick={(e) => { e.stopPropagation(); if (contextMenu.type === 'comment') setCommentReplyingTo(contextMenu.item); else setReplyingTo(contextMenu.item); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Reply size={18} className="text-[#86868b]" /> {t.replyAction}</button>
+                     <button onClick={(e) => { e.stopPropagation(); setCommentReplyingTo(contextMenu.item); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5">
+                       <Reply size={18} className="text-[#86868b]" /> {t.replyAction}
+                     </button>
                    )}
                    {showCopy && (
-                     <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(contextMenu.item.content).text); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Copy size={18} className="text-[#86868b]" /> {t.copy}</button>
-                   )}
-                   {showPin && (
-                     <button onClick={(e) => { e.stopPropagation(); togglePin(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Pin size={18} className="text-[#86868b]" /> {isPinned ? t.unpin : t.pin}</button>
-                   )}
-                   {showForward && (
-                     <button onClick={(e) => { e.stopPropagation(); openForwardModal(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Forward size={18} className="text-[#86868b]" /> {t.forward}</button>
+                     <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(contextMenu.item.content).text); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5">
+                       <Copy size={18} className="text-[#86868b]" /> {t.copy}
+                     </button>
                    )}
                    {showEdit && (
-                     <button onClick={(e) => { e.stopPropagation(); setContextMenu(null); startEditing(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Edit2 size={18} className="text-[#86868b]" /> {t.editAction}</button>
+                     <button onClick={(e) => { e.stopPropagation(); setContextMenu(null); startEditingPost(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5">
+                       <Edit2 size={18} className="text-[#86868b]" /> {t.editAction}
+                     </button>
                    )}
                    {showDelete && (
-                     <button onClick={(e) => { e.stopPropagation(); if (contextMenu.type === 'comment') deleteMessage(contextMenu.id, true); else deleteMessage(contextMenu.id); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5"><Trash2 size={18} className="text-[#86868b]" /> {t.deleteAction}</button>
+                     <button onClick={(e) => { e.stopPropagation(); deleteItem(contextMenu.id, contextMenu.type === 'comment'); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5">
+                       <Trash2 size={18} className="text-[#86868b]" /> {t.deleteAction}
+                     </button>
                    )}
                 </div>
              </div>
            </div>
          );
       })()}
+
+      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+        <Link href="/">
+          <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
+            <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
+            <span className="text-[11px] font-semibold tracking-wide">{t.chats}</span>
+          </a>
+        </Link>
+        <Link href="/wall">
+          <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95">
+            <Users size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
+            <span className="text-[11px] font-semibold tracking-wide">{t.wall}</span>
+          </a>
+        </Link>
+      </nav>
     </div>
   );
 }
