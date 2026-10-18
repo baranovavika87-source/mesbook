@@ -528,7 +528,6 @@ export default function ChatsPage() {
 
     return (
       <Link key={'/chat/' + chat.id} href={'/chat/' + chat.id}>
-        {/* Тонкие линии идут от самого начала до самого конца экрана */}
         <a className={`flex items-center px-4 active:bg-black/[0.05] dark:active:bg-white/[0.05] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors bg-white dark:bg-[#222224] relative ${isLast ? '' : 'border-b border-black/[0.07] dark:border-white/[0.07]'}`}>
           <div className="py-3 flex items-center shrink-0">
             <div className="relative w-[54px] h-[54px]">
@@ -819,7 +818,7 @@ export default function ChatsPage() {
         </div>
       ) : (
         <>
-          {/* Главная шапка с новым минималистичным логотипом MESO */}
+          {/* Главная шапка с большой чистой надписью MESO */}
           <header className="px-4 pt-12 pb-3.5 sticky top-0 z-10 bg-[#f5f5f7]/85 dark:bg-[#161618]/85 backdrop-blur-2xl">
             <div className="flex justify-between items-center relative">
               <button 
@@ -840,15 +839,9 @@ export default function ChatsPage() {
                 )}
               </button>
               
-              {/* Минималистичный необычный логотип MESO */}
-              <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white/70 dark:bg-[#222224]/80 border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] select-none">
-                <span className="w-1.5 h-1.5 rotate-45 bg-[#1d1d1f] dark:bg-[#f5f5f7] opacity-80" />
-                <div className="text-[15px] tracking-[0.28em] uppercase text-[#1d1d1f] dark:text-[#f5f5f7] flex items-center leading-none">
-                  <span className="font-light opacity-75">me</span>
-                  <span className="font-extrabold">so</span>
-                </div>
-                <span className="w-1.5 h-1.5 rounded-full bg-[#1d1d1f]/30 dark:bg-[#f5f5f7]/30" />
-              </div>
+              <h1 className="absolute left-1/2 -translate-x-1/2 text-[22px] font-black uppercase tracking-[0.26em] pl-[0.26em] text-[#1d1d1f] dark:text-[#f5f5f7] select-none">
+                MESO
+              </h1>
               
               <button 
                 onClick={() => setIsSearchOpen(true)}
@@ -873,17 +866,17 @@ export default function ChatsPage() {
             )}
           </main>
 
-          {/* Нижняя матовая панель с переключением пузырями */}
-          <nav className="border-t border-black/[0.06] dark:border-white/[0.06] px-6 pt-2 pb-6 bg-white/75 dark:bg-[#161618]/75 backdrop-blur-2xl z-20">
-            <div className="max-w-[280px] mx-auto bg-black/[0.04] dark:bg-white/[0.04] p-1 rounded-full flex items-center gap-1 border border-black/[0.04] dark:border-white/[0.05] backdrop-blur-xl">
+          {/* Два независимых матовых пузыря на расстоянии друг от друга */}
+          <nav className="border-t border-black/[0.06] dark:border-white/[0.06] px-6 pt-3 pb-6 bg-white/70 dark:bg-[#161618]/70 backdrop-blur-2xl z-20">
+            <div className="max-w-[310px] mx-auto flex items-center justify-center gap-5">
               <Link href="/">
-                <a className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full bg-white/90 dark:bg-[#2c2c2e]/95 text-[#1d1d1f] dark:text-[#f5f5f7] shadow-[0_2px_12px_rgba(0,0,0,0.08)] dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] border border-black/[0.04] dark:border-white/[0.08] backdrop-blur-xl transition-all duration-300 ease-out active:scale-90 animate-in zoom-in-95">
+                <a className="flex-1 flex items-center justify-center gap-2 py-2.5 px-5 rounded-full bg-white/95 dark:bg-[#2c2c2e]/95 text-[#1d1d1f] dark:text-[#f5f5f7] shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35),inset_0_1px_1px_rgba(255,255,255,0.12)] border border-black/[0.06] dark:border-white/[0.1] backdrop-blur-xl transition-all duration-300 ease-out active:scale-90 animate-in zoom-in-95">
                   <MessageSquare size={19} fill="currentColor" strokeWidth={1.8} />
                   <span className="text-[13px] font-semibold tracking-tight">{t.chats}</span>
                 </a>
               </Link>
               <Link href="/wall">
-                <a className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] active:bg-black/[0.05] dark:active:bg-white/[0.06] transition-all duration-300 ease-out active:scale-90">
+                <a className="flex-1 flex items-center justify-center gap-2 py-2.5 px-5 rounded-full bg-white/55 dark:bg-[#222224]/75 text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] border border-black/[0.05] dark:border-white/[0.06] backdrop-blur-xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] transition-all duration-300 ease-out active:scale-90">
                   <Users size={19} strokeWidth={1.8} />
                   <span className="text-[13px] font-medium tracking-tight">{t.wall}</span>
                 </a>
