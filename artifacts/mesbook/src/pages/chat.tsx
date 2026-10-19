@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRoute, Link, useLocation } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageSquare, MessageCircle, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, LogOut, Bell, Send } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageSquare, MessageCircle, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, LogOut, Bell, Send, Eye } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { saveSecureData, loadSecureData } from '../cryptoDB';
 
 let socket: any = null;
 const NL = String.fromCharCode(10);
@@ -218,13 +219,29 @@ export default function ChatPage() {
     }
   }, []);
 
-  const [messages, setMessages] = useState<any[]>(() => {
-    try {
-      if (isSavedChat) return JSON.parse(localStorage.getItem('mesbook_saved_messages_' + currentUserId) || '[]').map((m: any) => ({ ...m, isSending: false }));
-      const cached = localStorage.getItem('mesbook_messages_cache_' + currentUserId + '_' + chatId);
-      return cached ? JSON.parse(cached) : [];
-    } catch (e) { return []; }
-  });
+  // ИНИЦИАЛИЗАЦИЯ ПУСТЫМ МАССИВОМ ДЛЯ АСИНХРОННОЙ ЗАГРУЗКИ ИЗ INDEXEDDB
+  const [messages, setMessages] = useState<any[]>([]);
+
+  // АСИНХРОННАЯ ЗАГРУЗКА ИЗ ЗАШИФРОВАННОЙ БАЗЫ
+  useEffect(() => {
+    const fetchLocalEncryptedMessages = async () => {
+      const dbKey = isSavedChat ? `mesbook_saved_messages_${currentUserId}` : `mesbook_messages_cache_${currentUserId}_${chatId}`;
+      const decryptedData = await loadSecureData(dbKey);
+      if (decryptedData && Array.isArray(decryptedData)) {
+        setMessages(decryptedData.map((m: any) => ({ ...m, isSending: false })));
+      }
+    };
+    fetchLocalEncryptedMessages();
+  }, [chatId, currentUserId, isSavedChat]);
+
+  // АСИНХРОННОЕ ШИФРОВАНИЕ И СОХРАНЕНИЕ ПРИ ОБНОВЛЕНИИ
+  useEffect(() => {
+    if (messages.length > 0) {
+      const confirmedMsgs = messages.filter(m => !m.isSending);
+      const dbKey = isSavedChat ? `mesbook_saved_messages_${currentUserId}` : `mesbook_messages_cache_${currentUserId}_${chatId}`;
+      saveSecureData(dbKey, confirmedMsgs);
+    }
+  }, [messages, chatId, currentUserId, isSavedChat]);
 
   const [content, setContent] = useState('');
   const [showProfile, setShowProfile] = useState(false);
@@ -344,12 +361,6 @@ export default function ChatPage() {
     }
   }, [chatId]);
 
-  useEffect(() => {
-    if (!isSavedChat && messages.length > 0) {
-      localStorage.setItem('mesbook_messages_cache_' + currentUserId + '_' + chatId, JSON.stringify(messages.filter(m => !m.isSending)));
-    }
-  }, [messages, chatId, currentUserId, isSavedChat]);
-
   const loadComments = async (targetChatId: number, messageId: number) => {
     try {
       const commRes = await fetch(`/api/chats/${targetChatId}/messages/${messageId}/comments`, { headers: { 'Authorization': 'Bearer ' + currentUserId } });
@@ -359,10 +370,8 @@ export default function ChatPage() {
 
   const loadData = async () => {
     if (isSavedChat) {
-      try {
-        const saved = JSON.parse(localStorage.getItem('mesbook_saved_messages_' + currentUserId) || '[]');
-        setMessages(saved.map((m: any) => ({ ...m, isSending: false })));
-      } catch (e) {}
+      const saved = await loadSecureData('mesbook_saved_messages_' + currentUserId);
+      if (saved && Array.isArray(saved)) setMessages(saved.map((m: any) => ({ ...m, isSending: false })));
       setIsLoadingRole(false);
       return;
     }
@@ -569,7 +578,10 @@ export default function ChatPage() {
   const sendDirectMessage = async (msgContent: string) => {
     const tempMsg = { id: Date.now(), content: msgContent, isSending: true, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
     if (isSavedChat) {
-      setMessages((prev: any) => { const u = [...prev, { ...tempMsg, isSending: false }]; localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(u)); return u; });
+      const currentSaved = await loadSecureData(`mesbook_saved_messages_${currentUserId}`) || [];
+      const updatedSaved = [...currentSaved, { ...tempMsg, isSending: false }];
+      setMessages(updatedSaved);
+      saveSecureData(`mesbook_saved_messages_${currentUserId}`, updatedSaved);
       forceScrollToBottom();
       return;
     }
@@ -1726,4 +1738,4 @@ export default function ChatPage() {
       })()}
     </div>
   );
-}
+    }
