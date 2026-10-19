@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, ArrowLeft, Download, Copy, Reply, ChevronRight, Paperclip, Heart } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, ArrowLeft, Download, Copy, Reply, ChevronRight, Paperclip } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -556,7 +556,7 @@ export default function WallPage() {
                     
                     {/* ТЕКСТ ПОСТА */}
                     {hasText && (
-                      <div className="px-3.5 pt-2.5 pb-1">
+                      <div className="px-3.5 pt-2.5 pb-0.5">
                          {quotedText && (
                            <div className="mb-1.5 pl-2.5 border-l-[2px] text-[12px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>
                          )}
@@ -566,30 +566,39 @@ export default function WallPage() {
                       </div>
                     )}
 
-                    {/* РЕАКЦИИ СЛЕВА И ВРЕМЯ СПРАВА ВНИЗУ ПОСТА */}
-                    <div className="px-3.5 py-2 flex items-center justify-between gap-2">
-                       <div className="flex flex-wrap gap-1.5">
-                         {pReactionsKeys.length > 0 ? pReactionsKeys.map(key => {
-                           const rData = post.reactions[key];
-                           const count = typeof rData === 'number' ? rData : (rData?.count || 1);
-                           
-                           return (
-                             <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, key); }} className={`flex items-center justify-center gap-1.5 h-[26px] px-2.5 rounded-full border transition-transform hover:scale-105 active:scale-95 ${post.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
-                               <span className="text-[13px] leading-none flex items-center justify-center mt-[1px]">{key}</span>
-                               <span className={`text-[12px] font-semibold leading-none flex items-center justify-center mt-[1px] ${post.myReaction === key ? 'text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{count}</span>
-                             </button>
-                           );
-                         }) : (
-                           <button onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, '❤️'); }} className="flex items-center justify-center h-[26px] px-2.5 rounded-full bg-[#f5f5f7] dark:bg-[#333336] border border-black/5 dark:border-white/5 text-[#86868b] dark:text-[#98989d] transition-transform active:scale-95">
-                             <Heart size={13} strokeWidth={2} />
+                    {/* РЕАКЦИИ КАК В TELEGRAM И ВРЕМЯ В САМОМ НИЗУ СПРАВА */}
+                    <div className="px-3.5 pt-2 pb-2.5 flex flex-wrap items-end gap-1.5">
+                       {pReactionsKeys.map(key => {
+                         const rData = post.reactions[key];
+                         const count = typeof rData === 'number' ? rData : (rData?.count || 1);
+                         const isSelected = post.myReaction === key;
+                         
+                         return (
+                           <button
+                             key={key}
+                             onClick={(e) => { e.stopPropagation(); toggleReaction(post.id, key); }}
+                             className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full transition-all active:scale-90 ${
+                               isSelected
+                                 ? 'bg-[#1d1d1f] text-[#f5f5f7] dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm'
+                                 : 'bg-black/[0.06] dark:bg-white/[0.08] text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.1] dark:hover:bg-white/[0.12]'
+                             }`}
+                           >
+                             <span className="text-[14px] leading-none flex items-center justify-center">{key}</span>
+                             <span className={`text-[12px] font-semibold leading-none flex items-center justify-center ${
+                               isSelected ? 'text-[#f5f5f7] dark:text-[#1d1d1f]' : 'text-[#1d1d1f]/80 dark:text-[#f5f5f7]/80'
+                             }`}>
+                               {count}
+                             </span>
                            </button>
-                         )}
-                       </div>
-                       <span className="text-[11px] font-medium text-[#86868b] dark:text-[#98989d] shrink-0">{timeStr}</span>
+                         );
+                       })}
+                       <span className="ml-auto text-[11px] font-medium text-[#86868b] dark:text-[#98989d] leading-none pt-1 select-none">
+                         {timeStr}
+                       </span>
                     </div>
 
                     {/* КОМПАКТНАЯ СТРОКА КОММЕНТАРИЕВ */}
-                    <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); loadComments(post.chatId, post.id); }} className="w-full flex items-center justify-between px-3.5 py-2 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04]">
+                    <button onClick={(e) => { e.stopPropagation(); setActiveThread(post); loadComments(post.chatId, post.id); }} className="w-full flex items-center justify-between px-3.5 py-2.5 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04]">
                       <div className="flex gap-2 items-center">
                         <MessageCircle size={15} className="text-[#86868b] dark:text-[#98989d]" />
                         <span className="text-[12px] font-medium text-[#86868b] dark:text-[#98989d]">
@@ -793,19 +802,22 @@ export default function WallPage() {
          );
       })()}
 
-      <nav className="border-t border-black/[0.05] dark:border-white/[0.05] flex justify-around p-3 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-xl z-10 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
-        <Link href="/">
-          <a className="flex flex-col items-center text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] transition-colors active:scale-95">
-            <MessageSquare size={26} className="mb-1" strokeWidth={1.5} />
-            <span className="text-[11px] font-semibold tracking-wide">{t.chats}</span>
-          </a>
-        </Link>
-        <Link href="/wall">
-          <a className="flex flex-col items-center text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95">
-            <Users size={26} className="mb-1" fill="currentColor" strokeWidth={1.5} />
-            <span className="text-[11px] font-semibold tracking-wide">{t.wall}</span>
-          </a>
-        </Link>
+      {/* ДВА НЕЗАВИСИМЫХ МАТОВЫХ ПУЗЫРЯ НАВИГАЦИИ */}
+      <nav className="border-t border-black/[0.06] dark:border-white/[0.06] px-6 pt-3 pb-6 bg-white/70 dark:bg-[#161618]/70 backdrop-blur-2xl z-20">
+        <div className="max-w-[310px] mx-auto flex items-center justify-center gap-5">
+          <Link href="/">
+            <a className="flex-1 flex items-center justify-center gap-2 py-2.5 px-5 rounded-full bg-white/55 dark:bg-[#222224]/75 text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] border border-black/[0.05] dark:border-white/[0.06] backdrop-blur-xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] transition-all duration-300 ease-out active:scale-90">
+              <MessageSquare size={19} strokeWidth={1.8} />
+              <span className="text-[13px] font-medium tracking-tight">{t.chats}</span>
+            </a>
+          </Link>
+          <Link href="/wall">
+            <a className="flex-1 flex items-center justify-center gap-2 py-2.5 px-5 rounded-full bg-white/95 dark:bg-[#2c2c2e]/95 text-[#1d1d1f] dark:text-[#f5f5f7] shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35),inset_0_1px_1px_rgba(255,255,255,0.12)] border border-black/[0.06] dark:border-white/[0.1] backdrop-blur-xl transition-all duration-300 ease-out active:scale-90 animate-in zoom-in-95">
+              <Users size={19} fill="currentColor" strokeWidth={1.8} />
+              <span className="text-[13px] font-semibold tracking-tight">{t.wall}</span>
+            </a>
+          </Link>
+        </div>
       </nav>
     </div>
   );
