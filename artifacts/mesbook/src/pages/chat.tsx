@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRoute, Link, useLocation } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageSquare, MessageCircle, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, LogOut, Bell, Send, Eye } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageSquare, MessageCircle, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, LogOut, Bell, Send, Clock } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { saveSecureData, loadSecureData } from '../cryptoDB';
 
@@ -36,7 +36,7 @@ const translations = {
   },
   en: {
     saved: "Saved Messages", companion: "Companion", attachment: "Attachment", photo: "Photo",
-    info: "Info", name: "Name", desc: "Description", bio: "Bio", channel: "Channel",
+    info: "Info", name: "Name", desc: "Описание", bio: "Bio", channel: "Channel",
     personalChannel: "Personal Channel", birthday: "Birthday", online: "online", group: "Group",
     subs: ['subscriber', 'subscribers'], members: ['member', 'members'], onlineCount: "online",
     subscribe: "Subscribe", joinGroup: "Join Group", mute: "Mute", unmute: "Unmute",
@@ -109,7 +109,7 @@ const isMediaUrl = (word: string) => {
   return lower.includes('cloudinary.com') || lower.includes('/upload/') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp') || lower.endsWith('.gif') || lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov');
 };
 
-const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration }: any) => {
+const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration, isSending }: any) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -175,7 +175,9 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration }:
           <span>{formatAudioTime(isPlaying ? audioRef.current?.currentTime || 0 : (fixedDuration || duration))}</span>
           <div className="flex items-center gap-1">
             <span>{timeStr}</span>
-            {isMe && <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5} />{(readStatus || isSaved) && <Check size={11} strokeWidth={2.5} />}</div>}
+            {isMe && (
+              isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse" /> : <div className="flex -space-x-1"><Check size={11} strokeWidth={2.5} />{(readStatus || isSaved) && <Check size={11} strokeWidth={2.5} />}</div>
+            )}
           </div>
         </div>
       </div>
@@ -219,36 +221,177 @@ export default function ChatPage() {
     }
   }, []);
 
-  // ИНИЦИАЛИЗАЦИЯ ПУСТЫМ МАССИВОМ ДЛЯ АСИНХРОННОЙ ЗАГРУЗКИ ИЗ INDEXEDDB
   const [messages, setMessages] = useState<any[]>([]);
+  const isFlushingRef = useRef(false);
+  const outboxKey = `mesbook_outbox_${currentUserId}_${chatId}`;
+  const cacheKey = isSavedChat ? `mesbook_saved_messages_${currentUserId}` : `mesbook_messages_cache_${currentUserId}_${chatId}`;
 
-  // АСИНХРОННАЯ ЗАГРУЗКА ИЗ ЗАШИФРОВАННОЙ БАЗЫ
+  // ЗАГРУЗКА СООБЩЕНИЙ И ОФФЛАЙН-ОЧЕРЕДИ ИЗ INDEXEDDB
   useEffect(() => {
     const fetchLocalEncryptedMessages = async () => {
-      const dbKey = isSavedChat ? `mesbook_saved_messages_${currentUserId}` : `mesbook_messages_cache_${currentUserId}_${chatId}`;
-      const decryptedData = await loadSecureData(dbKey);
-      if (decryptedData && Array.isArray(decryptedData)) {
-        setMessages(decryptedData.map((m: any) => ({ ...m, isSending: false })));
+      const decryptedData = await loadSecureData(cacheKey);
+      const outboxData = isSavedChat ? [] : (await loadSecureData(outboxKey) || []);
+      const baseMsgs = Array.isArray(decryptedData) ? decryptedData.map((m: any) => ({ ...m, isSending: false })) : [];
+      const pendingMsgs = Array.isArray(outboxData) ? outboxData.map((m: any) => ({ ...m, isSending: true })) : [];
+      if (baseMsgs.length > 0 || pendingMsgs.length > 0) {
+        setMessages([...baseMsgs, ...pendingMsgs]);
       }
     };
     fetchLocalEncryptedMessages();
   }, [chatId, currentUserId, isSavedChat]);
 
-  // АСИНХРОННОЕ ШИФРОВАНИЕ И СОХРАНЕНИЕ ПРИ ОБНОВЛЕНИИ
+  // СОХРАНЕНИЕ ПОДТВЕРЖДЕННЫХ СООБЩЕНИЙ В ЗАШИФРОВАННЫЙ КЭШ
   useEffect(() => {
     if (messages.length > 0) {
       const confirmedMsgs = messages.filter(m => !m.isSending);
-      const dbKey = isSavedChat ? `mesbook_saved_messages_${currentUserId}` : `mesbook_messages_cache_${currentUserId}_${chatId}`;
-      saveSecureData(dbKey, confirmedMsgs);
+      if (confirmedMsgs.length > 0 || isSavedChat) {
+        saveSecureData(cacheKey, confirmedMsgs);
+      }
     }
   }, [messages, chatId, currentUserId, isSavedChat]);
+
+  // ФОНОВАЯ ДОСТАВКА ОФФЛАЙН-ОЧЕРЕДИ (LOCAL-FIRST)
+  const flushOutbox = async () => {
+    if (isSavedChat || isFlushingRef.current || !navigator.onLine) return;
+    isFlushingRef.current = true;
+    try {
+      const queue: any[] = (await loadSecureData(outboxKey)) || [];
+      if (queue.length === 0) { isFlushingRef.current = false; return; }
+      const remaining: any[] = [];
+      for (const item of queue) {
+        try {
+          const res = await fetch('/api/chats/' + chatId + '/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
+            body: JSON.stringify({ content: item.content })
+          });
+          if (!res.ok) remaining.push(item);
+        } catch (err) {
+          remaining.push(item);
+        }
+      }
+      await saveSecureData(outboxKey, remaining);
+      if (remaining.length < queue.length) await loadData();
+    } catch (e) {}
+    isFlushingRef.current = false;
+  };
+
+  useEffect(() => {
+    const onOnline = () => flushOutbox();
+    window.addEventListener('online', onOnline);
+    flushOutbox();
+    return () => window.removeEventListener('online', onOnline);
+  }, [chatId, currentUserId]);
 
   const [content, setContent] = useState('');
   const [showProfile, setShowProfile] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [editingMsg, setEditingMsg] = useState<any>(null);
   const [isUploading] = useState(false);
+
+  // ЛАЙТБОКС С ЗУМОМ (PINCH-TO-ZOOM + DOUBLE TAP)
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  const [zoomScale, setZoomScale] = useState(1);
+  const [zoomPos, setZoomPos] = useState({ x: 0, y: 0 });
+  const pinchStartDistRef = useRef<number | null>(null);
+  const pinchStartScaleRef = useRef<number>(1);
+  const panStartRef = useRef<{ x: number, y: number, origX: number, origY: number } | null>(null);
+  const lastTapPhotoRef = useRef<number>(0);
+
+  const openLightbox = (url: string) => {
+    setZoomScale(1);
+    setZoomPos({ x: 0, y: 0 });
+    setFullScreenImage(url);
+    setContextMenu(null);
+  };
+
+  const handleLightboxTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchStartDistRef.current = Math.hypot(dx, dy);
+      pinchStartScaleRef.current = zoomScale;
+    } else if (e.touches.length === 1) {
+      const now = Date.now();
+      if (now - lastTapPhotoRef.current < 280) {
+        if (zoomScale > 1) { setZoomScale(1); setZoomPos({ x: 0, y: 0 }); }
+        else setZoomScale(2.5);
+        lastTapPhotoRef.current = 0;
+        return;
+      }
+      lastTapPhotoRef.current = now;
+      if (zoomScale > 1) {
+        panStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, origX: zoomPos.x, origY: zoomPos.y };
+      }
+    }
+  };
+
+  const handleLightboxTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchStartDistRef.current) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const newScale = Math.min(4, Math.max(1, pinchStartScaleRef.current * (dist / pinchStartDistRef.current)));
+      setZoomScale(newScale);
+      if (newScale === 1) setZoomPos({ x: 0, y: 0 });
+    } else if (e.touches.length === 1 && zoomScale > 1 && panStartRef.current) {
+      const dx = e.touches[0].clientX - panStartRef.current.x;
+      const dy = e.touches[0].clientY - panStartRef.current.y;
+      setZoomPos({ x: panStartRef.current.origX + dx, y: panStartRef.current.origY + dy });
+    }
+  };
+
+  const handleLightboxTouchEnd = () => {
+    pinchStartDistRef.current = null;
+    panStartRef.current = null;
+    if (zoomScale < 1.05) { setZoomScale(1); setZoomPos({ x: 0, y: 0 }); }
+  };
+
+  // СВАЙП ДЛЯ ОТВЕТА (ФИЗИКА ЖЕСТОВ)
+  const [swipeState, setSwipeState] = useState<{ id: number | null, offset: number }>({ id: null, offset: 0 });
+  const swipeTouchRef = useRef<{ id: number, x: number, y: number, item: any, locked: 'h' | 'v' | null, vibrated: boolean } | null>(null);
+
+  const handleMsgSwipeStart = (e: React.TouchEvent, msg: any) => {
+    if (e.touches.length !== 1) return;
+    swipeTouchRef.current = { id: msg.id, x: e.touches[0].clientX, y: e.touches[0].clientY, item: msg, locked: null, vibrated: false };
+  };
+
+  const handleMsgSwipeMove = (e: React.TouchEvent) => {
+    const st = swipeTouchRef.current;
+    if (!st || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - st.x;
+    const dy = e.touches[0].clientY - st.y;
+    if (!st.locked) {
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) st.locked = 'h';
+      else if (Math.abs(dy) > 8) st.locked = 'v';
+    }
+    if (st.locked === 'h' && dx < 0) {
+      const offset = Math.max(-78, dx * 0.55);
+      if (offset <= -52 && !st.vibrated) {
+        st.vibrated = true;
+        if (window.navigator?.vibrate) window.navigator.vibrate(20);
+      } else if (offset > -52 && st.vibrated) {
+        st.vibrated = false;
+      }
+      setSwipeState({ id: st.id, offset });
+    }
+  };
+
+  const handleMsgSwipeEnd = () => {
+    const st = swipeTouchRef.current;
+    if (st && swipeState.id === st.id && swipeState.offset <= -52) {
+      if (!isChannel) {
+        setReplyingTo(st.item);
+        setTimeout(() => inputRef.current?.focus(), 50);
+      } else {
+        setActiveThread(st.item);
+        loadComments(st.item.chatId || chatId, st.item.id);
+      }
+    }
+    swipeTouchRef.current = null;
+    if (swipeState.id !== null) setSwipeState({ id: null, offset: 0 });
+  };
+
   const [contextMenu, setContextMenu] = useState<{ id: number, x: number, y: number, type: 'message' | 'comment', item: any } | null>(null);
 
   const [activeThread, setActiveThread] = useState<any>(null);
@@ -305,7 +448,6 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const commentsScrollRef = useRef<HTMLDivElement>(null);
 
-  const photoOpenedRef = useRef(false);
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const [chatInfo] = useState<any>(() => {
@@ -346,12 +488,15 @@ export default function ChatPage() {
           setTimeout(() => setTypingUsers(prev => prev.filter(n => n !== data.name)), 3000);
         }
       };
+      const handleReconnect = () => flushOutbox();
+      socket.on('connect', handleReconnect);
       socket.on('chat_update', handleUpdate);
       socket.on('message_read', handleUpdate);
       socket.on('messages_read', handleUpdate);
       socket.on('message', handleUpdate);
       socket.on('typing', handleTyping);
       return () => {
+        socket.off('connect', handleReconnect);
         socket.off('chat_update', handleUpdate);
         socket.off('message_read', handleUpdate);
         socket.off('messages_read', handleUpdate);
@@ -395,7 +540,9 @@ export default function ChatPage() {
       const msgRes = await fetch('/api/chats/' + chatId + '/messages', { headers: { 'Authorization': 'Bearer ' + currentUserId } });
       if (msgRes.ok) {
         const data = await msgRes.json();
-        setMessages(Array.isArray(data.messages) ? data.messages : []);
+        const serverMsgs = Array.isArray(data.messages) ? data.messages : [];
+        const pendingOutbox = (await loadSecureData(outboxKey)) || [];
+        setMessages([...serverMsgs, ...pendingOutbox.map((m: any) => ({ ...m, isSending: true }))]);
         if (data.pinnedMessage) {
           setPinnedMessages(prev => prev.find(m => m.id === data.pinnedMessage.id) ? prev : [...prev, data.pinnedMessage]);
         }
@@ -407,7 +554,7 @@ export default function ChatPage() {
   useEffect(() => { loadData(); }, [chatId, activeThread]);
 
   const forceScrollToBottom = () => { setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 10); };
-  useEffect(() => { forceScrollToBottom(); }, [messages]);
+  useEffect(() => { forceScrollToBottom(); }, [messages.length]);
 
   useEffect(() => {
     if (commentsScrollRef.current && threadComments.length > 0) {
@@ -575,8 +722,9 @@ export default function ChatPage() {
     }
   };
 
+  // ОПТИМИСТИЧНАЯ ОТПРАВКА С ОФФЛАЙН-ОЧЕРЕДЬЮ
   const sendDirectMessage = async (msgContent: string) => {
-    const tempMsg = { id: Date.now(), content: msgContent, isSending: true, senderId: currentUserId, createdAt: new Date().toISOString(), read: false };
+    const tempMsg = { id: Date.now() + Math.floor(Math.random() * 1000), content: msgContent, isSending: true, senderId: currentUserId, senderName: currentUser?.displayName, createdAt: new Date().toISOString(), read: false };
     if (isSavedChat) {
       const currentSaved = await loadSecureData(`mesbook_saved_messages_${currentUserId}`) || [];
       const updatedSaved = [...currentSaved, { ...tempMsg, isSending: false }];
@@ -585,12 +733,27 @@ export default function ChatPage() {
       forceScrollToBottom();
       return;
     }
+
     setMessages((prev: any) => [...prev, tempMsg]);
     forceScrollToBottom();
+
+    const currentOutbox = (await loadSecureData(outboxKey)) || [];
+    await saveSecureData(outboxKey, [...currentOutbox, tempMsg]);
+
     try {
-      await fetch('/api/chats/' + chatId + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: msgContent }) });
-      loadData();
-    } catch (error) {}
+      const res = await fetch('/api/chats/' + chatId + '/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId },
+        body: JSON.stringify({ content: msgContent })
+      });
+      if (res.ok) {
+        const latestOutbox = (await loadSecureData(outboxKey)) || [];
+        await saveSecureData(outboxKey, latestOutbox.filter((m: any) => m.id !== tempMsg.id));
+        loadData();
+      }
+    } catch (error) {
+      // Остается в зашифрованном outbox со значком часиков до появления сети
+    }
   };
 
   const handleSend = async (e: React.FormEvent) => {
@@ -751,6 +914,14 @@ export default function ChatPage() {
 
   const deleteMessage = async (msgId: number, isComment = false) => {
     try {
+      if (!isComment) {
+        const latestOutbox = (await loadSecureData(outboxKey)) || [];
+        if (latestOutbox.some((m: any) => m.id === msgId)) {
+          await saveSecureData(outboxKey, latestOutbox.filter((m: any) => m.id !== msgId));
+          setMessages(prev => prev.filter(m => m.id !== msgId));
+          return;
+        }
+      }
       const targetChatId = isComment && activeThread ? (activeThread.chatId || chatId) : chatId;
       await fetch(`/api/chats/${targetChatId}/messages/${msgId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId } });
       if (isComment && activeThread) loadComments(targetChatId, activeThread.id);
@@ -759,32 +930,23 @@ export default function ChatPage() {
   };
 
   const openGlobalMenu = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'message' | 'comment') => {
-    e.stopPropagation(); e.preventDefault();
-    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
+    e.stopPropagation();
     const clientX = 'touches' in e && e.touches.length > 0 ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = 'touches' in e && e.touches.length > 0 ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
     setContextMenu({ id: item.id, x: clientX, y: clientY, type, item });
   };
 
-  const handleTouchStartPhoto = (e: React.TouchEvent | React.MouseEvent, url: string) => {
-    e.stopPropagation();
-    photoOpenedRef.current = false;
+  const handleTouchStartPhoto = (e: React.TouchEvent | React.MouseEvent, item: any, type: 'message' | 'comment') => {
+    const clientX = 'touches' in e && e.touches.length > 0 ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = 'touches' in e && e.touches.length > 0 ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    if (pressTimer.current) clearTimeout(pressTimer.current);
     pressTimer.current = setTimeout(() => {
-      photoOpenedRef.current = true;
-      if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
-      setFullScreenImage(url);
-      setContextMenu(null);
-    }, 400);
+      if (window.navigator?.vibrate) window.navigator.vibrate(35);
+      setContextMenu({ id: item.id, x: clientX, y: clientY, type, item });
+    }, 450);
   };
 
   const clearPhotoTimer = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
-
-  const handlePhotoClick = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'message' | 'comment') => {
-    e.stopPropagation(); e.preventDefault();
-    clearPhotoTimer();
-    if (photoOpenedRef.current) { photoOpenedRef.current = false; return; }
-    openGlobalMenu(e, item, type);
-  };
 
   const joinChat = async () => {
     try { await fetch(`/api/chats/${chatId}/join`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); setIsMember(true); loadData(); } catch (e) {}
@@ -1016,15 +1178,33 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ЛАЙТБОКС */}
+      {/* ЛАЙТБОКС С ПОДДЕРЖКОЙ ЗУМА (PINCH-TO-ZOOM & DOUBLE TAP) */}
       {fullScreenImage && (
-        <div className="fixed inset-0 z-[200] bg-black flex flex-col animate-in fade-in duration-200 ease-out">
-          <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-10">
-            <button onClick={() => setFullScreenImage(null)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><X size={24} /></button>
-            <button onClick={() => downloadImage(fullScreenImage)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><Download size={24} /></button>
+        <div
+          className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl flex flex-col animate-in fade-in duration-200 ease-out touch-none"
+          onTouchStart={handleLightboxTouchStart}
+          onTouchMove={handleLightboxTouchMove}
+          onTouchEnd={handleLightboxTouchEnd}
+        >
+          <div className="flex items-center justify-between p-4 pt-10 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-20">
+            <button onClick={() => setFullScreenImage(null)} className="p-2.5 text-white bg-white/10 rounded-full backdrop-blur-md active:scale-90 transition-transform"><X size={22} /></button>
+            <button onClick={() => downloadImage(fullScreenImage)} className="p-2.5 text-white bg-white/10 rounded-full backdrop-blur-md active:scale-90 transition-transform"><Download size={22} /></button>
           </div>
-          <div className="flex-1 flex items-center justify-center p-2 overflow-hidden touch-pinch-zoom">
-            <img src={fullScreenImage} alt="Media" className="max-w-full max-h-full object-contain select-none" />
+          <div
+            className="flex-1 flex items-center justify-center overflow-hidden"
+            onClick={() => { if (zoomScale === 1) setFullScreenImage(null); }}
+          >
+            <img
+              src={fullScreenImage}
+              alt="Media"
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={() => { if (zoomScale > 1) { setZoomScale(1); setZoomPos({ x: 0, y: 0 }); } else setZoomScale(2.5); }}
+              style={{
+                transform: `translate3d(${zoomPos.x}px, ${zoomPos.y}px, 0) scale(${zoomScale})`,
+                transition: pinchStartDistRef.current || panStartRef.current ? 'none' : 'transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)'
+              }}
+              className="max-w-full max-h-full object-contain select-none"
+            />
           </div>
         </div>
       )}
@@ -1179,7 +1359,7 @@ export default function ChatPage() {
                         <div className="col-span-3 text-center py-10 text-[#86868b] font-medium">Нет медиа</div>
                       ) : (
                         chatMedia.map((url, i) => (
-                          <div key={i} className="aspect-square bg-[#e5e5ea] dark:bg-[#333336] rounded-[4px] overflow-hidden cursor-pointer active:scale-[0.98] transition-transform" onClick={() => setFullScreenImage(url)}>
+                          <div key={i} className="aspect-square bg-[#e5e5ea] dark:bg-[#333336] rounded-[4px] overflow-hidden cursor-pointer active:scale-[0.98] transition-transform" onClick={() => openLightbox(url)}>
                             {url.match(/\.(mp4|webm)$/) ? <video src={url} className="w-full h-full object-cover pointer-events-none" /> : <img src={url} className="w-full h-full object-cover" loading="lazy" />}
                           </div>
                         ))
@@ -1252,21 +1432,45 @@ export default function ChatPage() {
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
               const mReactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
               const isMsgUploading = msg.id === uploadingMsgId;
+              const isSwiping = swipeState.id === msg.id;
+              const currentSwipeOffset = isSwiping ? swipeState.offset : 0;
 
-              {/* РЕНДЕР ПОСТОВ В КАНАЛЕ (Как на стене и в Telegram) */}
+              {/* РЕНДЕР ПОСТОВ В КАНАЛЕ */}
               if (isChannel) {
                 return (
-                  <div key={msg.id} id={`msg-${msg.id}`} className="flex flex-col w-full mb-3 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out">
+                  <div
+                    key={msg.id}
+                    id={`msg-${msg.id}`}
+                    className="flex flex-col w-full mb-3 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out cursor-pointer"
+                    onClick={(e) => openGlobalMenu(e, msg, 'message')}
+                    onContextMenu={(e) => { e.preventDefault(); openGlobalMenu(e, msg, 'message'); }}
+                    onTouchStart={(e) => handleMsgSwipeStart(e, msg)}
+                    onTouchMove={handleMsgSwipeMove}
+                    onTouchEnd={handleMsgSwipeEnd}
+                  >
                     {showDate && (
-                      <div className="flex justify-center w-full my-3 relative z-0">
+                      <div className="flex justify-center w-full my-3 relative z-0" onClick={(e) => e.stopPropagation()}>
                         <span className="bg-black/30 text-white backdrop-blur-md text-[11px] font-bold px-3 py-1 rounded-full capitalize">{currentDateStr}</span>
                       </div>
                     )}
-                    <div className="flex flex-col w-[86%] max-w-[340px] mr-auto items-start relative">
+                    <div
+                      className="flex flex-col w-[86%] max-w-[340px] mr-auto items-start relative"
+                      style={{
+                        transform: `translate3d(${currentSwipeOffset}px, 0, 0)`,
+                        transition: isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.2, 0.9, 0.2, 1)'
+                      }}
+                    >
+                      {currentSwipeOffset < -10 && (
+                        <div
+                          className="absolute -right-11 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/15 dark:bg-white/15 backdrop-blur-md flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7]"
+                          style={{ opacity: Math.min(1, Math.abs(currentSwipeOffset) / 50), transform: `translateY(-50%) scale(${Math.min(1.1, Math.abs(currentSwipeOffset) / 52)})` }}
+                        >
+                          <Reply size={16} />
+                        </div>
+                      )}
                       <div
                         className={isOnlyVideoNote ? 'relative flex flex-col cursor-pointer bg-transparent' : 'w-full bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[22px] rounded-tl-[6px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col cursor-pointer overflow-hidden'}
                         onClick={(e) => openGlobalMenu(e, msg, 'message')}
-                        onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                       >
                         {isMsgUploading ? (
                           <div className="px-4 py-3 flex items-center justify-center opacity-80">
@@ -1290,7 +1494,7 @@ export default function ChatPage() {
 
                             {voiceUrl && (
                               <div className="pt-1">
-                                <VoicePlayer url={voiceUrl} isMe={false} timeStr={timeStr} readStatus={false} isSaved={false} fixedDuration={fixedDuration} />
+                                <VoicePlayer url={voiceUrl} isMe={false} timeStr={timeStr} readStatus={false} isSaved={false} fixedDuration={fixedDuration} isSending={msg.isSending} />
                               </div>
                             )}
 
@@ -1308,9 +1512,10 @@ export default function ChatPage() {
                                         <img
                                           src={url} loading="lazy" decoding="async" className={imgClass}
                                           style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                                          onTouchStart={(e) => handleTouchStartPhoto(e, url)} onMouseDown={(e) => handleTouchStartPhoto(e, url)}
+                                          onTouchStart={(e) => handleTouchStartPhoto(e, msg, 'message')}
+                                          onMouseDown={(e) => handleTouchStartPhoto(e, msg, 'message')}
                                           onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                                          onClick={(e) => handlePhotoClick(e, msg, 'message')}
+                                          onClick={(e) => { e.stopPropagation(); clearPhotoTimer(); openLightbox(url); }}
                                           onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
                                           onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
                                         />
@@ -1332,7 +1537,6 @@ export default function ChatPage() {
                               </div>
                             )}
 
-                            {/* РЕАКЦИИ КАК В TELEGRAM И ВРЕМЯ В САМОМ НИЗУ СПРАВА */}
                             {!isOnlyVideoNote && (
                               <div className="px-3.5 pt-2 pb-2.5 flex flex-wrap items-end gap-1.5">
                                 {mReactionsKeys.map(key => {
@@ -1358,14 +1562,14 @@ export default function ChatPage() {
                                     </button>
                                   );
                                 })}
-                                <span className="ml-auto text-[11px] font-medium text-[#86868b] dark:text-[#98989d] leading-none pt-1 select-none">
+                                <span className="ml-auto text-[11px] font-medium text-[#86868b] dark:text-[#98989d] leading-none pt-1 select-none flex items-center gap-1">
                                   {msg.isEdited && <span className="italic mr-1">{t.edited}</span>}
                                   {timeStr}
+                                  {msg.isSending && <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" />}
                                 </span>
                               </div>
                             )}
 
-                            {/* КОМПАКТНАЯ СТРОКА КОММЕНТАРИЕВ ВНУТРИ КАРТОЧКИ ПОСТА */}
                             {!isOnlyVideoNote && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }}
@@ -1390,14 +1594,38 @@ export default function ChatPage() {
 
               {/* РЕНДЕР СООБЩЕНИЙ В ЛИЧНЫХ ЧАТАХ И ГРУППАХ */}
               return (
-                <div key={msg.id} id={`msg-${msg.id}`} className="flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out">
+                <div
+                  key={msg.id}
+                  id={`msg-${msg.id}`}
+                  className="flex flex-col w-full mb-1.5 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out cursor-pointer"
+                  onClick={(e) => openGlobalMenu(e, msg, 'message')}
+                  onContextMenu={(e) => { e.preventDefault(); openGlobalMenu(e, msg, 'message'); }}
+                  onTouchStart={(e) => handleMsgSwipeStart(e, msg)}
+                  onTouchMove={handleMsgSwipeMove}
+                  onTouchEnd={handleMsgSwipeEnd}
+                >
                   {showDate && (
-                    <div className="flex justify-center w-full my-4 relative z-0">
+                    <div className="flex justify-center w-full my-4 relative z-0" onClick={(e) => e.stopPropagation()}>
                       <span className="bg-black/30 text-white backdrop-blur-md text-[11px] font-bold px-3 py-1 rounded-full capitalize">{currentDateStr}</span>
                     </div>
                   )}
 
-                  <div className={`flex flex-col max-w-[85%] sm:max-w-[420px] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} relative`}>
+                  <div
+                    className={`flex flex-col max-w-[85%] sm:max-w-[420px] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} relative`}
+                    style={{
+                      transform: `translate3d(${currentSwipeOffset}px, 0, 0)`,
+                      transition: isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.2, 0.9, 0.2, 1)'
+                    }}
+                  >
+                    {currentSwipeOffset < -10 && (
+                      <div
+                        className="absolute -right-10 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/15 dark:bg-white/15 backdrop-blur-md flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7]"
+                        style={{ opacity: Math.min(1, Math.abs(currentSwipeOffset) / 50), transform: `translateY(-50%) scale(${Math.min(1.1, Math.abs(currentSwipeOffset) / 52)})` }}
+                      >
+                        <Reply size={16} />
+                      </div>
+                    )}
+
                     {isGroup && !isMe && msg.senderName && !isOnlyVideoNote && (
                       <span className="text-[13px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] ml-2 mb-1">{msg.senderName}</span>
                     )}
@@ -1408,7 +1636,6 @@ export default function ChatPage() {
                         : `shadow-sm relative flex flex-col min-w-[60px] ${hasMedia ? 'w-[75vw] max-w-[320px]' : 'w-fit max-w-full'} cursor-pointer overflow-hidden ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`
                       }
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
-                      onContextMenu={(e) => openGlobalMenu(e, msg, 'message')}
                     >
                       {isMsgUploading ? (
                         <div className={`px-4 py-3 flex items-center justify-center opacity-80 ${isOnlyVideoNote ? 'bg-black/10 rounded-full w-[220px] h-[220px]' : ''}`}>
@@ -1426,7 +1653,7 @@ export default function ChatPage() {
                                 {expandedVideoMsgId !== msg.id && (
                                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
                                     {timeStr}
-                                    {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={10} strokeWidth={3} />{isMsgRead(msg, isSavedChat) ? <Check size={10} strokeWidth={3} /> : null}</div>}
+                                    {isMe && (msg.isSending ? <Clock size={10} strokeWidth={3} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={10} strokeWidth={3} />{isMsgRead(msg, isSavedChat) ? <Check size={10} strokeWidth={3} /> : null}</div>)}
                                   </div>
                                 )}
                               </div>
@@ -1435,7 +1662,7 @@ export default function ChatPage() {
 
                           {voiceUrl && (
                             <div className={`${hasText ? 'pb-1' : ''}`}>
-                              <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} fixedDuration={fixedDuration} />
+                              <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} fixedDuration={fixedDuration} isSending={msg.isSending} />
                             </div>
                           )}
 
@@ -1453,9 +1680,10 @@ export default function ChatPage() {
                                       <img
                                         src={url} loading="lazy" decoding="async" className={imgClass}
                                         style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                                        onTouchStart={(e) => handleTouchStartPhoto(e, url)} onMouseDown={(e) => handleTouchStartPhoto(e, url)}
+                                        onTouchStart={(e) => handleTouchStartPhoto(e, msg, 'message')}
+                                        onMouseDown={(e) => handleTouchStartPhoto(e, msg, 'message')}
                                         onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                                        onClick={(e) => handlePhotoClick(e, msg, 'message')}
+                                        onClick={(e) => { e.stopPropagation(); clearPhotoTimer(); openLightbox(url); }}
                                         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
                                         onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
                                       />
@@ -1467,7 +1695,7 @@ export default function ChatPage() {
                               {(!hasText && !voiceUrl && !videoNoteUrl) && (
                                 <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
                                   {timeStr}
-                                  {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={11} strokeWidth={2.5} /> : null}</div>}
+                                  {isMe && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={11} strokeWidth={2.5} /> : null}</div>)}
                                 </div>
                               )}
                             </div>
@@ -1484,7 +1712,7 @@ export default function ChatPage() {
                                   <span className={`float-right inline-flex items-center gap-1 text-[10px] ml-3 mt-1.5 pointer-events-none select-none relative top-[2px] ${isMe ? 'opacity-60 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
                                     {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                     {timeStr}
-                                    {isMe && <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={12} strokeWidth={2.5} /> : null}</div>}
+                                    {isMe && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={12} strokeWidth={2.5} /> : null}</div>)}
                                   </span>
                                 )}
                                 <div className="clear-both"></div>
@@ -1546,7 +1774,7 @@ export default function ChatPage() {
               {activeThreadContent?.hasMedia && (
                 <div className="flex gap-2 overflow-x-auto my-2">
                   {activeThreadContent.mediaUrls.map((url: string) => (
-                    <img key={url} src={url} className="h-[80px] w-auto rounded-[8px] object-cover border border-black/5 dark:border-white/5" />
+                    <img key={url} src={url} onClick={(e) => { e.stopPropagation(); openLightbox(url); }} className="h-[80px] w-auto rounded-[8px] object-cover border border-black/5 dark:border-white/5 cursor-pointer" />
                   ))}
                 </div>
               )}
@@ -1563,8 +1791,8 @@ export default function ChatPage() {
                 const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
 
                 return (
-                  <div key={c.id} className="relative flex flex-col mb-2 z-10">
-                    <div className="flex gap-3 items-start cursor-pointer" onClick={(e) => openGlobalMenu(e, c, 'comment')} onContextMenu={(e) => openGlobalMenu(e, c, 'comment')}>
+                  <div key={c.id} className="relative flex flex-col mb-2 z-10" onClick={(e) => openGlobalMenu(e, c, 'comment')}>
+                    <div className="flex gap-3 items-start cursor-pointer" onClick={(e) => openGlobalMenu(e, c, 'comment')} onContextMenu={(e) => { e.preventDefault(); openGlobalMenu(e, c, 'comment'); }}>
                       <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
                         {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName?.charAt(0).toUpperCase() || 'U'}
                       </div>
@@ -1574,11 +1802,12 @@ export default function ChatPage() {
                         {hasMedia && (
                           <img
                             src={mediaUrls[0]}
-                            className={`max-h-[200px] w-auto object-cover pointer-events-none ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`}
+                            className={`max-h-[200px] w-auto object-cover cursor-pointer ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`}
                             style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                            onTouchStart={(e) => handleTouchStartPhoto(e, mediaUrls[0])} onMouseDown={(e) => handleTouchStartPhoto(e, mediaUrls[0])}
+                            onTouchStart={(e) => handleTouchStartPhoto(e, c, 'comment')}
+                            onMouseDown={(e) => handleTouchStartPhoto(e, c, 'comment')}
                             onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                            onClick={(e) => handlePhotoClick(e, c, 'comment')}
+                            onClick={(e) => { e.stopPropagation(); clearPhotoTimer(); openLightbox(mediaUrls[0]); }}
                             onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, c, 'comment'); }}
                           />
                         )}
@@ -1738,4 +1967,4 @@ export default function ChatPage() {
       })()}
     </div>
   );
-    }
+}
