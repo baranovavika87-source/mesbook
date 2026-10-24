@@ -18,6 +18,7 @@ const FAST_REACTIONS = ['❤️', '👍', '🔥', '😂', '😢'];
 const translations = {
   ru: {
     saved: "Избранное", companion: "Собеседник", attachment: "Вложение", photo: "Фотография",
+    voiceMsg: "Голосовое сообщение", videoMsg: "Видеосообщение",
     info: "Информация", name: "Название", desc: "Описание", bio: "О себе", channel: "Канал",
     personalChannel: "Личный Канал", birthday: "День рождения", online: "в сети", group: "Группа",
     subs: ['подписчик', 'подписчика', 'подписчиков'], members: ['участник', 'участника', 'участников'],
@@ -36,7 +37,8 @@ const translations = {
   },
   en: {
     saved: "Saved Messages", companion: "Companion", attachment: "Attachment", photo: "Photo",
-    info: "Info", name: "Name", desc: "Описание", bio: "Bio", channel: "Channel",
+    voiceMsg: "Voice message", videoMsg: "Video message",
+    info: "Info", name: "Name", desc: "Description", bio: "Bio", channel: "Channel",
     personalChannel: "Personal Channel", birthday: "Birthday", online: "online", group: "Group",
     subs: ['subscriber', 'subscribers'], members: ['member', 'members'], onlineCount: "online",
     subscribe: "Subscribe", joinGroup: "Join Group", mute: "Mute", unmute: "Unmute",
@@ -221,36 +223,61 @@ export default function ChatPage() {
     }
   }, []);
 
-  const [messages, setMessages] = useState<any[]>([]);
-  const isFlushingRef = useRef(false);
   const outboxKey = `mesbook_outbox_${currentUserId}_${chatId}`;
   const cacheKey = isSavedChat ? `mesbook_saved_messages_${currentUserId}` : `mesbook_messages_cache_${currentUserId}_${chatId}`;
+  const pinnedStorageKey = `mesbook_pinned_${currentUserId}_${chatId}`;
 
-  // ЗАГРУЗКА СООБЩЕНИЙ И ОФФЛАЙН-ОЧЕРЕДИ ИЗ INDEXEDDB
+  // СИНХРОННЫЙ СТАРТ ДЛЯ ИЗБРАННОГО + АСИНХРОННАЯ СИНХРОНИЗАЦИЯ С CRYPTODB
+  const [messages, setMessages] = useState<any[]>(() => {
+    if (isSavedChat) {
+      try {
+        return JSON.parse(localStorage.getItem(`mesbook_saved_messages_${currentUserId}`) || '[]').map((m: any) => ({ ...m, isSending: false }));
+      } catch (e) { return []; }
+    }
+    return [];
+  });
+
+  const isFlushingRef = useRef(false);
+
+  const syncSavedMessages = (updatedMsgs: any[]) => {
+    const clean = updatedMsgs.map(m => ({ ...m, isSending: false }));
+    setMessages(clean);
+    try { localStorage.setItem(`mesbook_saved_messages_${currentUserId}`, JSON.stringify(clean)); } catch (e) {}
+    saveSecureData(`mesbook_saved_messages_${currentUserId}`, clean);
+  };
+
   useEffect(() => {
     const fetchLocalEncryptedMessages = async () => {
+      if (isSavedChat) {
+        let localArr: any[] = [];
+        try { localArr = JSON.parse(localStorage.getItem(cacheKey) || '[]'); } catch (e) {}
+        const cryptoArr = await loadSecureData(cacheKey);
+        if (Array.isArray(cryptoArr) && cryptoArr.length > localArr.length) {
+          syncSavedMessages(cryptoArr);
+        } else if (localArr.length > 0) {
+          saveSecureData(cacheKey, localArr);
+          setMessages(localArr.map((m: any) => ({ ...m, isSending: false })));
+        }
+        return;
+      }
       const decryptedData = await loadSecureData(cacheKey);
-      const outboxData = isSavedChat ? [] : (await loadSecureData(outboxKey) || []);
+      const outboxData = (await loadSecureData(outboxKey)) || [];
       const baseMsgs = Array.isArray(decryptedData) ? decryptedData.map((m: any) => ({ ...m, isSending: false })) : [];
       const pendingMsgs = Array.isArray(outboxData) ? outboxData.map((m: any) => ({ ...m, isSending: true })) : [];
       if (baseMsgs.length > 0 || pendingMsgs.length > 0) {
-        setMessages([...baseMsgs, ...pendingMsgs]);
+        setMessages((prev) => prev.length === 0 ? [...baseMsgs, ...pendingMsgs] : prev);
       }
     };
     fetchLocalEncryptedMessages();
   }, [chatId, currentUserId, isSavedChat]);
 
-  // СОХРАНЕНИЕ ПОДТВЕРЖДЕННЫХ СООБЩЕНИЙ В ЗАШИФРОВАННЫЙ КЭШ
   useEffect(() => {
-    if (messages.length > 0) {
+    if (!isSavedChat && messages.length > 0) {
       const confirmedMsgs = messages.filter(m => !m.isSending);
-      if (confirmedMsgs.length > 0 || isSavedChat) {
-        saveSecureData(cacheKey, confirmedMsgs);
-      }
+      if (confirmedMsgs.length > 0) saveSecureData(cacheKey, confirmedMsgs);
     }
   }, [messages, chatId, currentUserId, isSavedChat]);
 
-  // ФОНОВАЯ ДОСТАВКА ОФФЛАЙН-ОЧЕРЕДИ (LOCAL-FIRST)
   const flushOutbox = async () => {
     if (isSavedChat || isFlushingRef.current || !navigator.onLine) return;
     isFlushingRef.current = true;
@@ -289,7 +316,7 @@ export default function ChatPage() {
   const [editingMsg, setEditingMsg] = useState<any>(null);
   const [isUploading] = useState(false);
 
-  // ЛАЙТБОКС С ЗУМОМ (PINCH-TO-ZOOM + DOUBLE TAP)
+  // ЛАЙТБОКС С ЗУМОМ
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
   const [zoomPos, setZoomPos] = useState({ x: 0, y: 0 });
@@ -347,7 +374,7 @@ export default function ChatPage() {
     if (zoomScale < 1.05) { setZoomScale(1); setZoomPos({ x: 0, y: 0 }); }
   };
 
-  // СВАЙП ДЛЯ ОТВЕТА (ФИЗИКА ЖЕСТОВ)
+  // СВАЙП ДЛЯ ОТВЕТА
   const [swipeState, setSwipeState] = useState<{ id: number | null, offset: number }>({ id: null, offset: 0 });
   const swipeTouchRef = useRef<{ id: number, x: number, y: number, item: any, locked: 'h' | 'v' | null, vibrated: boolean } | null>(null);
 
@@ -400,8 +427,39 @@ export default function ChatPage() {
   const [isCommentUploading, setIsCommentUploading] = useState(false);
   const [commentReplyingTo, setCommentReplyingTo] = useState<any>(null);
 
-  const [pinnedMessages, setPinnedMessages] = useState<any[]>([]);
+  // СОХРАНЕНИЕ ВСЕХ ЗАКРЕПЛЁННЫХ СООБЩЕНИЙ МЕЖДУ СЕССИЯМИ
+  const [pinnedMessages, setPinnedMessages] = useState<any[]>(() => {
+    try {
+      const savedPins = localStorage.getItem(`mesbook_pinned_${currentUserId}_${chatId}`);
+      return savedPins ? JSON.parse(savedPins) : [];
+    } catch (e) { return []; }
+  });
   const [activePinnedIndex, setActivePinnedIndex] = useState(0);
+
+  const persistPinnedMessages = (pins: any[]) => {
+    setPinnedMessages(pins);
+    try { localStorage.setItem(pinnedStorageKey, JSON.stringify(pins)); } catch (e) {}
+    saveSecureData(pinnedStorageKey, pins);
+  };
+
+  useEffect(() => {
+    const loadSavedPins = async () => {
+      try {
+        const localPins = JSON.parse(localStorage.getItem(pinnedStorageKey) || '[]');
+        if (localPins.length > 0) {
+          setPinnedMessages(localPins);
+          return;
+        }
+      } catch (e) {}
+      const cryptoPins = await loadSecureData(pinnedStorageKey);
+      if (Array.isArray(cryptoPins) && cryptoPins.length > 0) {
+        setPinnedMessages(cryptoPins);
+        try { localStorage.setItem(pinnedStorageKey, JSON.stringify(cryptoPins)); } catch (e) {}
+      }
+    };
+    loadSavedPins();
+  }, [chatId, currentUserId]);
+
   const [forwardingMsg, setForwardingMsg] = useState<any>(null);
   const [chatListForForward, setChatListForForward] = useState<any[]>([]);
 
@@ -515,8 +573,10 @@ export default function ChatPage() {
 
   const loadData = async () => {
     if (isSavedChat) {
-      const saved = await loadSecureData('mesbook_saved_messages_' + currentUserId);
-      if (saved && Array.isArray(saved)) setMessages(saved.map((m: any) => ({ ...m, isSending: false })));
+      try {
+        const localSaved = JSON.parse(localStorage.getItem(`mesbook_saved_messages_${currentUserId}`) || '[]');
+        setMessages(localSaved.map((m: any) => ({ ...m, isSending: false })));
+      } catch (e) {}
       setIsLoadingRole(false);
       return;
     }
@@ -543,9 +603,19 @@ export default function ChatPage() {
         const serverMsgs = Array.isArray(data.messages) ? data.messages : [];
         const pendingOutbox = (await loadSecureData(outboxKey)) || [];
         setMessages([...serverMsgs, ...pendingOutbox.map((m: any) => ({ ...m, isSending: true }))]);
+
+        // СИНХРОНИЗАЦИЯ НЕСКОЛЬКИХ ЗАКРЕПОВ
+        let savedPins: any[] = [];
+        try { savedPins = JSON.parse(localStorage.getItem(pinnedStorageKey) || '[]'); } catch (e) {}
         if (data.pinnedMessage) {
-          setPinnedMessages(prev => prev.find(m => m.id === data.pinnedMessage.id) ? prev : [...prev, data.pinnedMessage]);
+          const exists = savedPins.some(p => p.id === data.pinnedMessage.id);
+          if (!exists) savedPins = [...savedPins, data.pinnedMessage];
         }
+        if (serverMsgs.length > 0 && savedPins.length > 0) {
+          const serverIds = new Set(serverMsgs.map((m: any) => m.id));
+          savedPins = savedPins.filter(p => serverIds.has(p.id)).map(p => serverMsgs.find((m: any) => m.id === p.id) || p);
+        }
+        persistPinnedMessages(savedPins);
       }
     } catch (e) {}
     if (activeThread) loadComments(activeThread.chatId || chatId, activeThread.id);
@@ -722,14 +792,13 @@ export default function ChatPage() {
     }
   };
 
-  // ОПТИМИСТИЧНАЯ ОТПРАВКА С ОФФЛАЙН-ОЧЕРЕДЬЮ
   const sendDirectMessage = async (msgContent: string) => {
     const tempMsg = { id: Date.now() + Math.floor(Math.random() * 1000), content: msgContent, isSending: true, senderId: currentUserId, senderName: currentUser?.displayName, createdAt: new Date().toISOString(), read: false };
     if (isSavedChat) {
-      const currentSaved = await loadSecureData(`mesbook_saved_messages_${currentUserId}`) || [];
+      let currentSaved: any[] = [];
+      try { currentSaved = JSON.parse(localStorage.getItem(`mesbook_saved_messages_${currentUserId}`) || '[]'); } catch (e) {}
       const updatedSaved = [...currentSaved, { ...tempMsg, isSending: false }];
-      setMessages(updatedSaved);
-      saveSecureData(`mesbook_saved_messages_${currentUserId}`, updatedSaved);
+      syncSavedMessages(updatedSaved);
       forceScrollToBottom();
       return;
     }
@@ -751,9 +820,14 @@ export default function ChatPage() {
         await saveSecureData(outboxKey, latestOutbox.filter((m: any) => m.id !== tempMsg.id));
         loadData();
       }
-    } catch (error) {
-      // Остается в зашифрованном outbox со значком часиков до появления сети
-    }
+    } catch (error) {}
+  };
+
+  const getAuthorNameForReply = (msg: any) => {
+    if (!msg) return displayName;
+    if (msg.senderName) return msg.senderName;
+    if (String(msg.senderId) === String(currentUserId)) return currentUser?.displayName || (lang === 'ru' ? 'Вы' : 'You');
+    return displayName;
   };
 
   const handleSend = async (e: React.FormEvent) => {
@@ -766,12 +840,21 @@ export default function ChatPage() {
         const parts = editingMsg.content.split(DOUBLE_NL);
         finalEditedContent = `${parts[0]}${DOUBLE_NL}${newTextContent}`;
       }
-      setContent(''); setEditingMsg(null);
-      try { await fetch(`/api/chats/${chatId}/messages/${editingMsg.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalEditedContent }) }); loadData(); } catch (e) {}
+      setContent('');
+      const targetEditId = editingMsg.id;
+      setEditingMsg(null);
+      if (isSavedChat) {
+        const updated = messages.map(m => m.id === targetEditId ? { ...m, content: finalEditedContent, isEdited: true } : m);
+        syncSavedMessages(updated);
+        return;
+      }
+      try { await fetch(`/api/chats/${chatId}/messages/${targetEditId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: finalEditedContent }) }); loadData(); } catch (e) {}
       return;
     }
     const tempContent = content.trim();
-    const finalContent = replyingTo ? `> ${stripQuotedPrefix(replyingTo.content)}${DOUBLE_NL}${tempContent}` : tempContent;
+    const replySnippet = replyingTo ? (parseContent(replyingTo.content).text || t.photo).split(NL).join(' ') : '';
+    const replyAuthor = replyingTo ? getAuthorNameForReply(replyingTo) : '';
+    const finalContent = replyingTo ? `> ${replyAuthor}: ${replySnippet}${DOUBLE_NL}${tempContent}` : tempContent;
     setContent(''); setReplyingTo(null);
     sendDirectMessage(finalContent);
   };
@@ -780,7 +863,9 @@ export default function ChatPage() {
     e.preventDefault();
     if (!commentContent.trim() || !activeThread) return;
     const tempContent = commentContent.trim();
-    const finalContent = commentReplyingTo ? `> ${stripQuotedPrefix(commentReplyingTo.content)}${DOUBLE_NL}${tempContent}` : tempContent;
+    const replyAuthor = commentReplyingTo ? (commentReplyingTo.senderName || t.companion) : '';
+    const replySnippet = commentReplyingTo ? (parseContent(commentReplyingTo.content).text || t.photo).split(NL).join(' ') : '';
+    const finalContent = commentReplyingTo ? `> ${replyAuthor}: ${replySnippet}${DOUBLE_NL}${tempContent}` : tempContent;
     setCommentContent(''); setCommentReplyingTo(null);
     try {
       const targetChatId = activeThread.chatId || chatId;
@@ -840,16 +925,21 @@ export default function ChatPage() {
   const togglePin = async (msg: any) => {
     setContextMenu(null);
     const isPinned = pinnedMessages.some(m => m.id === msg.id);
+    let updatedPins: any[] = [];
     if (isPinned) {
-      setPinnedMessages(prev => prev.filter(m => m.id !== msg.id));
-      if (activePinnedIndex >= pinnedMessages.length - 1) setActivePinnedIndex(Math.max(0, pinnedMessages.length - 2));
+      updatedPins = pinnedMessages.filter(m => m.id !== msg.id);
+      if (activePinnedIndex >= updatedPins.length) setActivePinnedIndex(Math.max(0, updatedPins.length - 1));
     } else {
-      setPinnedMessages(prev => [...prev, msg]);
-      setActivePinnedIndex(pinnedMessages.length);
+      updatedPins = [...pinnedMessages, msg];
+      setActivePinnedIndex(updatedPins.length - 1);
     }
-    try {
-      await fetch(`/api/chats/${chatId}/pin`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ messageId: isPinned ? null : msg.id }) });
-    } catch (e) {}
+    persistPinnedMessages(updatedPins);
+    if (!isSavedChat) {
+      try {
+        const lastPinId = updatedPins.length > 0 ? updatedPins[updatedPins.length - 1].id : null;
+        await fetch(`/api/chats/${chatId}/pin`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ messageId: lastPinId }) });
+      } catch (e) {}
+    }
   };
 
   const openForwardModal = (msg: any) => {
@@ -859,10 +949,23 @@ export default function ChatPage() {
 
   const handleForward = async (targetChatId: string) => {
     if (!forwardingMsg) return;
-    const contentToForward = `> ${t.forwardedFrom} ${forwardingMsg.senderName || t.companion}${DOUBLE_NL}${forwardingMsg.content}`;
+    const senderLabel = getAuthorNameForReply(forwardingMsg);
+    const cleanBody = stripQuotedPrefix(forwardingMsg.content);
+    const contentToForward = `> ${t.forwardedFrom} ${senderLabel}${DOUBLE_NL}${cleanBody}`;
     setForwardingMsg(null);
+    if (targetChatId === 'saved') {
+      let currentSaved: any[] = [];
+      try { currentSaved = JSON.parse(localStorage.getItem(`mesbook_saved_messages_${currentUserId}`) || '[]'); } catch (e) {}
+      const newSavedMsg = { id: Date.now(), content: contentToForward, isSending: false, senderId: currentUserId, senderName: currentUser?.displayName, createdAt: new Date().toISOString(), read: true };
+      const updated = [...currentSaved, newSavedMsg];
+      try { localStorage.setItem(`mesbook_saved_messages_${currentUserId}`, JSON.stringify(updated)); } catch (e) {}
+      saveSecureData(`mesbook_saved_messages_${currentUserId}`, updated);
+      if (isSavedChat) setMessages(updated);
+      return;
+    }
     try {
       await fetch(`/api/chats/${targetChatId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ content: contentToForward }) });
+      if (String(targetChatId) === String(chatId)) loadData();
     } catch (e) {}
   };
 
@@ -887,34 +990,104 @@ export default function ChatPage() {
     const updateFn = (item: any) => {
       const newR = { ...(item.reactions || {}) };
       if (item.myReaction === reaction) {
-        if (newR[reaction]) newR[reaction].count = Math.max(0, newR[reaction].count - 1);
-        if (newR[reaction]?.count === 0) delete newR[reaction];
+        if (newR[reaction]) {
+          newR[reaction].count = Math.max(0, (newR[reaction].count || 1) - 1);
+          newR[reaction].users = (newR[reaction].users || []).filter((u: any) => String(u.id) !== String(currentUserId));
+        }
+        if (!newR[reaction] || newR[reaction].count === 0) delete newR[reaction];
         return { ...item, reactions: newR, myReaction: null };
       } else {
         if (item.myReaction && newR[item.myReaction]) {
-          newR[item.myReaction].count = Math.max(0, newR[item.myReaction].count - 1);
+          newR[item.myReaction].count = Math.max(0, (newR[item.myReaction].count || 1) - 1);
+          newR[item.myReaction].users = (newR[item.myReaction].users || []).filter((u: any) => String(u.id) !== String(currentUserId));
           if (newR[item.myReaction].count === 0) delete newR[item.myReaction];
         }
         if (!newR[reaction]) newR[reaction] = { count: 0, users: [] };
-        newR[reaction].count++;
-        if (currentUser) {
-          const userObj = { id: currentUserId, name: currentUser.displayName || 'U', avatar: currentUser.avatarUrl };
-          newR[reaction].users = [userObj, ...(newR[reaction].users || []).filter((u: any) => u.id !== currentUserId)];
-        }
+        newR[reaction].count = (newR[reaction].count || 0) + 1;
+        const userObj = { id: currentUserId, name: currentUser?.displayName || 'U', avatar: currentUser?.avatarUrl };
+        newR[reaction].users = [userObj, ...(newR[reaction].users || []).filter((u: any) => String(u.id) !== String(currentUserId))];
         return { ...item, reactions: newR, myReaction: reaction };
       }
     };
-    if (isComment) setThreadComments(prev => prev.map(c => c.id === msgId ? updateFn(c) : c));
-    else setMessages(prev => prev.map(m => m.id === msgId ? updateFn(m) : m));
+    if (isComment) {
+      setThreadComments(prev => prev.map(c => c.id === msgId ? updateFn(c) : c));
+    } else if (isSavedChat) {
+      const updated = messages.map(m => m.id === msgId ? updateFn(m) : m);
+      syncSavedMessages(updated);
+      return;
+    } else {
+      setMessages(prev => prev.map(m => m.id === msgId ? updateFn(m) : m));
+    }
     try {
       const targetChatId = isComment && activeThread ? (activeThread.chatId || chatId) : chatId;
       await fetch(`/api/chats/${targetChatId}/messages/${msgId}/reaction`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, body: JSON.stringify({ reaction }) });
     } catch (e) {}
   };
 
+  // ПОЛУЧЕНИЕ АВАТАРОК РЕАКЦИЙ ДЛЯ СООБЩЕНИЙ КАК В TELEGRAM
+  const getReactionUsers = (msg: any, key: string, rData: any) => {
+    const rawUsers = Array.isArray(rData) ? rData : (Array.isArray(rData?.users) ? rData.users : []);
+    const count = typeof rData === 'number' ? rData : (rData?.count || rawUsers.length || 1);
+    const resolved: { id: any; name: string; avatar?: string }[] = [];
+
+    for (const u of rawUsers) {
+      const uid = u?.id || u?.userId || u;
+      let avatar = u?.avatar || u?.avatarUrl;
+      let name = u?.name || u?.displayName || 'U';
+      if (!avatar) {
+        if (String(uid) === String(currentUserId)) {
+          avatar = currentUser?.avatarUrl;
+          name = currentUser?.displayName || name;
+        } else if (!isGroupOrChannel && chatInfo?.participant) {
+          avatar = chatInfo.participant.avatarUrl;
+          name = chatInfo.participant.displayName || name;
+        } else if (chatMembers.length > 0) {
+          const found = chatMembers.find(m => String(m.id) === String(uid));
+          if (found) { avatar = found.avatarUrl; name = found.displayName || name; }
+        }
+      }
+      resolved.push({ id: uid, name, avatar });
+    }
+
+    if (msg.myReaction === key && !resolved.some(u => String(u.id) === String(currentUserId))) {
+      resolved.unshift({ id: currentUserId, name: currentUser?.displayName || 'Я', avatar: currentUser?.avatarUrl });
+    }
+
+    if (resolved.length < count && !isGroupOrChannel && chatInfo?.participant) {
+      if (!resolved.some(u => String(u.id) !== String(currentUserId))) {
+        resolved.push({
+          id: chatInfo.participant.id || 'companion',
+          name: chatInfo.participant.displayName || displayName,
+          avatar: chatInfo.participant.avatarUrl
+        });
+      }
+    }
+
+    if (resolved.length === 0) {
+      if (msg.myReaction === key || isSavedChat) {
+        resolved.push({ id: currentUserId, name: currentUser?.displayName || 'Я', avatar: currentUser?.avatarUrl });
+      } else if (chatInfo?.participant) {
+        resolved.push({ id: 'companion', name: chatInfo.participant.displayName || displayName, avatar: chatInfo.participant.avatarUrl });
+      }
+    }
+
+    return { users: resolved.slice(0, 3), count };
+  };
+
   const deleteMessage = async (msgId: number, isComment = false) => {
     try {
+      if (isSavedChat && !isComment) {
+        const updated = messages.filter(m => m.id !== msgId);
+        syncSavedMessages(updated);
+        if (pinnedMessages.some(p => p.id === msgId)) {
+          persistPinnedMessages(pinnedMessages.filter(p => p.id !== msgId));
+        }
+        return;
+      }
       if (!isComment) {
+        if (pinnedMessages.some(p => p.id === msgId)) {
+          persistPinnedMessages(pinnedMessages.filter(p => p.id !== msgId));
+        }
         const latestOutbox = (await loadSecureData(outboxKey)) || [];
         if (latestOutbox.some((m: any) => m.id === msgId)) {
           await saveSecureData(outboxKey, latestOutbox.filter((m: any) => m.id !== msgId));
@@ -1002,9 +1175,37 @@ export default function ChatPage() {
 
   const parseContent = (rawText: any) => {
     if (!rawText || typeof rawText !== 'string') {
-      return { text: '', quotedText: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false, voiceUrl: null, videoNoteUrl: null, fixedDuration: null };
+      return { text: '', quotedText: null, replyAuthor: null, replyBody: null, forwardedFrom: null, mediaUrls: [], hasMedia: false, hasText: false, isVideo: false, voiceUrl: null, videoNoteUrl: null, fixedDuration: null };
     }
     let text = rawText.split(CR).join('');
+    let quotedText: string | null = null;
+    let replyAuthor: string | null = null;
+    let replyBody: string | null = null;
+    let forwardedFrom: string | null = null;
+
+    // Сначала отделяем блок цитаты или пересылки сверху, чтобы медиа в основном теле не ломали префикс
+    if (text.startsWith('> ')) {
+      const parts = text.split(DOUBLE_NL);
+      if (parts.length > 0) {
+        const headerRaw = parts[0].slice(2).trim();
+        text = parts.slice(1).join(DOUBLE_NL).trim();
+        if (headerRaw.startsWith('Переслано от ')) {
+          forwardedFrom = headerRaw.slice('Переслано от '.length).trim();
+        } else if (headerRaw.startsWith('Forwarded from ')) {
+          forwardedFrom = headerRaw.slice('Forwarded from '.length).trim();
+        } else {
+          quotedText = headerRaw;
+          const colonIdx = headerRaw.indexOf(': ');
+          if (colonIdx > 0 && colonIdx < 35) {
+            replyAuthor = headerRaw.slice(0, colonIdx).trim();
+            replyBody = headerRaw.slice(colonIdx + 2).trim();
+          } else {
+            replyBody = headerRaw;
+          }
+        }
+      }
+    }
+
     let voiceUrl: string | null = null;
     let videoNoteUrl: string | null = null;
     let fixedDuration: number | null = null;
@@ -1062,23 +1263,22 @@ export default function ChatPage() {
       text = cleanLines.join(NL).trim();
     } catch (e) {}
 
-    let quotedText: string | null = null;
-    try {
-      if (text.startsWith('> ')) {
-        const parts = text.split(DOUBLE_NL);
-        if (parts.length > 0) {
-          quotedText = parts[0].slice(2).trim();
-          text = parts.slice(1).join(DOUBLE_NL).trim();
-        }
-      }
-    } catch (e) {}
-
     const hasMedia = mediaUrls.length > 0;
-    const hasText = Boolean(text) || Boolean(quotedText);
+    const hasText = Boolean(text) || Boolean(quotedText) || Boolean(forwardedFrom);
     const firstUrl = mediaUrls[0] ? mediaUrls[0].toLowerCase() : '';
     const isVideo = hasMedia && (firstUrl.endsWith('.mp4') || firstUrl.endsWith('.webm') || firstUrl.endsWith('.mov') || firstUrl.endsWith('.ogg') || firstUrl.includes('/video/upload/'));
 
-    return { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration };
+    return { text, quotedText, replyAuthor, replyBody, forwardedFrom, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration };
+  };
+
+  const getPinnedPreviewText = (pinMsg: any) => {
+    if (!pinMsg) return '';
+    const parsed = parseContent(pinMsg.content);
+    if (parsed.text) return parsed.text;
+    if (parsed.voiceUrl) return t.voiceMsg;
+    if (parsed.videoNoteUrl) return t.videoMsg;
+    if (parsed.hasMedia) return t.photo;
+    return t.attachment;
   };
 
   const lastSeen = chatInfo?.participant?.lastSeen;
@@ -1106,7 +1306,8 @@ export default function ChatPage() {
   }, []).reverse();
 
   const activeThreadContent = activeThread ? parseContent(activeThread.content) : null;
-  const currentPinnedMsg = pinnedMessages[activePinnedIndex] || pinnedMessages[0];
+  const safePinIdx = pinnedMessages.length > 0 ? Math.min(activePinnedIndex, pinnedMessages.length - 1) : 0;
+  const currentPinnedMsg = pinnedMessages[safePinIdx] || pinnedMessages[0];
 
   return (
     <div
@@ -1165,6 +1366,12 @@ export default function ChatPage() {
               <button onClick={() => setForwardingMsg(null)} className="p-1 active:scale-95 text-[#86868b]"><X size={20} /></button>
             </div>
             <div className="overflow-y-auto p-2">
+              <div onClick={() => handleForward('saved')} className="flex items-center gap-3 p-3 hover:bg-black/5 dark:hover:bg-white/5 rounded-[16px] cursor-pointer transition-colors">
+                <div className="w-12 h-12 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center shrink-0">
+                  <Bookmark size={20} fill="currentColor" />
+                </div>
+                <span className="font-medium text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7]">{t.saved}</span>
+              </div>
               {chatListForForward.map(c => (
                 <div key={c.id} onClick={() => handleForward(c.id)} className="flex items-center gap-3 p-3 hover:bg-black/5 dark:hover:bg-white/5 rounded-[16px] cursor-pointer transition-colors">
                   <div className="w-12 h-12 rounded-full bg-[#e5e5ea] dark:bg-[#333336] overflow-hidden flex items-center justify-center shrink-0 font-medium text-[16px]">
@@ -1178,7 +1385,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ЛАЙТБОКС С ПОДДЕРЖКОЙ ЗУМА (PINCH-TO-ZOOM & DOUBLE TAP) */}
+      {/* ЛАЙТБОКС С ПОДДЕРЖКОЙ ЗУМА */}
       {fullScreenImage && (
         <div
           className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl flex flex-col animate-in fade-in duration-200 ease-out touch-none"
@@ -1390,29 +1597,55 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
+      </header>
 
-        {/* ТОНКАЯ ЛИНИЯ ЗАКРЕПЛЕННЫХ СООБЩЕНИЙ */}
-        {pinnedMessages.length > 0 && currentPinnedMsg && (
+      {/* ПЛАВАЮЩАЯ КАПСУЛА ЗАКРЕПЛЁННЫХ СООБЩЕНИЙ КАК В TELEGRAM */}
+      {pinnedMessages.length > 0 && currentPinnedMsg && (
+        <div className="px-2.5 pt-1.5 pb-0.5 relative z-20">
           <div
-            className="mt-2 -mx-3 px-3 py-1 flex items-center gap-2 cursor-pointer border-t border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            className="w-full px-3.5 py-2 rounded-[16px] bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl shadow-[0_4px_15px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_15px_rgba(0,0,0,0.3)] border border-black/5 dark:border-white/5 flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-all"
             onClick={() => {
               const el = document.getElementById(`msg-${currentPinnedMsg.id}`);
               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
               if (pinnedMessages.length > 1) setActivePinnedIndex((prev) => (prev + 1) % pinnedMessages.length);
             }}
           >
-            <div className="w-[2px] h-[26px] bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full shrink-0"></div>
-            <div className="flex flex-col flex-1 truncate py-0.5">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-none mb-0.5 uppercase tracking-wide">{t.pinnedMsg}</span>
-                {pinnedMessages.length > 1 && <span className="text-[10px] text-[#86868b] dark:text-[#98989d] bg-black/5 dark:bg-white/10 px-1.5 rounded-full leading-tight mb-0.5">{activePinnedIndex + 1}/{pinnedMessages.length}</span>}
-              </div>
-              <span className="text-[12px] text-[#86868b] dark:text-[#98989d] truncate leading-none">{parseContent(currentPinnedMsg.content).text || t.photo}</span>
+            {/* Сегментированный индикатор слева (как в Telegram) */}
+            <div className="flex flex-col gap-[2px] h-[32px] w-[3px] shrink-0 justify-center">
+              {pinnedMessages.length === 1 ? (
+                <div className="w-full h-full bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full" />
+              ) : (
+                pinnedMessages.map((p, idx) => (
+                  <div
+                    key={p.id || idx}
+                    className={`w-full flex-1 rounded-full transition-opacity ${idx === safePinIdx ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] opacity-100' : 'bg-[#1d1d1f] dark:bg-[#f5f5f7] opacity-30'}`}
+                  />
+                ))
+              )}
             </div>
-            {isAdmin && <button onClick={(e) => { e.stopPropagation(); togglePin(currentPinnedMsg); }} className="p-1.5 text-[#86868b] active:scale-95 shrink-0"><X size={16} /></button>}
+
+            <div className="flex flex-col flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[13px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight truncate">
+                  {t.pinnedMsg} {pinnedMessages.length > 1 ? `#${safePinIdx + 1}` : ''}
+                </span>
+              </div>
+              <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate leading-tight mt-0.5">
+                {getPinnedPreviewText(currentPinnedMsg)}
+              </span>
+            </div>
+
+            {(isAdmin || !isGroupOrChannel) && (
+              <button
+                onClick={(e) => { e.stopPropagation(); togglePin(currentPinnedMsg); }}
+                className="p-1.5 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] active:scale-90 transition-all shrink-0"
+              >
+                <X size={18} strokeWidth={2.2} />
+              </button>
+            )}
           </div>
-        )}
-      </header>
+        </div>
+      )}
 
       {/* ОСНОВНАЯ ЛЕНТА СООБЩЕНИЙ / ПОСТОВ КАНАЛА */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 pb-4 relative" onClick={() => setContextMenu(null)}>
@@ -1421,7 +1654,7 @@ export default function ChatPage() {
             let lastDateStr = '';
             return messages.map((msg: any) => {
               const isMe = String(msg.senderId) === String(currentUserId);
-              const { text, quotedText, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration } = parseContent(msg.content);
+              const { text, quotedText, replyAuthor, replyBody, forwardedFrom, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration } = parseContent(msg.content);
               const isOnlyVideoNote = videoNoteUrl && !hasText && !hasMedia && !voiceUrl;
 
               const dateObj = new Date(msg.createdAt);
@@ -1431,6 +1664,7 @@ export default function ChatPage() {
 
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
               const mReactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
+              const hasReactions = mReactionsKeys.length > 0;
               const isMsgUploading = msg.id === uploadingMsgId;
               const isSwiping = swipeState.id === msg.id;
               const currentSwipeOffset = isSwiping ? swipeState.offset : 0;
@@ -1478,6 +1712,13 @@ export default function ChatPage() {
                           </div>
                         ) : (
                           <>
+                            {forwardedFrom && (
+                              <div className="px-3.5 pt-2.5 pb-1 flex items-center gap-1.5 text-[12px] font-semibold text-[#86868b] dark:text-[#98989d]">
+                                <Forward size={13} className="shrink-0" />
+                                <span className="truncate">{t.forwardedFrom} {forwardedFrom}</span>
+                              </div>
+                            )}
+
                             {videoNoteUrl && (
                               <div className={`${isOnlyVideoNote ? '' : 'p-2'} flex justify-center`}>
                                 <div
@@ -1499,7 +1740,7 @@ export default function ChatPage() {
                             )}
 
                             {hasMedia && (
-                              <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[2px] bg-black/5 dark:bg-white/5' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                              <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[1px] bg-black/10 dark:bg-white/10' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                 {mediaUrls.map((url: string, idx: number) => {
                                   const isSingle = mediaUrls.length === 1;
                                   const itemClass = isSingle ? 'relative w-full flex justify-center' : `relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`;
@@ -1526,14 +1767,19 @@ export default function ChatPage() {
                               </div>
                             )}
 
-                            {hasText && (
+                            {(quotedText || text) && (
                               <div className="px-3.5 pt-2.5 pb-0.5">
                                 {quotedText && (
-                                  <div className="mb-1.5 pl-2.5 border-l-[2px] text-[12px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>
+                                  <div className="mb-1.5 px-2.5 py-1.5 rounded-[10px] bg-black/[0.05] dark:bg-white/[0.08] border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] flex flex-col">
+                                    <span className="text-[12px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight truncate">{replyAuthor || displayName}</span>
+                                    <span className="text-[12px] text-[#86868b] dark:text-[#98989d] truncate leading-tight mt-0.5">{replyBody || quotedText}</span>
+                                  </div>
                                 )}
-                                <div className="leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]" style={{ fontSize: `${textSize}px` }}>
-                                  {text}
-                                </div>
+                                {text && (
+                                  <div className="leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]" style={{ fontSize: `${textSize}px` }}>
+                                    {text}
+                                  </div>
+                                )}
                               </div>
                             )}
 
@@ -1592,7 +1838,7 @@ export default function ChatPage() {
                 );
               }
 
-              {/* РЕНДЕР СООБЩЕНИЙ В ЛИЧНЫХ ЧАТАХ И ГРУППАХ */}
+              {/* РЕНДЕР СООБЩЕНИЙ В ЛИЧНЫХ ЧАТАХ, ИЗБРАННОМ И ГРУППАХ */}
               return (
                 <div
                   key={msg.id}
@@ -1633,7 +1879,7 @@ export default function ChatPage() {
                     <div
                       className={isOnlyVideoNote
                         ? 'relative flex flex-col cursor-pointer bg-transparent'
-                        : `shadow-sm relative flex flex-col min-w-[60px] ${hasMedia ? 'w-[75vw] max-w-[320px]' : 'w-fit max-w-full'} cursor-pointer overflow-hidden ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`
+                        : `shadow-sm relative flex flex-col min-w-[72px] ${hasMedia ? 'w-[75vw] max-w-[320px]' : 'w-fit max-w-full'} cursor-pointer overflow-hidden ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`
                       }
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                     >
@@ -1643,6 +1889,24 @@ export default function ChatPage() {
                         </div>
                       ) : (
                         <>
+                          {/* ЗАГОЛОВОК ПЕРЕСЫЛКИ КАК В TELEGRAM */}
+                          {forwardedFrom && (
+                            <div className={`px-3 pt-2 pb-0.5 flex items-center gap-1.5 text-[12px] font-semibold ${isMe ? 'text-white/80 dark:text-black/75' : 'text-[#86868b] dark:text-[#98989d]'}`}>
+                              <Forward size={13} className="shrink-0" />
+                              <span className="truncate">{t.forwardedFrom} {forwardedFrom}</span>
+                            </div>
+                          )}
+
+                          {/* ПЛАШКА ОТВЕТА КАК В TELEGRAM (ЕСЛИ МЕДИА БЕЗ ТЕКСТА) */}
+                          {quotedText && !text && (
+                            <div className="px-2.5 pt-2 pb-1">
+                              <div className={`px-2.5 py-1.5 rounded-[10px] border-l-[3px] flex flex-col ${isMe ? 'bg-white/15 dark:bg-black/10 border-white dark:border-[#1d1d1f]' : 'bg-black/[0.05] dark:bg-white/[0.08] border-[#1d1d1f] dark:border-[#f5f5f7]'}`}>
+                                <span className="text-[12px] font-semibold leading-tight truncate">{replyAuthor || displayName}</span>
+                                <span className="text-[12px] opacity-80 truncate leading-tight mt-0.5">{replyBody || quotedText}</span>
+                              </div>
+                            </div>
+                          )}
+
                           {videoNoteUrl && (
                             <div className={`${isOnlyVideoNote ? '' : 'p-1.5'} flex justify-center`}>
                               <div
@@ -1667,7 +1931,7 @@ export default function ChatPage() {
                           )}
 
                           {hasMedia && (
-                            <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[2px] bg-black/5 dark:bg-white/5' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                            <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[1px] bg-black/10 dark:bg-white/10' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                               {mediaUrls.map((url: string, idx: number) => {
                                 const isSingle = mediaUrls.length === 1;
                                 const itemClass = isSingle ? 'relative w-full flex justify-center' : `relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`;
@@ -1692,8 +1956,8 @@ export default function ChatPage() {
                                 );
                               })}
 
-                              {(!hasText && !voiceUrl && !videoNoteUrl) && (
-                                <div className="absolute bottom-1.5 right-1.5 bg-black/40 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
+                              {(!text && !voiceUrl && !videoNoteUrl && !hasReactions) && (
+                                <div className="absolute bottom-1.5 right-1.5 bg-black/45 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
                                   {timeStr}
                                   {isMe && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={11} strokeWidth={2.5} /> : null}</div>)}
                                 </div>
@@ -1701,15 +1965,18 @@ export default function ChatPage() {
                             </div>
                           )}
 
-                          {hasText && (
-                            <div className="px-3 pt-2 pb-2.5">
+                          {text && (
+                            <div className={`px-3 pt-2 ${hasReactions ? 'pb-1' : 'pb-2'}`}>
                               {quotedText && (
-                                <div className={`mb-1.5 pl-2.5 border-l-[3px] font-medium opacity-80 truncate ${isMe ? 'border-white/40 dark:border-black/40' : 'border-black/10 dark:border-white/10'}`} style={{ fontSize: `${Math.max(11, textSize - 3)}px` }}>{quotedText}</div>
+                                <div className={`mb-1.5 px-2.5 py-1.5 rounded-[10px] border-l-[3px] flex flex-col ${isMe ? 'bg-white/15 dark:bg-black/10 border-white dark:border-[#1d1d1f]' : 'bg-black/[0.05] dark:bg-white/[0.08] border-[#1d1d1f] dark:border-[#f5f5f7]'}`}>
+                                  <span className="text-[12px] font-semibold leading-tight truncate">{replyAuthor || displayName}</span>
+                                  <span className="text-[12px] opacity-80 truncate leading-tight mt-0.5">{replyBody || quotedText}</span>
+                                </div>
                               )}
                               <div className="leading-[1.35] break-words whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>
                                 {text}
-                                {(!voiceUrl && !videoNoteUrl) && (
-                                  <span className={`float-right inline-flex items-center gap-1 text-[10px] ml-3 mt-1.5 pointer-events-none select-none relative top-[2px] ${isMe ? 'opacity-60 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
+                                {(!voiceUrl && !videoNoteUrl && !hasReactions) && (
+                                  <span className={`float-right inline-flex items-center gap-1 text-[10px] ml-3 mt-1.5 pointer-events-none select-none relative top-[2px] ${isMe ? 'opacity-65 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
                                     {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                     {timeStr}
                                     {isMe && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={12} strokeWidth={2.5} /> : null}</div>)}
@@ -1719,37 +1986,60 @@ export default function ChatPage() {
                               </div>
                             </div>
                           )}
+
+                          {/* ВСТРОЕННЫЕ РЕАКЦИИ С АВАТАРКАМИ И ВРЕМЕНЕМ ВНУТРИ СООБЩЕНИЯ КАК В TELEGRAM */}
+                          {hasReactions && !isOnlyVideoNote && (
+                            <div className="px-2.5 pt-1 pb-2 flex flex-wrap items-end gap-1.5">
+                              {mReactionsKeys.map(key => {
+                                const rData = msg.reactions[key];
+                                const { users: rUsers, count } = getReactionUsers(msg, key, rData);
+                                const isSelected = msg.myReaction === key;
+
+                                return (
+                                  <button
+                                    key={key}
+                                    onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
+                                    className={`flex items-center gap-1.5 h-[28px] pl-2.5 pr-1.5 rounded-full transition-all active:scale-90 ${
+                                      isMe
+                                        ? (isSelected ? 'bg-white/25 dark:bg-black/20 text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-white/12 dark:bg-black/10 text-[#f5f5f7] dark:text-[#1d1d1f]')
+                                        : (isSelected ? 'bg-[#1d1d1f]/15 dark:bg-white/20 text-[#1d1d1f] dark:text-[#f5f5f7]' : 'bg-black/[0.06] dark:bg-white/[0.08] text-[#1d1d1f] dark:text-[#f5f5f7]')
+                                    }`}
+                                  >
+                                    <span className="text-[14px] leading-none flex items-center justify-center">{key}</span>
+                                    {rUsers.length > 0 && count <= 3 ? (
+                                      <div className="flex items-center -space-x-1.5">
+                                        {rUsers.map((u, idx) => (
+                                          <div
+                                            key={idx}
+                                            className="w-[20px] h-[20px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-[#e5e5ea] dark:bg-[#333336] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] ring-1 ring-black/10 dark:ring-white/10"
+                                          >
+                                            {u.avatar && u.avatar.length > 5 ? (
+                                              <img src={u.avatar} className="w-full h-full object-cover" />
+                                            ) : (
+                                              (u.name || 'U').charAt(0).toUpperCase()
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-[12px] font-semibold leading-none pr-1">{count}</span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+
+                              {(!voiceUrl && !videoNoteUrl) && (
+                                <span className={`ml-auto inline-flex items-center gap-1 text-[10px] pl-2 leading-none pb-0.5 pointer-events-none select-none ${isMe ? 'opacity-65 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
+                                  {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
+                                  {timeStr}
+                                  {isMe && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={12} strokeWidth={2.5} /> : null}</div>)}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
-
-                    {mReactionsKeys.length > 0 && !isOnlyVideoNote && (
-                      <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                        {mReactionsKeys.map(key => {
-                          const rData = msg.reactions[key];
-                          const count = typeof rData === 'number' ? rData : (rData?.count || 1);
-                          const isSelected = msg.myReaction === key;
-                          return (
-                            <button
-                              key={key}
-                              onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
-                              className={`flex items-center justify-center gap-1.5 h-[26px] px-2.5 rounded-full transition-all active:scale-90 ${
-                                isSelected
-                                  ? 'bg-[#1d1d1f] text-[#f5f5f7] dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm'
-                                  : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5 shadow-sm'
-                              }`}
-                            >
-                              <span className="text-[13px] leading-none flex items-center justify-center">{key}</span>
-                              <span className={`text-[11px] font-semibold leading-none flex items-center justify-center ${
-                                isSelected ? 'text-[#f5f5f7] dark:text-[#1d1d1f]' : 'text-[#86868b] dark:text-[#98989d]'
-                              }`}>
-                                {count}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
                   </div>
                 </div>
               );
@@ -1787,7 +2077,7 @@ export default function ChatPage() {
               <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
             ) : (
               threadComments.map((c) => {
-                const { text, quotedText, hasMedia, mediaUrls, hasText } = parseContent(c.content);
+                const { text, quotedText, replyAuthor, replyBody, hasMedia, mediaUrls, hasText } = parseContent(c.content);
                 const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
 
                 return (
@@ -1798,7 +2088,12 @@ export default function ChatPage() {
                       </div>
                       <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5">
                         <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
-                        {quotedText && <div className="mb-1.5 pl-2.5 border-l-[3px] text-[13px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>}
+                        {quotedText && (
+                          <div className="mb-1.5 px-2.5 py-1 rounded-[8px] bg-black/[0.05] dark:bg-white/[0.08] border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] flex flex-col">
+                            {replyAuthor && <span className="text-[11px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] truncate">{replyAuthor}</span>}
+                            <span className="text-[12px] text-[#86868b] dark:text-[#98989d] truncate">{replyBody || quotedText}</span>
+                          </div>
+                        )}
                         {hasMedia && (
                           <img
                             src={mediaUrls[0]}
@@ -1872,9 +2167,13 @@ export default function ChatPage() {
         <div className="bg-white/90 dark:bg-[#161618]/90 border-t border-black/5 dark:border-white/5 relative z-10 flex flex-col backdrop-blur-xl">
           {(replyingTo || editingMsg) && (
             <div className="flex items-center justify-between mb-1 mt-3 mx-4 px-4 py-2.5 bg-[#f5f5f7] dark:bg-[#222224] rounded-[14px] border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7]">
-              <div className="flex flex-col mr-4">
-                <span className="text-[11px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] uppercase">{editingMsg ? t.editing : t.replyAction}</span>
-                <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate">{editingMsg ? (parseContent(editingMsg.content).text || t.photo) : (parseContent(replyingTo.content).text || t.photo)}</span>
+              <div className="flex flex-col mr-4 min-w-0">
+                <span className="text-[12px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] truncate">
+                  {editingMsg ? t.editing : `${t.replyAction} ${getAuthorNameForReply(replyingTo)}`}
+                </span>
+                <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate">
+                  {editingMsg ? (parseContent(editingMsg.content).text || t.photo) : (parseContent(replyingTo.content).text || t.photo)}
+                </span>
               </div>
               <button type="button" onClick={() => { setReplyingTo(null); setEditingMsg(null); setContent(''); }} className="p-1.5 flex-shrink-0 text-[#86868b]"><X size={16} /></button>
             </div>
@@ -1936,13 +2235,13 @@ export default function ChatPage() {
         if (safeY < 0) safeY = 20;
 
         const isMe = String(contextMenu.item.senderId) === String(currentUserId);
-        const { hasText } = parseContent(contextMenu.item.content);
+        const { text: parsedBodyText } = parseContent(contextMenu.item.content);
         const showReply = contextMenu.type === 'comment' || !isChannel;
-        const showCopy = hasText;
+        const showCopy = Boolean(parsedBodyText);
         const showForward = contextMenu.type === 'message';
         const showPin = contextMenu.type === 'message' && (isAdmin || !isGroupOrChannel);
         const showEdit = isMe && contextMenu.type === 'message';
-        const showDelete = isMe || isAdmin;
+        const showDelete = isMe || isAdmin || isSavedChat;
         const isPinned = pinnedMessages.some(m => m.id === contextMenu.item.id);
 
         return (
@@ -1955,7 +2254,7 @@ export default function ChatPage() {
               </div>
               <div className="flex flex-col bg-white/95 dark:bg-[#222224]/95 backdrop-blur-xl rounded-[20px] shadow-lg border border-black/5 dark:border-white/5 overflow-hidden w-full">
                 {showReply && <button onClick={(e) => { e.stopPropagation(); if (contextMenu.type === 'comment') setCommentReplyingTo(contextMenu.item); else setReplyingTo(contextMenu.item); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Reply size={18} className="text-[#86868b]" /> {t.replyAction}</button>}
-                {showCopy && <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parseContent(contextMenu.item.content).text); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Copy size={18} className="text-[#86868b]" /> {t.copy}</button>}
+                {showCopy && <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(parsedBodyText); setContextMenu(null); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Copy size={18} className="text-[#86868b]" /> {t.copy}</button>}
                 {showPin && <button onClick={(e) => { e.stopPropagation(); togglePin(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Pin size={18} className="text-[#86868b]" /> {isPinned ? t.unpin : t.pin}</button>}
                 {showForward && <button onClick={(e) => { e.stopPropagation(); openForwardModal(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Forward size={18} className="text-[#86868b]" /> {t.forward}</button>}
                 {showEdit && <button onClick={(e) => { e.stopPropagation(); setContextMenu(null); startEditing(contextMenu.item); }} className="flex items-center gap-3.5 px-4 py-3 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5"><Edit2 size={18} className="text-[#86868b]" /> {t.editAction}</button>}
