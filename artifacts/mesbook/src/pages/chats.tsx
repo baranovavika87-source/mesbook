@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Search, MessageSquare, Moon, Sun, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2, ArrowLeft, Camera, Mic, Image as ImageIcon, Video } from 'lucide-react';
+import { Search, MessageSquare, Users, Bookmark, Settings, UserPlus, Volume2, Check, X, Loader2, ArrowLeft, Camera } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { saveSecureData, loadSecureData } from '../cryptoDB';
 
 let socket: any = null;
 
@@ -255,9 +256,31 @@ export default function ChatsPage() {
     } catch(e) { return []; }
   });
   
-  const [isDark, setIsDark] = useState(false);
   const [, setLocation] = useLocation();
   const touchStartX = useRef<number | null>(null);
+
+  // ЗАГРУЗКА ЗАШИФРОВАННЫХ ДАННЫХ ИЗ CRYPTODB ПРИ СТАРТЕ
+  useEffect(() => {
+    const syncEncryptedStorage = async () => {
+      const encChats = await loadSecureData('mesbook_chats_' + currentUserId);
+      if (Array.isArray(encChats) && encChats.length > 0) {
+        setChats(encChats);
+        try { localStorage.setItem('mesbook_chats_' + currentUserId, JSON.stringify(encChats)); } catch (e) {}
+      } else if (chats.length > 0) {
+        saveSecureData('mesbook_chats_' + currentUserId, chats);
+      }
+
+      const encSaved = await loadSecureData('mesbook_saved_messages_' + currentUserId);
+      if (Array.isArray(encSaved) && encSaved.length > 0) {
+        const cleanSaved = encSaved.map((m: any) => ({ ...m, isSending: false }));
+        setSavedMessages(cleanSaved);
+        try { localStorage.setItem('mesbook_saved_messages_' + currentUserId, JSON.stringify(cleanSaved)); } catch (e) {}
+      } else if (savedMessages.length > 0) {
+        saveSecureData('mesbook_saved_messages_' + currentUserId, savedMessages);
+      }
+    };
+    syncEncryptedStorage();
+  }, [currentUserId]);
 
   useEffect(() => {
     const sendPing = async () => {
@@ -271,10 +294,8 @@ export default function ChatsPage() {
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || localStorage.getItem('mesbook_theme');
     if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      setIsDark(true);
       document.documentElement.classList.add('dark');
     } else {
-      setIsDark(false);
       document.documentElement.classList.remove('dark');
     }
 
@@ -302,12 +323,22 @@ export default function ChatsPage() {
         const data = await res.json();
         setChats(data);
         localStorage.setItem('mesbook_chats_' + currentUserId, JSON.stringify(data));
+        saveSecureData('mesbook_chats_' + currentUserId, data);
       }
     } catch (e) {}
 
     try {
       const saved = localStorage.getItem('mesbook_saved_messages_' + currentUserId);
-      if (saved) setSavedMessages(JSON.parse(saved).map((m: any) => ({...m, isSending: false})));
+      if (saved) {
+        const parsed = JSON.parse(saved).map((m: any) => ({ ...m, isSending: false }));
+        setSavedMessages(parsed);
+        saveSecureData('mesbook_saved_messages_' + currentUserId, parsed);
+      } else {
+        const encSaved = await loadSecureData('mesbook_saved_messages_' + currentUserId);
+        if (Array.isArray(encSaved)) {
+          setSavedMessages(encSaved.map((m: any) => ({ ...m, isSending: false })));
+        }
+      }
     } catch(e) {}
   };
 
@@ -385,21 +416,6 @@ export default function ChatsPage() {
   const filteredChats = allDynamicChats.filter((c: any) => 
     (c.participant?.displayName || '').toLowerCase().includes(search.toLowerCase())
   );
-
-  const toggleTheme = () => {
-    const html = document.documentElement;
-    if (html.classList.contains('dark')) {
-      html.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-      localStorage.setItem('mesbook_theme', 'light');
-      setIsDark(false);
-    } else {
-      html.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-      localStorage.setItem('mesbook_theme', 'dark');
-      setIsDark(true);
-    }
-  };
 
   const handleCreateGroupOrChannel = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -577,11 +593,7 @@ export default function ChatsPage() {
                   {typingText}
                 </p>
               ) : (
-                <div className="flex items-center gap-1.5 overflow-hidden pr-2 text-[#86868b] dark:text-[#a1a1aa]">
-                  {parsedPreview.kind === 'voice' && <Mic size={15} className="shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] opacity-80" />}
-                  {parsedPreview.kind === 'video_note' && <Camera size={15} className="shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] opacity-80" />}
-                  {parsedPreview.kind === 'photo' && <ImageIcon size={15} className="shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] opacity-80" />}
-                  {parsedPreview.kind === 'video' && <Video size={15} className="shrink-0 text-[#1d1d1f] dark:text-[#f5f5f7] opacity-80" />}
+                <div className="flex items-center overflow-hidden pr-2 text-[#86868b] dark:text-[#a1a1aa]">
                   <p className="text-[15px] truncate leading-snug">
                     {parsedPreview.text}
                   </p>
@@ -652,7 +664,7 @@ export default function ChatsPage() {
         />
       )}
 
-      {/* Боковое меню */}
+      {/* Боковое меню (без кнопки смены темы) */}
       <div className={`fixed top-0 left-0 h-full w-[82%] max-w-[310px] bg-[#f5f5f7] dark:bg-[#161618] z-50 transform transition-transform duration-300 ease-out flex flex-col border-r border-black/5 dark:border-white/5 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 pt-12 pb-5 flex justify-between items-start relative bg-white dark:bg-[#222224] border-b border-black/5 dark:border-white/5">
           <div className="flex flex-col">
@@ -675,13 +687,6 @@ export default function ChatsPage() {
               {currentUser?.username || '@user'}
             </p>
           </div>
-
-          <button 
-            onClick={toggleTheme} 
-            className="p-2.5 rounded-full bg-[#f5f5f7] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95 border border-black/5 dark:border-white/5"
-          >
-            {isDark ? <Sun size={19} /> : <Moon size={19} />}
-          </button>
         </div>
 
         <div className="flex flex-col py-4 overflow-y-auto flex-1 gap-3.5 px-3.5">
