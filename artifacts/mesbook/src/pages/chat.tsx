@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRoute, Link, useLocation } from 'wouter';
-import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageSquare, MessageCircle, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, LogOut, Bell, Send, Clock } from 'lucide-react';
+import { ArrowLeft, Trash2, Edit2, Loader2, Check, X, Paperclip, Bookmark, Camera, ChevronRight, Download, MessageSquare, MessageCircle, Copy, Reply, Mic, Square, Play, RefreshCw, ArrowUp, Pin, Forward, LogOut, Bell, Send, Clock, MoreVertical, Image as ImageIcon, File, Link as LinkIcon, Plus } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { saveSecureData, loadSecureData } from '../cryptoDB';
 
@@ -18,7 +18,7 @@ const FAST_REACTIONS = ['❤️', '👍', '🔥', '😂', '😢'];
 const translations = {
   ru: {
     saved: "Избранное", companion: "Собеседник", attachment: "Вложение", photo: "Фотография",
-    voiceMsg: "Голосовое сообщение", videoMsg: "Видеосообщение",
+    voiceMsg: "Голосовое сообщение", videoMsg: "Видеосообщение", file: "Файл", link: "Ссылка",
     info: "Информация", name: "Название", desc: "Описание", bio: "О себе", channel: "Канал",
     personalChannel: "Личный Канал", birthday: "День рождения", online: "в сети", group: "Группа",
     subs: ['подписчик', 'подписчика', 'подписчиков'], members: ['участник', 'участника', 'участников'],
@@ -33,11 +33,12 @@ const translations = {
     makeAdmin: "Сделать админом", dismissAdmin: "Разжаловать", deleteChat: "Удалить чат",
     leaveChat: "Покинуть чат", forwardedFrom: "Переслано от", writeBtn: "Написать",
     muteBtn: "Звук", leaveBtn: "Leave", mediaTab: "Медиа", membersTab: "Members",
-    sendMedia: "Мои заметки", addCaption: "Добавить подпись..."
+    sendMedia: "Мои заметки", addCaption: "Добавить подпись...", block: "Заблокировать",
+    searchMsgs: "Поиск сообщений", searchDate: "Поиск по дате", changeWallpaper: "Обои чата"
   },
   en: {
     saved: "Saved Messages", companion: "Companion", attachment: "Attachment", photo: "Photo",
-    voiceMsg: "Voice message", videoMsg: "Video message",
+    voiceMsg: "Voice message", videoMsg: "Video message", file: "File", link: "Link",
     info: "Info", name: "Name", desc: "Description", bio: "Bio", channel: "Channel",
     personalChannel: "Personal Channel", birthday: "Birthday", online: "online", group: "Group",
     subs: ['subscriber', 'subscribers'], members: ['member', 'members'], onlineCount: "online",
@@ -51,7 +52,8 @@ const translations = {
     makeAdmin: "Make Admin", dismissAdmin: "Dismiss Admin", deleteChat: "Delete Chat",
     leaveChat: "Leave Chat", forwardedFrom: "Forwarded from", writeBtn: "Write",
     muteBtn: "Mute", leaveBtn: "Leave", mediaTab: "Media", membersTab: "Members",
-    sendMedia: "Send Media", addCaption: "Add a caption..."
+    sendMedia: "Send Media", addCaption: "Add a caption...", block: "Block",
+    searchMsgs: "Search", searchDate: "Search by date", changeWallpaper: "Wallpaper"
   }
 };
 
@@ -117,9 +119,11 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration, i
   const audioRef = useRef<HTMLAudioElement>(null);
   const [duration, setDuration] = useState(fixedDuration || 0);
 
+  const isLoading = url === 'loading';
+
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || isLoading) return;
     const updateProgress = () => {
       const currentDur = fixedDuration || audio.duration;
       if (currentDur && isFinite(currentDur)) setProgress((audio.currentTime / currentDur) * 100);
@@ -143,10 +147,11 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration, i
       audio.removeEventListener('ended', onEnd);
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
     };
-  }, [fixedDuration]);
+  }, [fixedDuration, isLoading]);
 
   const togglePlay = (e: any) => {
     e.stopPropagation();
+    if (isLoading) return;
     if (audioRef.current) {
       if (isPlaying) audioRef.current.pause(); else audioRef.current.play();
       setIsPlaying(!isPlaying);
@@ -163,18 +168,18 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration, i
   const bars = [2, 4, 3, 5, 7, 8, 6, 4, 5, 3, 2, 4, 6, 5, 7, 8, 6, 4, 2, 3, 5, 4, 2];
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2 w-[260px]">
-      <button onClick={togglePlay} className={`w-11 h-11 shrink-0 rounded-full flex items-center justify-center transition-transform active:scale-95 ${isMe ? 'bg-white dark:bg-[#161618] text-[#1d1d1f] dark:text-[#f5f5f7]' : 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]'}`}>
-        {isPlaying ? <Square size={16} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-1" />}
+    <div className="flex items-center gap-3 px-3 py-2 w-[260px] relative">
+      <button onClick={togglePlay} disabled={isLoading} className={`w-11 h-11 shrink-0 rounded-full flex items-center justify-center transition-transform active:scale-95 ${isMe ? 'bg-white dark:bg-[#161618] text-[#1d1d1f] dark:text-[#f5f5f7]' : 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]'}`}>
+        {isLoading ? <Loader2 size={20} className="animate-spin" /> : (isPlaying ? <Square size={16} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-1" />)}
       </button>
-      <div className="flex-1 flex flex-col justify-center">
-        <div className="flex items-end gap-[2px] h-6 w-full opacity-80 mt-1">
+      <div className={`flex-1 flex flex-col justify-center ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
+        <div className="flex items-end gap-[2px] h-6 w-full mt-1">
           {bars.map((h, i) => (
             <div key={i} className={`w-[2.5px] rounded-full ${isMe ? 'bg-white/90 dark:bg-black/90' : 'bg-black/80 dark:bg-white/80'}`} style={{ height: `${(h / 8) * 100}%`, opacity: progress > (i / bars.length) * 100 ? 1 : 0.4 }}></div>
           ))}
         </div>
         <div className="flex justify-between items-center text-[11px] mt-1.5 opacity-70 font-medium">
-          <span>{formatAudioTime(isPlaying ? audioRef.current?.currentTime || 0 : (fixedDuration || duration))}</span>
+          <span>{isLoading ? '0:00' : formatAudioTime(isPlaying ? audioRef.current?.currentTime || 0 : (fixedDuration || duration))}</span>
           <div className="flex items-center gap-1">
             <span>{timeStr}</span>
             {isMe && (
@@ -183,7 +188,7 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration, i
           </div>
         </div>
       </div>
-      <audio ref={audioRef} src={url} preload="metadata" className="hidden" />
+      {!isLoading && <audio ref={audioRef} src={url} preload="metadata" className="hidden" />}
     </div>
   );
 };
@@ -205,10 +210,20 @@ export default function ChatPage() {
   const [wallpaper, setWallpaper] = useState('');
   const [profileTab, setProfileTab] = useState<'members' | 'media'>(isGroupOrChannel && !isSavedChat ? 'members' : 'media');
 
+  // ФАЙЛЫ, ФОТО, ОТПРАВКА
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
+  const [currentPreviewIndex, setCurrentPreviewIndex] = useState(0);
   const [mediaCaption, setMediaCaption] = useState('');
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+
+  // МЕНЮ
+  const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
+
+  // ПОДСВЕТКА СООБЩЕНИЯ
+  const [highlightedMsgId, setHighlightedMsgId] = useState<number | null>(null);
 
   useEffect(() => {
     const savedSize = Number(localStorage.getItem('mesbook_text_size')) || 16;
@@ -227,12 +242,9 @@ export default function ChatPage() {
   const cacheKey = isSavedChat ? `mesbook_saved_messages_${currentUserId}` : `mesbook_messages_cache_${currentUserId}_${chatId}`;
   const pinnedStorageKey = `mesbook_pinned_${currentUserId}_${chatId}`;
 
-  // СИНХРОННЫЙ СТАРТ ДЛЯ ИЗБРАННОГО + АСИНХРОННАЯ СИНХРОНИЗАЦИЯ С CRYPTODB
   const [messages, setMessages] = useState<any[]>(() => {
     if (isSavedChat) {
-      try {
-        return JSON.parse(localStorage.getItem(`mesbook_saved_messages_${currentUserId}`) || '[]').map((m: any) => ({ ...m, isSending: false }));
-      } catch (e) { return []; }
+      try { return JSON.parse(localStorage.getItem(`mesbook_saved_messages_${currentUserId}`) || '[]').map((m: any) => ({ ...m, isSending: false })); } catch (e) { return []; }
     }
     return [];
   });
@@ -316,19 +328,33 @@ export default function ChatPage() {
   const [editingMsg, setEditingMsg] = useState<any>(null);
   const [isUploading] = useState(false);
 
-  // ЛАЙТБОКС С ЗУМОМ
-  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  // ЛАЙТБОКС С ЗУМОМ И СВАЙПОМ
+  const [lightboxData, setLightboxData] = useState<{ urls: string[], index: number } | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
   const [zoomPos, setZoomPos] = useState({ x: 0, y: 0 });
+  
   const pinchStartDistRef = useRef<number | null>(null);
   const pinchStartScaleRef = useRef<number>(1);
   const panStartRef = useRef<{ x: number, y: number, origX: number, origY: number } | null>(null);
   const lastTapPhotoRef = useRef<number>(0);
+  const swipeStartRef = useRef<number | null>(null);
 
   const openLightbox = (url: string) => {
+    const allMedia = messages.reduce((acc: string[], msg: any) => {
+      const { mediaUrls } = parseContent(msg.content);
+      if (mediaUrls && mediaUrls.length > 0) acc.push(...mediaUrls);
+      return acc;
+    }, []).reverse();
+    
+    let idx = allMedia.indexOf(url);
+    if (idx === -1) {
+      allMedia.push(url);
+      idx = allMedia.length - 1;
+    }
+    
     setZoomScale(1);
     setZoomPos({ x: 0, y: 0 });
-    setFullScreenImage(url);
+    setLightboxData({ urls: allMedia, index: idx });
     setContextMenu(null);
   };
 
@@ -349,6 +375,8 @@ export default function ChatPage() {
       lastTapPhotoRef.current = now;
       if (zoomScale > 1) {
         panStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, origX: zoomPos.x, origY: zoomPos.y };
+      } else {
+        swipeStartRef.current = e.touches[0].clientX;
       }
     }
   };
@@ -361,16 +389,27 @@ export default function ChatPage() {
       const newScale = Math.min(4, Math.max(1, pinchStartScaleRef.current * (dist / pinchStartDistRef.current)));
       setZoomScale(newScale);
       if (newScale === 1) setZoomPos({ x: 0, y: 0 });
-    } else if (e.touches.length === 1 && zoomScale > 1 && panStartRef.current) {
-      const dx = e.touches[0].clientX - panStartRef.current.x;
-      const dy = e.touches[0].clientY - panStartRef.current.y;
-      setZoomPos({ x: panStartRef.current.origX + dx, y: panStartRef.current.origY + dy });
+    } else if (e.touches.length === 1) {
+      if (zoomScale > 1 && panStartRef.current) {
+        const dx = e.touches[0].clientX - panStartRef.current.x;
+        const dy = e.touches[0].clientY - panStartRef.current.y;
+        setZoomPos({ x: panStartRef.current.origX + dx, y: panStartRef.current.origY + dy });
+      }
     }
   };
 
-  const handleLightboxTouchEnd = () => {
+  const handleLightboxTouchEnd = (e: React.TouchEvent) => {
+    if (e.changedTouches.length === 1 && zoomScale === 1 && swipeStartRef.current !== null && lightboxData) {
+      const diff = swipeStartRef.current - e.changedTouches[0].clientX;
+      if (diff > 50 && lightboxData.index < lightboxData.urls.length - 1) {
+        setLightboxData({ ...lightboxData, index: lightboxData.index + 1 });
+      } else if (diff < -50 && lightboxData.index > 0) {
+        setLightboxData({ ...lightboxData, index: lightboxData.index - 1 });
+      }
+    }
     pinchStartDistRef.current = null;
     panStartRef.current = null;
+    swipeStartRef.current = null;
     if (zoomScale < 1.05) { setZoomScale(1); setZoomPos({ x: 0, y: 0 }); }
   };
 
@@ -427,7 +466,6 @@ export default function ChatPage() {
   const [isCommentUploading, setIsCommentUploading] = useState(false);
   const [commentReplyingTo, setCommentReplyingTo] = useState<any>(null);
 
-  // СОХРАНЕНИЕ ВСЕХ ЗАКРЕПЛЁННЫХ СООБЩЕНИЙ МЕЖДУ СЕССИЯМИ
   const [pinnedMessages, setPinnedMessages] = useState<any[]>(() => {
     try {
       const savedPins = localStorage.getItem(`mesbook_pinned_${currentUserId}_${chatId}`);
@@ -501,6 +539,7 @@ export default function ChatPage() {
 
   const editAvatarRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -524,6 +563,15 @@ export default function ChatPage() {
   useEffect(() => {
     setProfileTab(isGroup && !isChannel ? 'members' : 'media');
   }, [isGroup, isChannel, showProfile]);
+
+  const handleScrollToMsg = (msgId: number) => {
+    const el = document.getElementById(`msg-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMsgId(msgId);
+      setTimeout(() => setHighlightedMsgId(null), 2000);
+    }
+  };
 
   useEffect(() => {
     const sendPing = async () => { try { await fetch('/api/ping', { method: 'POST', headers: { 'Authorization': 'Bearer ' + currentUserId } }); } catch (e) {} };
@@ -604,7 +652,6 @@ export default function ChatPage() {
         const pendingOutbox = (await loadSecureData(outboxKey)) || [];
         setMessages([...serverMsgs, ...pendingOutbox.map((m: any) => ({ ...m, isSending: true }))]);
 
-        // СИНХРОНИЗАЦИЯ НЕСКОЛЬКИХ ЗАКРЕПОВ
         let savedPins: any[] = [];
         try { savedPins = JSON.parse(localStorage.getItem(pinnedStorageKey) || '[]'); } catch (e) {}
         if (data.pinnedMessage) {
@@ -877,9 +924,34 @@ export default function ChatPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-    setSelectedFiles(files);
-    setMediaPreviews(files.map(file => URL.createObjectURL(file)));
+    setSelectedFiles(prev => [...prev, ...files]);
+    setMediaPreviews(prev => [...prev, ...files.map(file => URL.createObjectURL(file))]);
+    if (selectedFiles.length === 0) setCurrentPreviewIndex(0);
     setMediaCaption('');
+    setIsAttachmentMenuOpen(false);
+  };
+
+  const removeSelectedFile = (idx: number) => {
+    const newFiles = [...selectedFiles];
+    newFiles.splice(idx, 1);
+    const newPreviews = [...mediaPreviews];
+    newPreviews.splice(idx, 1);
+    setSelectedFiles(newFiles);
+    setMediaPreviews(newPreviews);
+    if (currentPreviewIndex >= newFiles.length) {
+      setCurrentPreviewIndex(Math.max(0, newFiles.length - 1));
+    }
+  };
+
+  const handlePreviewSwipe = (e: React.TouchEvent) => {
+    if (mediaPreviews.length <= 1) return;
+    const diff = swipeStartRef.current !== null ? swipeStartRef.current - e.changedTouches[0].clientX : 0;
+    if (diff > 50 && currentPreviewIndex < mediaPreviews.length - 1) {
+      setCurrentPreviewIndex(prev => prev + 1);
+    } else if (diff < -50 && currentPreviewIndex > 0) {
+      setCurrentPreviewIndex(prev => prev - 1);
+    }
+    swipeStartRef.current = null;
   };
 
   const handleConfirmMediaUpload = async () => {
@@ -1024,7 +1096,6 @@ export default function ChatPage() {
     } catch (e) {}
   };
 
-  // ПОЛУЧЕНИЕ АВАТАРОК РЕАКЦИЙ ДЛЯ СООБЩЕНИЙ КАК В TELEGRAM
   const getReactionUsers = (msg: any, key: string, rData: any) => {
     const rawUsers = Array.isArray(rData) ? rData : (Array.isArray(rData?.users) ? rData.users : []);
     const count = typeof rData === 'number' ? rData : (rData?.count || rawUsers.length || 1);
@@ -1183,7 +1254,6 @@ export default function ChatPage() {
     let replyBody: string | null = null;
     let forwardedFrom: string | null = null;
 
-    // Сначала отделяем блок цитаты или пересылки сверху, чтобы медиа в основном теле не ломали префикс
     if (text.startsWith('> ')) {
       const parts = text.split(DOUBLE_NL);
       if (parts.length > 0) {
@@ -1301,7 +1371,7 @@ export default function ChatPage() {
   const chatMedia = messages.reduce((acc: string[], msg: any) => {
     const { mediaUrls, videoNoteUrl } = parseContent(msg.content);
     if (mediaUrls && mediaUrls.length > 0) acc.push(...mediaUrls);
-    if (videoNoteUrl) acc.push(videoNoteUrl);
+    if (videoNoteUrl && videoNoteUrl !== 'loading') acc.push(videoNoteUrl);
     return acc;
   }, []).reverse();
 
@@ -1313,35 +1383,49 @@ export default function ChatPage() {
     <div
       className={`flex flex-col h-[100dvh] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out ${!wallpaper ? 'bg-[#f5f5f7] dark:bg-[#161618]' : ''}`}
       style={wallpaper ? { background: wallpaper.startsWith('#') ? wallpaper : `url(${wallpaper}) center/cover fixed` } : {}}
-      onClick={() => setContextMenu(null)}
+      onClick={() => { setContextMenu(null); setIsChatMenuOpen(false); setIsProfileMenuOpen(false); setIsAttachmentMenuOpen(false); }}
     >
-      {/* МОДАЛКА МУЛЬТИЗАГРУЗКИ ФОТО */}
+      {/* МОДАЛКА МУЛЬТИЗАГРУЗКИ ФОТО / ФАЙЛОВ */}
       {selectedFiles.length > 0 && (
-        <div className="fixed inset-0 z-[400] bg-black flex flex-col animate-in fade-in duration-200">
-          <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-10">
+        <div className="fixed inset-0 z-[400] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in fade-in duration-200">
+          <div className="flex items-center justify-between p-4 bg-white/90 dark:bg-[#222224]/90 border-b border-black/5 dark:border-white/5 backdrop-blur-xl absolute top-0 w-full z-10 pt-10">
             <div className="flex items-center gap-4">
-              <button onClick={() => { setSelectedFiles([]); setMediaPreviews([]); }} className="p-2 text-white active:scale-95 transition-transform"><ArrowLeft size={24} /></button>
-              <span className="font-semibold text-[18px] text-white">Выбрано {selectedFiles.length}</span>
+              <button onClick={() => { setSelectedFiles([]); setMediaPreviews([]); setCurrentPreviewIndex(0); }} className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform"><ArrowLeft size={24} /></button>
+              <span className="font-semibold text-[18px] text-[#1d1d1f] dark:text-[#f5f5f7]">Выбрано {selectedFiles.length}</span>
             </div>
+            <button onClick={() => fileInputRef.current?.click()} className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95"><Plus size={24} /></button>
           </div>
-          <div className="flex-1 flex items-center justify-center p-2 overflow-hidden bg-black mt-16">
-            <img src={mediaPreviews[0]} className="max-w-full max-h-full object-contain" />
+          
+          <div 
+            className="flex-1 flex items-center justify-center p-2 mt-20 mb-32"
+            onTouchStart={(e) => { swipeStartRef.current = e.touches[0].clientX; }}
+            onTouchEnd={handlePreviewSwipe}
+          >
+            {mediaPreviews.length > 0 && (
+              <img src={mediaPreviews[currentPreviewIndex]} className="max-w-full max-h-full object-contain rounded-[12px] shadow-sm" />
+            )}
           </div>
-          <div className="bg-[#1c1c1e] w-full rounded-t-[20px] flex flex-col">
+          
+          <div className="absolute bottom-0 w-full bg-white dark:bg-[#222224] rounded-t-[20px] flex flex-col border-t border-black/5 dark:border-white/5 shadow-2xl">
             {mediaPreviews.length > 1 && (
-              <div className="p-3 overflow-x-auto flex gap-2 scrollbar-hide border-b border-white/10">
+              <div className="p-3 overflow-x-auto flex gap-2 scrollbar-hide border-b border-black/5 dark:border-white/5 px-4">
                 {mediaPreviews.map((src, idx) => (
-                  <div key={idx} className="w-[60px] h-[60px] rounded-[8px] overflow-hidden shrink-0 relative bg-black/50">
+                  <div key={idx} onClick={() => setCurrentPreviewIndex(idx)} className={`w-[60px] h-[60px] rounded-[10px] overflow-hidden shrink-0 relative cursor-pointer border-[2px] transition-colors ${idx === currentPreviewIndex ? 'border-[#1d1d1f] dark:border-[#f5f5f7]' : 'border-transparent'}`}>
                     <img src={src} className="w-full h-full object-cover opacity-80" />
-                    <div className="absolute top-1 right-1 w-[18px] h-[18px] bg-white rounded-full flex items-center justify-center border-2 border-[#1c1c1e]"><Check size={12} className="text-[#1c1c1e]" strokeWidth={3} /></div>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); removeSelectedFile(idx); }}
+                      className="absolute top-1 right-1 w-[18px] h-[18px] bg-white dark:bg-[#222224] rounded-full flex items-center justify-center border border-black/10 shadow-sm"
+                    >
+                      <X size={12} className="text-[#1d1d1f] dark:text-[#f5f5f7]" strokeWidth={2.5} />
+                    </button>
                   </div>
                 ))}
               </div>
             )}
-            <div className="p-3 flex items-center gap-3">
-              <input type="text" value={mediaCaption} onChange={e => setMediaCaption(e.target.value)} placeholder={t.addCaption} className="flex-1 bg-transparent text-[16px] text-white outline-none placeholder-gray-400 py-2" />
-              <button onClick={handleConfirmMediaUpload} disabled={isUploadingMedia} className="w-[42px] h-[42px] shrink-0 bg-white rounded-full flex items-center justify-center active:scale-95 transition-transform disabled:opacity-50">
-                {isUploadingMedia ? <Loader2 size={20} className="animate-spin text-[#1c1c1e]" /> : <Send size={18} className="text-[#1c1c1e] ml-0.5" />}
+            <div className="p-4 flex items-center gap-3">
+              <input type="text" value={mediaCaption} onChange={e => setMediaCaption(e.target.value)} placeholder={t.addCaption} className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] rounded-full px-4 text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] outline-none placeholder-[#86868b] py-2.5" />
+              <button onClick={handleConfirmMediaUpload} disabled={isUploadingMedia} className="w-[42px] h-[42px] shrink-0 bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-full flex items-center justify-center active:scale-95 transition-transform disabled:opacity-50">
+                {isUploadingMedia ? <Loader2 size={20} className="animate-spin" /> : <ArrowUp size={22} strokeWidth={2.5} />}
               </button>
             </div>
           </div>
@@ -1385,8 +1469,8 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ЛАЙТБОКС С ПОДДЕРЖКОЙ ЗУМА */}
-      {fullScreenImage && (
+      {/* ЛАЙТБОКС С ПОДДЕРЖКОЙ ЗУМА И СВАЙПА */}
+      {lightboxData && lightboxData.urls.length > 0 && (
         <div
           className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl flex flex-col animate-in fade-in duration-200 ease-out touch-none"
           onTouchStart={handleLightboxTouchStart}
@@ -1394,15 +1478,18 @@ export default function ChatPage() {
           onTouchEnd={handleLightboxTouchEnd}
         >
           <div className="flex items-center justify-between p-4 pt-10 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-20">
-            <button onClick={() => setFullScreenImage(null)} className="p-2.5 text-white bg-white/10 rounded-full backdrop-blur-md active:scale-90 transition-transform"><X size={22} /></button>
-            <button onClick={() => downloadImage(fullScreenImage)} className="p-2.5 text-white bg-white/10 rounded-full backdrop-blur-md active:scale-90 transition-transform"><Download size={22} /></button>
+            <button onClick={() => setLightboxData(null)} className="p-2.5 text-white bg-white/10 rounded-full backdrop-blur-md active:scale-90 transition-transform"><X size={22} /></button>
+            <div className="flex gap-2">
+              <span className="text-white/80 font-medium px-3 py-1.5 bg-white/10 rounded-full text-[13px]">{lightboxData.index + 1} / {lightboxData.urls.length}</span>
+              <button onClick={() => downloadImage(lightboxData.urls[lightboxData.index])} className="p-2.5 text-white bg-white/10 rounded-full backdrop-blur-md active:scale-90 transition-transform"><Download size={22} /></button>
+            </div>
           </div>
           <div
             className="flex-1 flex items-center justify-center overflow-hidden"
-            onClick={() => { if (zoomScale === 1) setFullScreenImage(null); }}
+            onClick={() => { if (zoomScale === 1) setLightboxData(null); }}
           >
             <img
-              src={fullScreenImage}
+              src={lightboxData.urls[lightboxData.index]}
               alt="Media"
               onClick={(e) => e.stopPropagation()}
               onDoubleClick={() => { if (zoomScale > 1) { setZoomScale(1); setZoomPos({ x: 0, y: 0 }); } else setZoomScale(2.5); }}
@@ -1418,15 +1505,42 @@ export default function ChatPage() {
 
       {/* ПРОФИЛЬ ЧАТА / КАНАЛА */}
       {showProfile && chatInfo?.participant && (
-        <div className="fixed inset-0 z-[150] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out overflow-y-auto">
+        <div className="fixed inset-0 z-[150] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out overflow-y-auto" onClick={() => setIsProfileMenuOpen(false)}>
           <header className="flex items-center justify-between px-4 pt-12 pb-2 sticky top-0 bg-[#f5f5f7]/90 dark:bg-[#161618]/90 backdrop-blur-xl z-20">
             <button onClick={() => { setShowProfile(false); setIsEditingChat(false); }} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-2 -ml-2 transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2.5} /></button>
-            {isAdmin && !isEditingChat && <button onClick={handleEditChatClick} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-2 -mr-2 transition-transform active:scale-95"><Edit2 size={24} strokeWidth={2.5} /></button>}
-            {isEditingChat && (
-              <button onClick={handleSaveChatSettings} disabled={isSavingChat} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-2 -mr-2 transition-transform active:scale-95">
-                {isSavingChat ? <Loader2 size={24} className="animate-spin" /> : <Check size={26} strokeWidth={2.5} />}
-              </button>
-            )}
+            <div className="relative">
+              {isEditingChat ? (
+                <button onClick={handleSaveChatSettings} disabled={isSavingChat} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-2 -mr-2 transition-transform active:scale-95">
+                  {isSavingChat ? <Loader2 size={24} className="animate-spin" /> : <Check size={26} strokeWidth={2.5} />}
+                </button>
+              ) : (
+                <button onClick={(e) => { e.stopPropagation(); setIsProfileMenuOpen(!isProfileMenuOpen); }} className="text-[#1d1d1f] dark:text-[#f5f5f7] p-2 -mr-2 transition-transform active:scale-95">
+                  <MoreVertical size={24} strokeWidth={2.5} />
+                </button>
+              )}
+              
+              {/* МЕНЮ ПРОФИЛЯ КАК В ТЕЛЕГРАМ */}
+              {isProfileMenuOpen && (
+                <div className="absolute right-0 top-12 w-48 bg-white dark:bg-[#222224] rounded-[16px] shadow-lg border border-black/5 dark:border-white/5 py-1 z-30 animate-in zoom-in-95">
+                  {isAdmin && (
+                    <button onClick={() => { handleEditChatClick(); setIsProfileMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
+                      <Edit2 size={18} /> {t.editAction}
+                    </button>
+                  )}
+                  <button onClick={() => { setIsMuted(!isMuted); setIsProfileMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
+                    <Bell size={18} className={isMuted ? 'opacity-50' : ''} /> {isMuted ? t.unmute : t.mute}
+                  </button>
+                  {!isGroupOrChannel && (
+                    <button onClick={() => setIsProfileMenuOpen(false)} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#ff3b30] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
+                      <X size={18} /> {t.block}
+                    </button>
+                  )}
+                  <button onClick={() => setIsProfileMenuOpen(false)} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
+                    <Forward size={18} /> {t.forward}
+                  </button>
+                </div>
+              )}
+            </div>
           </header>
 
           {isEditingChat ? (
@@ -1456,25 +1570,6 @@ export default function ChatPage() {
               </div>
               <h2 className="text-[22px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] px-4 text-center tracking-tight">{chatInfo.participant.displayName}</h2>
               <p className={`text-[14px] mt-1 ${subtitleColor}`}>{subtitleText}</p>
-
-              <div className="flex justify-center gap-2 px-4 mt-6 w-full max-w-lg">
-                {!isChannel && (
-                  <div className="flex flex-col items-center justify-center w-[80px] h-[70px] bg-[#e5e5ea] dark:bg-[#222224] rounded-[16px] cursor-pointer active:scale-95 transition-transform" onClick={() => setShowProfile(false)}>
-                    <MessageSquare size={22} className="mb-1 text-[#1d1d1f] dark:text-[#f5f5f7]" />
-                    <span className="text-[12px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{t.writeBtn}</span>
-                  </div>
-                )}
-                <div className="flex flex-col items-center justify-center w-[80px] h-[70px] bg-[#e5e5ea] dark:bg-[#222224] rounded-[16px] cursor-pointer active:scale-95 transition-transform" onClick={() => setIsMuted(!isMuted)}>
-                  <Bell size={22} className={`mb-1 ${isMuted ? 'opacity-50' : ''} text-[#1d1d1f] dark:text-[#f5f5f7]`} />
-                  <span className="text-[12px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{t.muteBtn}</span>
-                </div>
-                {isGroupOrChannel && (
-                  <div className="flex flex-col items-center justify-center w-[80px] h-[70px] bg-[#e5e5ea] dark:bg-[#222224] rounded-[16px] cursor-pointer active:scale-95 transition-transform" onClick={leaveOrDeleteChat}>
-                    <LogOut size={22} className="mb-1 text-[#1d1d1f] dark:text-[#f5f5f7]" />
-                    <span className="text-[12px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{t.leaveBtn}</span>
-                  </div>
-                )}
-              </div>
 
               {(!isGroupOrChannel || isChannel) && (
                 <div className="px-4 mt-6 w-full max-w-lg">
@@ -1580,81 +1675,94 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ШАПКА ЧАТА */}
+      {/* ШАПКА ЧАТА С МЕНЮ ТЕЛЕГРАМ */}
       <header className="px-3 pt-10 pb-2 border-b border-black/5 dark:border-white/5 flex flex-col bg-[#f5f5f7]/90 dark:bg-[#161618]/90 backdrop-blur-xl relative z-20 shadow-sm">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Link href="/"><a className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></a></Link>
-          <div className="flex items-center gap-3.5 cursor-pointer flex-1" onClick={() => !isSavedChat && setShowProfile(true)}>
+          <div className="flex items-center gap-3.5 cursor-pointer flex-1 min-w-0" onClick={() => !isSavedChat && setShowProfile(true)}>
             <div className="relative w-[44px] h-[44px] shrink-0">
               <div className={`w-full h-full rounded-full flex items-center justify-center font-medium text-[19px] overflow-hidden border border-black/5 dark:border-white/5 ${isSavedChat ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-[#e5e5ea] dark:bg-[#333336] text-[#1d1d1f] dark:text-[#f5f5f7]'}`}>
                 {isSavedChat ? <Bookmark size={20} fill="currentColor" /> : chatInfo?.participant?.avatarUrl && chatInfo?.participant?.avatarUrl.length > 5 ? <img src={chatInfo?.participant?.avatarUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : displayName.charAt(0).toUpperCase()}
               </div>
               {!isSavedChat && !isGroupOrChannel && isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#1d1d1f] dark:bg-[#f5f5f7] border-2 border-[#f5f5f7] dark:border-[#161618] rounded-full z-10"></div>}
             </div>
-            <div className="flex flex-col">
-              <h2 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] leading-tight truncate pr-2 tracking-tight">{displayName}</h2>
-              {subtitleText && <p className={`text-[12px] font-medium mt-0.5 ${subtitleColor}`}>{subtitleText}</p>}
+            <div className="flex flex-col flex-1 min-w-0 pr-2">
+              <h2 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] leading-tight truncate tracking-tight">{displayName}</h2>
+              {subtitleText && <p className={`text-[12px] font-medium mt-0.5 truncate ${subtitleColor}`}>{subtitleText}</p>}
             </div>
+          </div>
+          
+          <div className="relative">
+             <button onClick={(e) => { e.stopPropagation(); setIsChatMenuOpen(!isChatMenuOpen); }} className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95">
+                <MoreVertical size={24} />
+             </button>
+             {isChatMenuOpen && (
+                <div className="absolute right-0 top-10 w-56 bg-white dark:bg-[#222224] rounded-[16px] shadow-lg border border-black/5 dark:border-white/5 py-1 z-30 animate-in zoom-in-95">
+                  <button onClick={() => { setIsChatMenuOpen(false); /* stub */ }} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
+                    <Search size={18} /> {t.searchMsgs}
+                  </button>
+                  <button onClick={() => { setIsChatMenuOpen(false); /* stub */ }} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
+                    <Clock size={18} /> {t.searchDate}
+                  </button>
+                  <button onClick={() => { setIsChatMenuOpen(false); /* stub */ }} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
+                    <ImageIcon size={18} /> {t.changeWallpaper}
+                  </button>
+                  <button onClick={() => { setIsChatMenuOpen(false); leaveOrDeleteChat(); }} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#ff3b30] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
+                    <Trash2 size={18} /> {t.deleteChat}
+                  </button>
+                </div>
+             )}
           </div>
         </div>
       </header>
 
-      {/* ПЛАВАЮЩАЯ КАПСУЛА ЗАКРЕПЛЁННЫХ СООБЩЕНИЙ КАК В TELEGRAM */}
+      {/* ПЛАВАЮЩАЯ КАПСУЛА ЗАКРЕПЛЁННЫХ СООБЩЕНИЙ (МЕНЬШЕ РАЗМЕРОМ) */}
       {pinnedMessages.length > 0 && currentPinnedMsg && (
-        <div className="px-2.5 pt-1.5 pb-0.5 relative z-20">
+        <div className="px-2 pt-1.5 pb-0.5 relative z-20">
           <div
-            className="w-full px-3.5 py-2 rounded-[16px] bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl shadow-[0_4px_15px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_15px_rgba(0,0,0,0.3)] border border-black/5 dark:border-white/5 flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-all"
+            className="w-full px-3 py-1.5 rounded-[12px] bg-white/90 dark:bg-[#222224]/90 backdrop-blur-xl shadow-[0_4px_15px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_15px_rgba(0,0,0,0.3)] border border-black/5 dark:border-white/5 flex items-center gap-2.5 cursor-pointer active:scale-[0.99] transition-all"
             onClick={() => {
-              const el = document.getElementById(`msg-${currentPinnedMsg.id}`);
-              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              handleScrollToMsg(currentPinnedMsg.id);
               if (pinnedMessages.length > 1) setActivePinnedIndex((prev) => (prev + 1) % pinnedMessages.length);
             }}
           >
-            {/* Сегментированный индикатор слева (как в Telegram) */}
-            <div className="flex flex-col gap-[2px] h-[32px] w-[3px] shrink-0 justify-center">
+            <div className="flex flex-col gap-[2px] h-[28px] w-[3px] shrink-0 justify-center">
               {pinnedMessages.length === 1 ? (
                 <div className="w-full h-full bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full" />
               ) : (
                 pinnedMessages.map((p, idx) => (
-                  <div
-                    key={p.id || idx}
-                    className={`w-full flex-1 rounded-full transition-opacity ${idx === safePinIdx ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] opacity-100' : 'bg-[#1d1d1f] dark:bg-[#f5f5f7] opacity-30'}`}
-                  />
+                  <div key={p.id || idx} className={`w-full flex-1 rounded-full transition-opacity ${idx === safePinIdx ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] opacity-100' : 'bg-[#1d1d1f] dark:bg-[#f5f5f7] opacity-30'}`} />
                 ))
               )}
             </div>
-
             <div className="flex flex-col flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[13px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight truncate">
-                  {t.pinnedMsg} {pinnedMessages.length > 1 ? `#${safePinIdx + 1}` : ''}
-                </span>
-              </div>
-              <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate leading-tight mt-0.5">
+              <span className="text-[12px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight truncate">
+                {t.pinnedMsg} {pinnedMessages.length > 1 ? `#${safePinIdx + 1}` : ''}
+              </span>
+              <span className="text-[12px] text-[#86868b] dark:text-[#98989d] truncate leading-tight mt-0.5">
                 {getPinnedPreviewText(currentPinnedMsg)}
               </span>
             </div>
-
             {(isAdmin || !isGroupOrChannel) && (
-              <button
-                onClick={(e) => { e.stopPropagation(); togglePin(currentPinnedMsg); }}
-                className="p-1.5 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] active:scale-90 transition-all shrink-0"
-              >
-                <X size={18} strokeWidth={2.2} />
+              <button onClick={(e) => { e.stopPropagation(); togglePin(currentPinnedMsg); }} className="p-1 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] active:scale-90 transition-all shrink-0">
+                <X size={16} strokeWidth={2.2} />
               </button>
             )}
           </div>
         </div>
       )}
 
-      {/* ОСНОВНАЯ ЛЕНТА СООБЩЕНИЙ / ПОСТОВ КАНАЛА */}
-      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 pb-4 relative" onClick={() => setContextMenu(null)}>
+      {/* ОСНОВНАЯ ЛЕНТА СООБЩЕНИЙ */}
+      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 pb-4 relative" onClick={() => { setContextMenu(null); setIsChatMenuOpen(false); setIsAttachmentMenuOpen(false); }}>
         <div className="flex flex-col w-full max-w-full">
           {(() => {
             let lastDateStr = '';
             return messages.map((msg: any) => {
               const isMe = String(msg.senderId) === String(currentUserId);
               const { text, quotedText, replyAuthor, replyBody, forwardedFrom, mediaUrls, hasMedia, hasText, isVideo, voiceUrl, videoNoteUrl, fixedDuration } = parseContent(msg.content);
+              
+              const isVoiceLoading = voiceUrl === 'loading';
+              const isVideoNoteLoading = videoNoteUrl === 'loading';
               const isOnlyVideoNote = videoNoteUrl && !hasText && !hasMedia && !voiceUrl;
 
               const dateObj = new Date(msg.createdAt);
@@ -1665,180 +1773,10 @@ export default function ChatPage() {
               const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
               const mReactionsKeys = msg.reactions ? Object.keys(msg.reactions) : [];
               const hasReactions = mReactionsKeys.length > 0;
-              const isMsgUploading = msg.id === uploadingMsgId;
               const isSwiping = swipeState.id === msg.id;
               const currentSwipeOffset = isSwiping ? swipeState.offset : 0;
+              const isHighlighted = highlightedMsgId === msg.id;
 
-              {/* РЕНДЕР ПОСТОВ В КАНАЛЕ */}
-              if (isChannel) {
-                return (
-                  <div
-                    key={msg.id}
-                    id={`msg-${msg.id}`}
-                    className="flex flex-col w-full mb-3 relative z-10 animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out cursor-pointer"
-                    onClick={(e) => openGlobalMenu(e, msg, 'message')}
-                    onContextMenu={(e) => { e.preventDefault(); openGlobalMenu(e, msg, 'message'); }}
-                    onTouchStart={(e) => handleMsgSwipeStart(e, msg)}
-                    onTouchMove={handleMsgSwipeMove}
-                    onTouchEnd={handleMsgSwipeEnd}
-                  >
-                    {showDate && (
-                      <div className="flex justify-center w-full my-3 relative z-0" onClick={(e) => e.stopPropagation()}>
-                        <span className="bg-black/30 text-white backdrop-blur-md text-[11px] font-bold px-3 py-1 rounded-full capitalize">{currentDateStr}</span>
-                      </div>
-                    )}
-                    <div
-                      className="flex flex-col w-[86%] max-w-[340px] mr-auto items-start relative"
-                      style={{
-                        transform: `translate3d(${currentSwipeOffset}px, 0, 0)`,
-                        transition: isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.2, 0.9, 0.2, 1)'
-                      }}
-                    >
-                      {currentSwipeOffset < -10 && (
-                        <div
-                          className="absolute -right-11 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/15 dark:bg-white/15 backdrop-blur-md flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7]"
-                          style={{ opacity: Math.min(1, Math.abs(currentSwipeOffset) / 50), transform: `translateY(-50%) scale(${Math.min(1.1, Math.abs(currentSwipeOffset) / 52)})` }}
-                        >
-                          <Reply size={16} />
-                        </div>
-                      )}
-                      <div
-                        className={isOnlyVideoNote ? 'relative flex flex-col cursor-pointer bg-transparent' : 'w-full bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[22px] rounded-tl-[6px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col cursor-pointer overflow-hidden'}
-                        onClick={(e) => openGlobalMenu(e, msg, 'message')}
-                      >
-                        {isMsgUploading ? (
-                          <div className="px-4 py-3 flex items-center justify-center opacity-80">
-                            <Loader2 size={20} className="animate-spin mr-2" /> <span className="text-[14px]">Загрузка...</span>
-                          </div>
-                        ) : (
-                          <>
-                            {forwardedFrom && (
-                              <div className="px-3.5 pt-2.5 pb-1 flex items-center gap-1.5 text-[12px] font-semibold text-[#86868b] dark:text-[#98989d]">
-                                <Forward size={13} className="shrink-0" />
-                                <span className="truncate">{t.forwardedFrom} {forwardedFrom}</span>
-                              </div>
-                            )}
-
-                            {videoNoteUrl && (
-                              <div className={`${isOnlyVideoNote ? '' : 'p-2'} flex justify-center`}>
-                                <div
-                                  className={`relative inline-block w-[240px] h-[240px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`}
-                                  onClick={(e) => { e.stopPropagation(); setExpandedVideoMsgId(expandedVideoMsgId === msg.id ? null : msg.id); }}
-                                >
-                                  <video src={videoNoteUrl} autoPlay loop muted playsInline className="w-full h-full rounded-full object-cover" />
-                                  {expandedVideoMsgId !== msg.id && (
-                                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium backdrop-blur-md">{timeStr}</div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {voiceUrl && (
-                              <div className="pt-1">
-                                <VoicePlayer url={voiceUrl} isMe={false} timeStr={timeStr} readStatus={false} isSaved={false} fixedDuration={fixedDuration} isSending={msg.isSending} />
-                              </div>
-                            )}
-
-                            {hasMedia && (
-                              <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[1px] bg-black/10 dark:bg-white/10' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                {mediaUrls.map((url: string, idx: number) => {
-                                  const isSingle = mediaUrls.length === 1;
-                                  const itemClass = isSingle ? 'relative w-full flex justify-center' : `relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`;
-                                  const imgClass = isSingle ? 'w-full h-auto max-h-[440px] object-cover block' : 'absolute inset-0 w-full h-full object-cover block';
-                                  return (
-                                    <div key={idx} className={itemClass}>
-                                      {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
-                                        <video src={url} controls className={imgClass} onClick={(e) => e.stopPropagation()} />
-                                      ) : (
-                                        <img
-                                          src={url} loading="lazy" decoding="async" className={imgClass}
-                                          style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                                          onTouchStart={(e) => handleTouchStartPhoto(e, msg, 'message')}
-                                          onMouseDown={(e) => handleTouchStartPhoto(e, msg, 'message')}
-                                          onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                                          onClick={(e) => { e.stopPropagation(); clearPhotoTimer(); openLightbox(url); }}
-                                          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
-                                          onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
-                                        />
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            {(quotedText || text) && (
-                              <div className="px-3.5 pt-2.5 pb-0.5">
-                                {quotedText && (
-                                  <div className="mb-1.5 px-2.5 py-1.5 rounded-[10px] bg-black/[0.05] dark:bg-white/[0.08] border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] flex flex-col">
-                                    <span className="text-[12px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] leading-tight truncate">{replyAuthor || displayName}</span>
-                                    <span className="text-[12px] text-[#86868b] dark:text-[#98989d] truncate leading-tight mt-0.5">{replyBody || quotedText}</span>
-                                  </div>
-                                )}
-                                {text && (
-                                  <div className="leading-[1.35] break-words whitespace-pre-wrap text-[#1d1d1f] dark:text-[#f5f5f7]" style={{ fontSize: `${textSize}px` }}>
-                                    {text}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {!isOnlyVideoNote && (
-                              <div className="px-3.5 pt-2 pb-2.5 flex flex-wrap items-end gap-1.5">
-                                {mReactionsKeys.map(key => {
-                                  const rData = msg.reactions[key];
-                                  const count = typeof rData === 'number' ? rData : (rData?.count || 1);
-                                  const isSelected = msg.myReaction === key;
-                                  return (
-                                    <button
-                                      key={key}
-                                      onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
-                                      className={`flex items-center justify-center gap-1.5 h-[28px] px-3 rounded-full transition-all active:scale-90 ${
-                                        isSelected
-                                          ? 'bg-[#1d1d1f] text-[#f5f5f7] dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm'
-                                          : 'bg-black/[0.06] dark:bg-white/[0.08] text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.1] dark:hover:bg-white/[0.12]'
-                                      }`}
-                                    >
-                                      <span className="text-[14px] leading-none flex items-center justify-center">{key}</span>
-                                      <span className={`text-[12px] font-semibold leading-none flex items-center justify-center ${
-                                        isSelected ? 'text-[#f5f5f7] dark:text-[#1d1d1f]' : 'text-[#1d1d1f]/80 dark:text-[#f5f5f7]/80'
-                                      }`}>
-                                        {count}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                                <span className="ml-auto text-[11px] font-medium text-[#86868b] dark:text-[#98989d] leading-none pt-1 select-none flex items-center gap-1">
-                                  {msg.isEdited && <span className="italic mr-1">{t.edited}</span>}
-                                  {timeStr}
-                                  {msg.isSending && <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" />}
-                                </span>
-                              </div>
-                            )}
-
-                            {!isOnlyVideoNote && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }}
-                                className="w-full flex items-center justify-between px-3.5 py-2.5 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
-                              >
-                                <div className="flex gap-2 items-center">
-                                  <MessageCircle size={15} className="text-[#86868b] dark:text-[#98989d]" />
-                                  <span className="text-[12px] font-medium text-[#86868b] dark:text-[#98989d]">
-                                    {(msg.commentsCount || 0) > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount || 0, t.commentsCount, lang)}` : t.comments}
-                                  </span>
-                                </div>
-                                <ChevronRight size={15} className="text-[#86868b] dark:text-[#98989d]" />
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              {/* РЕНДЕР СООБЩЕНИЙ В ЛИЧНЫХ ЧАТАХ, ИЗБРАННОМ И ГРУППАХ */}
               return (
                 <div
                   key={msg.id}
@@ -1857,7 +1795,7 @@ export default function ChatPage() {
                   )}
 
                   <div
-                    className={`flex flex-col max-w-[85%] sm:max-w-[420px] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} relative`}
+                    className={`flex flex-col max-w-[85%] sm:max-w-[420px] ${isChannel ? 'mr-auto' : (isMe ? 'ml-auto items-end' : 'mr-auto items-start')} relative transition-all duration-500`}
                     style={{
                       transform: `translate3d(${currentSwipeOffset}px, 0, 0)`,
                       transition: isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.2, 0.9, 0.2, 1)'
@@ -1872,172 +1810,170 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    {isGroup && !isMe && msg.senderName && !isOnlyVideoNote && (
+                    {!isChannel && isGroup && !isMe && msg.senderName && !isOnlyVideoNote && (
                       <span className="text-[13px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] ml-2 mb-1">{msg.senderName}</span>
                     )}
 
                     <div
                       className={isOnlyVideoNote
-                        ? 'relative flex flex-col cursor-pointer bg-transparent'
-                        : `shadow-sm relative flex flex-col min-w-[72px] ${hasMedia ? 'w-[75vw] max-w-[320px]' : 'w-fit max-w-full'} cursor-pointer overflow-hidden ${isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5'}`
+                        ? `relative flex flex-col cursor-pointer bg-transparent transition-colors duration-500 rounded-full ${isHighlighted ? 'ring-4 ring-white/40 dark:ring-black/40' : ''}`
+                        : `shadow-sm relative flex flex-col min-w-[72px] ${hasMedia ? 'w-[75vw] max-w-[320px]' : 'w-fit max-w-full'} cursor-pointer overflow-hidden transition-colors duration-500 ${isChannel ? 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[22px] rounded-tl-[6px] border border-black/5 dark:border-white/5' : (isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5')} ${isHighlighted ? 'bg-black/10 dark:bg-white/20 scale-[1.02]' : ''}`
                       }
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                     >
-                      {isMsgUploading ? (
-                        <div className={`px-4 py-3 flex items-center justify-center opacity-80 ${isOnlyVideoNote ? 'bg-black/10 rounded-full w-[220px] h-[220px]' : ''}`}>
-                          <Loader2 size={20} className="animate-spin mr-2" /> <span className="text-[14px]">Загрузка...</span>
+                      {/* ЗАГОЛОВОК ПЕРЕСЫЛКИ КАК В TELEGRAM */}
+                      {forwardedFrom && (
+                        <div className={`px-3 pt-2 pb-0.5 flex items-center gap-1.5 text-[12px] font-semibold ${isMe && !isChannel ? 'text-white/80 dark:text-black/75' : 'text-[#86868b] dark:text-[#98989d]'}`}>
+                          <Forward size={13} className="shrink-0" />
+                          <span className="truncate">{t.forwardedFrom} {forwardedFrom}</span>
                         </div>
-                      ) : (
-                        <>
-                          {/* ЗАГОЛОВОК ПЕРЕСЫЛКИ КАК В TELEGRAM */}
-                          {forwardedFrom && (
-                            <div className={`px-3 pt-2 pb-0.5 flex items-center gap-1.5 text-[12px] font-semibold ${isMe ? 'text-white/80 dark:text-black/75' : 'text-[#86868b] dark:text-[#98989d]'}`}>
-                              <Forward size={13} className="shrink-0" />
-                              <span className="truncate">{t.forwardedFrom} {forwardedFrom}</span>
-                            </div>
-                          )}
+                      )}
 
-                          {/* ПЛАШКА ОТВЕТА КАК В TELEGRAM (ЕСЛИ МЕДИА БЕЗ ТЕКСТА) */}
-                          {quotedText && !text && (
-                            <div className="px-2.5 pt-2 pb-1">
-                              <div className={`px-2.5 py-1.5 rounded-[10px] border-l-[3px] flex flex-col ${isMe ? 'bg-white/15 dark:bg-black/10 border-white dark:border-[#1d1d1f]' : 'bg-black/[0.05] dark:bg-white/[0.08] border-[#1d1d1f] dark:border-[#f5f5f7]'}`}>
-                                <span className="text-[12px] font-semibold leading-tight truncate">{replyAuthor || displayName}</span>
-                                <span className="text-[12px] opacity-80 truncate leading-tight mt-0.5">{replyBody || quotedText}</span>
+                      {/* ПЛАШКА ОТВЕТА (КЛИКАБЕЛЬНАЯ ДЛЯ ПЕРЕХОДА) */}
+                      {quotedText && !text && (
+                        <div className="px-2.5 pt-2 pb-1" onClick={(e) => { e.stopPropagation(); const found = messages.slice().reverse().find(m => parseContent(m.content).text.includes(replyBody || quotedText)); if (found) handleScrollToMsg(found.id); }}>
+                          <div className={`px-2.5 py-1.5 rounded-[10px] border-l-[3px] flex flex-col cursor-pointer hover:opacity-80 transition-opacity ${isMe && !isChannel ? 'bg-white/15 dark:bg-black/10 border-white dark:border-[#1d1d1f]' : 'bg-black/[0.05] dark:bg-white/[0.08] border-[#1d1d1f] dark:border-[#f5f5f7]'}`}>
+                            <span className="text-[12px] font-semibold leading-tight truncate">{replyAuthor || displayName}</span>
+                            <span className="text-[12px] opacity-80 truncate leading-tight mt-0.5">{replyBody || quotedText}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {(videoNoteUrl || isVideoNoteLoading) && (
+                        <div className={`${isOnlyVideoNote ? '' : 'p-1.5'} flex justify-center`}>
+                          <div
+                            className={`relative inline-block w-[240px] h-[240px] rounded-full transition-transform duration-300 ease-out cursor-pointer overflow-hidden ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'} ${isVideoNoteLoading ? 'bg-black/10 dark:bg-white/10 flex items-center justify-center' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); setExpandedVideoMsgId(expandedVideoMsgId === msg.id ? null : msg.id); }}
+                          >
+                            {isVideoNoteLoading ? (
+                              <Loader2 size={36} className="animate-spin text-[#1d1d1f] dark:text-[#f5f5f7] opacity-60" />
+                            ) : (
+                              <video src={videoNoteUrl} autoPlay loop muted playsInline className="w-full h-full rounded-full object-cover" />
+                            )}
+                            {expandedVideoMsgId !== msg.id && (
+                              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
+                                {timeStr}
+                                {isMe && !isChannel && (msg.isSending ? <Clock size={10} strokeWidth={3} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={10} strokeWidth={3} />{isMsgRead(msg, isSavedChat) ? <Check size={10} strokeWidth={3} /> : null}</div>)}
                               </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {(voiceUrl || isVoiceLoading) && (
+                        <div className={`${hasText ? 'pb-1' : ''}`}>
+                          <VoicePlayer url={voiceUrl} isMe={isMe && !isChannel} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} fixedDuration={fixedDuration} isSending={msg.isSending} />
+                        </div>
+                      )}
+
+                      {hasMedia && (
+                        <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[1px] bg-black/10 dark:bg-white/10' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                          {mediaUrls.map((url: string, idx: number) => {
+                            const isSingle = mediaUrls.length === 1;
+                            const itemClass = isSingle ? 'relative w-full flex justify-center' : `relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`;
+                            const imgClass = isSingle ? 'w-full h-auto max-h-[440px] object-cover block' : 'absolute inset-0 w-full h-full object-cover block';
+                            return (
+                              <div key={idx} className={itemClass}>
+                                {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
+                                  <video src={url} controls className={imgClass} onClick={(e) => e.stopPropagation()} />
+                                ) : (
+                                  <img
+                                    src={url} loading="lazy" decoding="async" className={imgClass}
+                                    style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+                                    onTouchStart={(e) => handleTouchStartPhoto(e, msg, 'message')}
+                                    onMouseDown={(e) => handleTouchStartPhoto(e, msg, 'message')}
+                                    onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
+                                    onClick={(e) => { e.stopPropagation(); clearPhotoTimer(); openLightbox(url); }}
+                                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
+                                    onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+
+                          {(!text && !voiceUrl && !videoNoteUrl && !hasReactions) && (
+                            <div className="absolute bottom-1.5 right-1.5 bg-black/45 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
+                              {timeStr}
+                              {isMe && !isChannel && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={11} strokeWidth={2.5} /> : null}</div>)}
                             </div>
                           )}
+                        </div>
+                      )}
 
-                          {videoNoteUrl && (
-                            <div className={`${isOnlyVideoNote ? '' : 'p-1.5'} flex justify-center`}>
-                              <div
-                                className={`relative inline-block w-[240px] h-[240px] rounded-full transition-transform duration-300 ease-out cursor-pointer ${expandedVideoMsgId === msg.id ? 'scale-[1.15] z-50 shadow-xl' : 'scale-100 z-10 shadow-sm'}`}
-                                onClick={(e) => { e.stopPropagation(); setExpandedVideoMsgId(expandedVideoMsgId === msg.id ? null : msg.id); }}
+                      {text && (
+                        <div className={`px-3 pt-2 ${hasReactions ? 'pb-1' : 'pb-2'}`}>
+                          {quotedText && (
+                            <div className={`mb-1.5 px-2.5 py-1.5 rounded-[10px] border-l-[3px] flex flex-col cursor-pointer hover:opacity-80 transition-opacity ${isMe && !isChannel ? 'bg-white/15 dark:bg-black/10 border-white dark:border-[#1d1d1f]' : 'bg-black/[0.05] dark:bg-white/[0.08] border-[#1d1d1f] dark:border-[#f5f5f7]'}`} onClick={(e) => { e.stopPropagation(); const found = messages.slice().reverse().find(m => parseContent(m.content).text.includes(replyBody || quotedText)); if (found) handleScrollToMsg(found.id); }}>
+                              <span className="text-[12px] font-semibold leading-tight truncate">{replyAuthor || displayName}</span>
+                              <span className="text-[12px] opacity-80 truncate leading-tight mt-0.5">{replyBody || quotedText}</span>
+                            </div>
+                          )}
+                          <div className="leading-[1.35] break-words whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>
+                            {text}
+                            {(!voiceUrl && !videoNoteUrl && !hasReactions) && (
+                              <span className={`float-right inline-flex items-center gap-1 text-[10px] ml-3 mt-1.5 pointer-events-none select-none relative top-[2px] ${isMe && !isChannel ? 'opacity-65 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
+                                {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
+                                {timeStr}
+                                {isMe && !isChannel && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={12} strokeWidth={2.5} /> : null}</div>)}
+                              </span>
+                            )}
+                            <div className="clear-both"></div>
+                          </div>
+                        </div>
+                      )}
+
+                      {hasReactions && !isOnlyVideoNote && (
+                        <div className="px-2.5 pt-1 pb-2 flex flex-wrap items-end gap-1.5">
+                          {mReactionsKeys.map(key => {
+                            const rData = msg.reactions[key];
+                            const { users: rUsers, count } = getReactionUsers(msg, key, rData);
+                            const isSelected = msg.myReaction === key;
+
+                            return (
+                              <button
+                                key={key}
+                                onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
+                                className={`flex items-center gap-1.5 h-[28px] pl-2.5 pr-1.5 rounded-full transition-all active:scale-90 ${
+                                  isMe && !isChannel
+                                    ? (isSelected ? 'bg-white/25 dark:bg-black/20 text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-white/12 dark:bg-black/10 text-[#f5f5f7] dark:text-[#1d1d1f]')
+                                    : (isSelected ? 'bg-[#1d1d1f]/15 dark:bg-white/20 text-[#1d1d1f] dark:text-[#f5f5f7]' : 'bg-black/[0.06] dark:bg-white/[0.08] text-[#1d1d1f] dark:text-[#f5f5f7]')
+                                }`}
                               >
-                                <video src={videoNoteUrl} autoPlay loop muted playsInline className="w-full h-full rounded-full object-cover" />
-                                {expandedVideoMsgId !== msg.id && (
-                                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 text-white px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
-                                    {timeStr}
-                                    {isMe && (msg.isSending ? <Clock size={10} strokeWidth={3} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={10} strokeWidth={3} />{isMsgRead(msg, isSavedChat) ? <Check size={10} strokeWidth={3} /> : null}</div>)}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {voiceUrl && (
-                            <div className={`${hasText ? 'pb-1' : ''}`}>
-                              <VoicePlayer url={voiceUrl} isMe={isMe} timeStr={timeStr} readStatus={isMsgRead(msg, isSavedChat)} isSaved={isSavedChat} fixedDuration={fixedDuration} isSending={msg.isSending} />
-                            </div>
-                          )}
-
-                          {hasMedia && (
-                            <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[1px] bg-black/10 dark:bg-white/10' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                              {mediaUrls.map((url: string, idx: number) => {
-                                const isSingle = mediaUrls.length === 1;
-                                const itemClass = isSingle ? 'relative w-full flex justify-center' : `relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`;
-                                const imgClass = isSingle ? 'w-full h-auto max-h-[440px] object-cover block' : 'absolute inset-0 w-full h-full object-cover block';
-                                return (
-                                  <div key={idx} className={itemClass}>
-                                    {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
-                                      <video src={url} controls className={imgClass} onClick={(e) => e.stopPropagation()} />
-                                    ) : (
-                                      <img
-                                        src={url} loading="lazy" decoding="async" className={imgClass}
-                                        style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                                        onTouchStart={(e) => handleTouchStartPhoto(e, msg, 'message')}
-                                        onMouseDown={(e) => handleTouchStartPhoto(e, msg, 'message')}
-                                        onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                                        onClick={(e) => { e.stopPropagation(); clearPhotoTimer(); openLightbox(url); }}
-                                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, msg, 'message'); }}
-                                        onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }}
-                                      />
-                                    )}
-                                  </div>
-                                );
-                              })}
-
-                              {(!text && !voiceUrl && !videoNoteUrl && !hasReactions) && (
-                                <div className="absolute bottom-1.5 right-1.5 bg-black/45 text-white px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 backdrop-blur-md pointer-events-none">
-                                  {timeStr}
-                                  {isMe && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={11} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={11} strokeWidth={2.5} /> : null}</div>)}
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {text && (
-                            <div className={`px-3 pt-2 ${hasReactions ? 'pb-1' : 'pb-2'}`}>
-                              {quotedText && (
-                                <div className={`mb-1.5 px-2.5 py-1.5 rounded-[10px] border-l-[3px] flex flex-col ${isMe ? 'bg-white/15 dark:bg-black/10 border-white dark:border-[#1d1d1f]' : 'bg-black/[0.05] dark:bg-white/[0.08] border-[#1d1d1f] dark:border-[#f5f5f7]'}`}>
-                                  <span className="text-[12px] font-semibold leading-tight truncate">{replyAuthor || displayName}</span>
-                                  <span className="text-[12px] opacity-80 truncate leading-tight mt-0.5">{replyBody || quotedText}</span>
-                                </div>
-                              )}
-                              <div className="leading-[1.35] break-words whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>
-                                {text}
-                                {(!voiceUrl && !videoNoteUrl && !hasReactions) && (
-                                  <span className={`float-right inline-flex items-center gap-1 text-[10px] ml-3 mt-1.5 pointer-events-none select-none relative top-[2px] ${isMe ? 'opacity-65 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
-                                    {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
-                                    {timeStr}
-                                    {isMe && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={12} strokeWidth={2.5} /> : null}</div>)}
-                                  </span>
-                                )}
-                                <div className="clear-both"></div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* ВСТРОЕННЫЕ РЕАКЦИИ С АВАТАРКАМИ И ВРЕМЕНЕМ ВНУТРИ СООБЩЕНИЯ КАК В TELEGRAM */}
-                          {hasReactions && !isOnlyVideoNote && (
-                            <div className="px-2.5 pt-1 pb-2 flex flex-wrap items-end gap-1.5">
-                              {mReactionsKeys.map(key => {
-                                const rData = msg.reactions[key];
-                                const { users: rUsers, count } = getReactionUsers(msg, key, rData);
-                                const isSelected = msg.myReaction === key;
-
-                                return (
-                                  <button
-                                    key={key}
-                                    onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, key); }}
-                                    className={`flex items-center gap-1.5 h-[28px] pl-2.5 pr-1.5 rounded-full transition-all active:scale-90 ${
-                                      isMe
-                                        ? (isSelected ? 'bg-white/25 dark:bg-black/20 text-[#f5f5f7] dark:text-[#1d1d1f]' : 'bg-white/12 dark:bg-black/10 text-[#f5f5f7] dark:text-[#1d1d1f]')
-                                        : (isSelected ? 'bg-[#1d1d1f]/15 dark:bg-white/20 text-[#1d1d1f] dark:text-[#f5f5f7]' : 'bg-black/[0.06] dark:bg-white/[0.08] text-[#1d1d1f] dark:text-[#f5f5f7]')
-                                    }`}
-                                  >
-                                    <span className="text-[14px] leading-none flex items-center justify-center">{key}</span>
-                                    {rUsers.length > 0 && count <= 3 ? (
-                                      <div className="flex items-center -space-x-1.5">
-                                        {rUsers.map((u, idx) => (
-                                          <div
-                                            key={idx}
-                                            className="w-[20px] h-[20px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-[#e5e5ea] dark:bg-[#333336] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] ring-1 ring-black/10 dark:ring-white/10"
-                                          >
-                                            {u.avatar && u.avatar.length > 5 ? (
-                                              <img src={u.avatar} className="w-full h-full object-cover" />
-                                            ) : (
-                                              (u.name || 'U').charAt(0).toUpperCase()
-                                            )}
-                                          </div>
-                                        ))}
+                                <span className="text-[14px] leading-none flex items-center justify-center">{key}</span>
+                                {rUsers.length > 0 && count <= 3 ? (
+                                  <div className="flex items-center -space-x-1.5">
+                                    {rUsers.map((u, idx) => (
+                                      <div key={idx} className="w-[20px] h-[20px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-[#e5e5ea] dark:bg-[#333336] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] ring-1 ring-black/10 dark:ring-white/10">
+                                        {u.avatar && u.avatar.length > 5 ? <img src={u.avatar} className="w-full h-full object-cover" /> : (u.name || 'U').charAt(0).toUpperCase()}
                                       </div>
-                                    ) : (
-                                      <span className="text-[12px] font-semibold leading-none pr-1">{count}</span>
-                                    )}
-                                  </button>
-                                );
-                              })}
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-[12px] font-semibold leading-none pr-1">{count}</span>
+                                )}
+                              </button>
+                            );
+                          })}
 
-                              {(!voiceUrl && !videoNoteUrl) && (
-                                <span className={`ml-auto inline-flex items-center gap-1 text-[10px] pl-2 leading-none pb-0.5 pointer-events-none select-none ${isMe ? 'opacity-65 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
-                                  {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
-                                  {timeStr}
-                                  {isMe && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={12} strokeWidth={2.5} /> : null}</div>)}
-                                </span>
-                              )}
-                            </div>
+                          {(!voiceUrl && !videoNoteUrl) && (
+                            <span className={`ml-auto inline-flex items-center gap-1 text-[10px] pl-2 leading-none pb-0.5 pointer-events-none select-none ${isMe && !isChannel ? 'opacity-65 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
+                              {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
+                              {timeStr}
+                              {isMe && !isChannel && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={12} strokeWidth={2.5} /> : null}</div>)}
+                            </span>
                           )}
-                        </>
+                        </div>
+                      )}
+                      
+                      {isChannel && (
+                         <button onClick={(e) => { e.stopPropagation(); setActiveThread(msg); loadComments(msg.chatId || chatId, msg.id); }} className="w-full flex items-center justify-between px-3.5 py-2.5 border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04]">
+                            <div className="flex gap-2 items-center">
+                              <MessageCircle size={15} className="text-[#86868b] dark:text-[#98989d]" />
+                              <span className="text-[12px] font-medium text-[#86868b] dark:text-[#98989d]">{(msg.commentsCount || 0) > 0 ? `${msg.commentsCount} ${declOfNum(msg.commentsCount || 0, t.commentsCount, lang)}` : t.comments}</span>
+                            </div>
+                            <ChevronRight size={15} className="text-[#86868b] dark:text-[#98989d]" />
+                         </button>
                       )}
                     </div>
                   </div>
@@ -2047,120 +1983,6 @@ export default function ChatPage() {
           })()}
         </div>
       </main>
-
-      {/* МОДАЛКА КОММЕНТАРИЕВ */}
-      {activeThread && (
-        <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={() => setContextMenu(null)}>
-          <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10">
-            <div className="flex items-center gap-4">
-              <button onClick={() => setActiveThread(null)} className="text-[#1d1d1f] dark:text-[#f5f5f7] transition-transform active:scale-95"><ArrowLeft size={26} strokeWidth={2} /></button>
-              <h1 className="text-[18px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{t.comments}</h1>
-            </div>
-          </header>
-
-          <div ref={commentsScrollRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-10">
-            <div className="bg-white dark:bg-[#222224] p-4 rounded-[20px] mb-2 border border-black/5 dark:border-white/5 flex flex-col">
-              <span className="font-semibold text-[14px] text-[#86868b] dark:text-[#98989d] mb-1 block">{activeThread.channelName || displayName}</span>
-              {activeThreadContent?.hasMedia && (
-                <div className="flex gap-2 overflow-x-auto my-2">
-                  {activeThreadContent.mediaUrls.map((url: string) => (
-                    <img key={url} src={url} onClick={(e) => { e.stopPropagation(); openLightbox(url); }} className="h-[80px] w-auto rounded-[8px] object-cover border border-black/5 dark:border-white/5 cursor-pointer" />
-                  ))}
-                </div>
-              )}
-              {activeThreadContent?.hasText && (
-                <p className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap">{activeThreadContent.text}</p>
-              )}
-            </div>
-
-            {threadComments.length === 0 ? (
-              <div className="text-center text-[#86868b] dark:text-[#98989d] mt-10 font-medium">{t.noComments}</div>
-            ) : (
-              threadComments.map((c) => {
-                const { text, quotedText, replyAuthor, replyBody, hasMedia, mediaUrls, hasText } = parseContent(c.content);
-                const cReactionsKeys = c.reactions ? Object.keys(c.reactions) : [];
-
-                return (
-                  <div key={c.id} className="relative flex flex-col mb-2 z-10" onClick={(e) => openGlobalMenu(e, c, 'comment')}>
-                    <div className="flex gap-3 items-start cursor-pointer" onClick={(e) => openGlobalMenu(e, c, 'comment')} onContextMenu={(e) => { e.preventDefault(); openGlobalMenu(e, c, 'comment'); }}>
-                      <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
-                        {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName?.charAt(0).toUpperCase() || 'U'}
-                      </div>
-                      <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5">
-                        <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
-                        {quotedText && (
-                          <div className="mb-1.5 px-2.5 py-1 rounded-[8px] bg-black/[0.05] dark:bg-white/[0.08] border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] flex flex-col">
-                            {replyAuthor && <span className="text-[11px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] truncate">{replyAuthor}</span>}
-                            <span className="text-[12px] text-[#86868b] dark:text-[#98989d] truncate">{replyBody || quotedText}</span>
-                          </div>
-                        )}
-                        {hasMedia && (
-                          <img
-                            src={mediaUrls[0]}
-                            className={`max-h-[200px] w-auto object-cover cursor-pointer ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`}
-                            style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                            onTouchStart={(e) => handleTouchStartPhoto(e, c, 'comment')}
-                            onMouseDown={(e) => handleTouchStartPhoto(e, c, 'comment')}
-                            onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                            onClick={(e) => { e.stopPropagation(); clearPhotoTimer(); openLightbox(mediaUrls[0]); }}
-                            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, c, 'comment'); }}
-                          />
-                        )}
-                        {hasText && <span className="text-[15px] text-[#1d1d1f] dark:text-[#f5f5f7] whitespace-pre-wrap leading-snug">{text}</span>}
-                        <span className="text-[11px] text-[#86868b] dark:text-[#98989d] mt-1.5 text-right">{new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-                    </div>
-
-                    {cReactionsKeys.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1 justify-start pl-12">
-                        {cReactionsKeys.map(key => {
-                          const rData = c.reactions[key];
-                          const count = typeof rData === 'number' ? rData : (rData?.count || 1);
-                          const isSelected = c.myReaction === key;
-                          return (
-                            <button
-                              key={key}
-                              onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }}
-                              className={`flex items-center justify-center gap-1 h-[24px] px-2.5 rounded-full border transition-transform active:scale-95 ${
-                                isSelected ? 'bg-[#1d1d1f] text-[#f5f5f7] dark:bg-[#f5f5f7] dark:text-[#1d1d1f] border-transparent' : 'bg-white dark:bg-[#222224] border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]'
-                              }`}
-                            >
-                              <span className="text-[13px] leading-none flex items-center justify-center">{key}</span>
-                              <span className="text-[11px] font-semibold leading-none flex items-center justify-center">{count}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          <div className="bg-white/80 dark:bg-[#222224]/80 border-t border-black/5 dark:border-white/5 relative z-10 flex flex-col backdrop-blur-xl">
-            {commentReplyingTo && (
-              <div className="flex items-center justify-between mb-1 mt-3 mx-4 px-4 py-2.5 bg-[#f5f5f7] dark:bg-[#161618] rounded-[14px] border-l-[3px] border-[#1d1d1f] dark:border-[#f5f5f7]">
-                <div className="flex flex-col mr-4">
-                  <span className="text-[11px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] uppercase">{t.replyAction}</span>
-                  <span className="text-[13px] text-[#86868b] dark:text-[#98989d] truncate">{parseContent(commentReplyingTo.content).text || t.photo}</span>
-                </div>
-                <button type="button" onClick={() => setCommentReplyingTo(null)} className="p-1.5 flex-shrink-0 text-[#86868b]"><X size={16} /></button>
-              </div>
-            )}
-            <form onSubmit={handleSendComment} className="p-3 flex items-center gap-2 pb-6">
-              <input type="file" accept="image/*,video/*" className="hidden" ref={commentFileInputRef} onChange={handleCommentFileUpload} />
-              <button type="button" onClick={() => commentFileInputRef.current?.click()} disabled={isCommentUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50">
-                {isCommentUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
-              </button>
-              <input className="flex-1 bg-[#f5f5f7] dark:bg-[#161618] border border-black/5 dark:border-white/5 rounded-full px-5 py-2.5 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-[15px]" value={commentContent} onChange={e => setCommentContent(e.target.value)} placeholder={t.commentPlaceholder} />
-              <button type="submit" disabled={!commentContent.trim()} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95">
-                <ChevronRight size={20} strokeWidth={2.5} className="ml-0.5" />
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ПАНЕЛЬ ОТПРАВКИ СООБЩЕНИЯ */}
       {!activeThread && (
@@ -2195,9 +2017,30 @@ export default function ChatPage() {
                 <button onClick={() => stopRecording(false)} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-white dark:text-[#1d1d1f] flex items-center justify-center active:scale-95 transition-transform"><ArrowUp size={20} strokeWidth={2.5} /></button>
               </div>
             ) : (
-              <form onSubmit={handleSend} className="p-3 flex items-center gap-2 pb-6">
+              <form onSubmit={handleSend} className="p-3 flex items-center gap-2 pb-6 relative">
                 <input type="file" accept="image/*,video/*" multiple className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors">{isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}</button>
+                <input type="file" accept="*" multiple className="hidden" ref={docInputRef} onChange={handleFileSelect} />
+                
+                <div className="relative">
+                  <button type="button" onClick={() => setIsAttachmentMenuOpen(!isAttachmentMenuOpen)} disabled={isUploading} className="w-[38px] h-[38px] shrink-0 flex items-center justify-center text-[#86868b] disabled:opacity-50 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors">
+                    {isUploading ? <Loader2 size={22} className="animate-spin" /> : <Paperclip size={22} />}
+                  </button>
+                  
+                  {isAttachmentMenuOpen && (
+                    <div className="absolute bottom-12 left-0 w-44 bg-white dark:bg-[#222224] rounded-[16px] shadow-lg border border-black/5 dark:border-white/5 py-1 z-30 animate-in zoom-in-95 origin-bottom-left">
+                      <button type="button" onClick={() => { setIsAttachmentMenuOpen(false); fileInputRef.current?.click(); }} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
+                        <ImageIcon size={18} className="text-[#86868b]" /> Медиа
+                      </button>
+                      <button type="button" onClick={() => { setIsAttachmentMenuOpen(false); docInputRef.current?.click(); }} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
+                        <File size={18} className="text-[#86868b]" /> Файл
+                      </button>
+                      <button type="button" onClick={() => { setIsAttachmentMenuOpen(false); setContent(prev => prev + (prev ? ' ' : '') + 'https://'); inputRef.current?.focus(); }} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
+                        <LinkIcon size={18} className="text-[#86868b]" /> Ссылка
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <input ref={inputRef} className="flex-1 bg-[#f5f5f7] dark:bg-[#222224] border border-black/5 dark:border-white/5 rounded-[20px] px-4 py-2 outline-none text-[#1d1d1f] dark:text-[#f5f5f7] text-[15px]" value={content} onChange={(e) => { setContent(e.target.value); if (Date.now() - lastTypingTime.current > 2000) { lastTypingTime.current = Date.now(); socket?.emit('typing', { chatId, name: currentUser?.displayName }); } }} placeholder={t.messagePlaceholder} />
                 {!content.trim() ? (
                   <button
@@ -2226,7 +2069,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* КОНТЕКСТНОЕ МЕНЮ */}
+      {/* КОНТЕКСТНОЕ МЕНЮ СООБЩЕНИЯ */}
       {contextMenu && (() => {
         const menuWidth = 220; const menuHeight = 280;
         let safeX = contextMenu.x; let safeY = contextMenu.y;
