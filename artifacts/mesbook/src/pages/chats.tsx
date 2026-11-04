@@ -202,21 +202,21 @@ const formatChatListTime = (timeRaw: any, lang: 'ru' | 'en') => {
 export default function ChatsPage() {
   const [search, setSearch] = useState('');
   const currentUserId = getUserId();
-  
+
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
   const t = translations[lang] || translations.ru;
-  
+
   const [chats, setChats] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('mesbook_chats_' + currentUserId);
       return saved ? JSON.parse(saved) : [];
     } catch(e) { return []; }
   });
-  
+
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  
+
   const [modalType, setModalType] = useState<'group' | 'channel' | null>(null);
   const [groupName, setGroupName] = useState('');
   const [channelName, setChannelName] = useState('');
@@ -255,7 +255,7 @@ export default function ChatsPage() {
       return saved ? JSON.parse(saved).map((m: any) => ({...m, isSending: false})) : [];
     } catch(e) { return []; }
   });
-  
+
   const [, setLocation] = useLocation();
   const touchStartX = useRef<number | null>(null);
 
@@ -292,8 +292,11 @@ export default function ChatsPage() {
   }, [currentUserId]);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('mesbook_theme');
-    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    const savedTheme = localStorage.getItem('mesbook_theme') || localStorage.getItem('theme') || 'auto';
+    if (
+      savedTheme === 'dark' ||
+      (savedTheme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+    ) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
@@ -473,26 +476,26 @@ export default function ChatsPage() {
     e.preventDefault();
     if (!newUsername.trim() || !newPassword.trim()) return;
     if (!isLoginMode && !newName.trim()) return;
-    
+
     setIsAddingAccount(true);
     try {
       const url = isLoginMode ? '/api/login' : '/api/register';
       const body = isLoginMode 
         ? { username: newUsername, password: newPassword } 
         : { username: newUsername, password: newPassword, displayName: newName };
-        
+
       const res = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
       });
-      
+
       if (res.ok) {
         const user = await res.json();
         const prevAccounts = JSON.parse(localStorage.getItem('mesbook_accounts') || '[]');
         const updatedAccounts = [...prevAccounts.filter((a: any) => String(a.id) !== String(user.id)), user];
-        
+
         localStorage.setItem('mesbook_accounts', JSON.stringify(updatedAccounts));
         localStorage.setItem('mesbook_user', JSON.stringify(user));
-        
+
         setNewUsername('');
         setNewPassword('');
         setNewName('');
@@ -524,16 +527,16 @@ export default function ChatsPage() {
     const isSaved = participant.isSaved || String(chat.id) === 'saved';
     const isOnline = participant.lastSeen ? (Date.now() - participant.lastSeen < 15000) : false;
     const timeRaw = chat.lastMessageAt || chat.lastMessageTime;
-    
+
     const isLastMessageMine = String(chat.lastMessageSenderId) === String(currentUserId);
     const isLastMessageRead = chat.lastMessageRead === 1 || chat.lastMessageRead === true || chat.lastMessageRead === '1';
 
     const typingNames = chat.typing || [];
     const isTyping = typingNames.length > 0;
-    
+
     const parsedPreview = parseLastMessagePreview(chat.lastMessage, t);
     let typingText = '';
-    
+
     if (isTyping) {
        if (typingNames.length === 1) {
           typingText = participant.isGroup || participant.isChannel ? `${typingNames[0]} ${t.isTyping}` : t.isTyping;
@@ -566,7 +569,7 @@ export default function ChatsPage() {
               )}
             </div>
           </div>
-          
+
           <div className="ml-3.5 py-3 flex-1 overflow-hidden flex flex-col justify-center min-h-[74px]">
             <div className="flex justify-between items-baseline mb-1">
               <h3 className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] truncate pr-2 tracking-tight leading-snug">
@@ -615,7 +618,7 @@ export default function ChatsPage() {
   const renderGlobalUserCard = (user: any, index: number, arr: any[]) => {
     const isLast = index === arr.length - 1;
     const isOnline = user.lastSeen ? (Date.now() - user.lastSeen < 15000) : false;
-    
+
     return (
       <Link key={user.id} href={'/chat/' + user.id}>
         <a 
@@ -641,7 +644,7 @@ export default function ChatsPage() {
               )}
             </div>
           </div>
-          
+
           <div className="ml-3.5 py-3.5 flex-1 flex flex-col justify-center">
             <span className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] text-[16px] tracking-tight">{user.displayName}</span>
             {user.username && <span className="text-[13px] text-[#86868b] dark:text-[#8e8e93]">{user.username}</span>}
@@ -746,7 +749,7 @@ export default function ChatsPage() {
                 <span className="text-[15px] font-medium tracking-tight">{t.saved}</span>
               </a>
             </Link>
-            
+
             <Link href="/settings">
               <a onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-3.5 px-4 py-3.5 text-[#1d1d1f] dark:text-[#f5f5f7] active:bg-black/[0.04] dark:active:bg-white/[0.04] transition-colors">
                 <Settings size={20} className="text-[#86868b] dark:text-[#98989d]" />
@@ -810,7 +813,7 @@ export default function ChatsPage() {
                     {filteredChats.map(renderChatCard)}
                   </div>
                 )}
-                
+
                 {searchResults.length === 0 && filteredChats.length === 0 && (
                    <div className="text-center py-24 text-[#86868b] dark:text-[#98989d]">
                       <Search size={40} className="mx-auto mb-3 opacity-30" />
@@ -843,11 +846,11 @@ export default function ChatsPage() {
                   </span>
                 )}
               </button>
-              
+
               <h1 className="absolute left-1/2 -translate-x-1/2 text-[22px] font-black uppercase tracking-[0.26em] pl-[0.26em] text-[#1d1d1f] dark:text-[#f5f5f7] select-none">
                 MESO
               </h1>
-              
+
               <button 
                 onClick={() => setIsSearchOpen(true)}
                 className="w-[38px] h-[38px] shrink-0 rounded-full bg-white/60 dark:bg-[#222224]/60 border border-black/5 dark:border-white/5 flex items-center justify-center text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-90 transition-transform"
@@ -975,7 +978,7 @@ export default function ChatsPage() {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="flex bg-[#e5e5ea] dark:bg-[#2c2c2e] rounded-[12px] p-1 mb-5">
                <button type="button" onClick={() => setIsLoginMode(true)} className={`flex-1 py-2 text-[14px] font-medium rounded-[10px] transition-colors ${isLoginMode ? 'bg-white dark:bg-[#1c1c1e] shadow-sm text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{t.login}</button>
                <button type="button" onClick={() => setIsLoginMode(false)} className={`flex-1 py-2 text-[14px] font-medium rounded-[10px] transition-colors ${!isLoginMode ? 'bg-white dark:bg-[#1c1c1e] shadow-sm text-[#1d1d1f] dark:text-[#f5f5f7]' : 'text-[#86868b] dark:text-[#98989d]'}`}>{t.create}</button>
@@ -998,4 +1001,4 @@ export default function ChatsPage() {
       )}
     </div>
   );
-}
+                                                  }
