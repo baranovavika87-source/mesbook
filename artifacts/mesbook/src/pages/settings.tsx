@@ -32,7 +32,8 @@ const translations = {
     textSize: "Размер текста",
     chatBackground: "Цвет чата",
     previewText: "Привет, как твои дела?",
-    previewTime: "12:34"
+    previewTime: "12:34",
+    messageRadius: "Скругление сообщений"
   },
   en: {
     settings: "Settings",
@@ -63,7 +64,8 @@ const translations = {
     textSize: "Text Size",
     chatBackground: "Chat Color",
     previewText: "Hi, how are you?",
-    previewTime: "12:34"
+    previewTime: "12:34",
+    messageRadius: "Message Corner Radius"
   }
 };
 
@@ -95,6 +97,7 @@ export default function SettingsPage() {
   const [theme, setTheme] = useState(localStorage.getItem('mesbook_theme') || 'auto');
   const [textSize, setTextSize] = useState(Number(localStorage.getItem('mesbook_text_size')) || 16);
   const [wallpaper, setWallpaper] = useState(localStorage.getItem('mesbook_wallpaper') || '');
+  const [messageRadius, setMessageRadius] = useState(Number(localStorage.getItem('mesbook_message_radius')) || 18);
 
   // Эффект для живой смены темы (без немедленного сохранения)
   useEffect(() => {
@@ -110,6 +113,7 @@ export default function SettingsPage() {
     localStorage.setItem('mesbook_theme', theme);
     localStorage.setItem('mesbook_text_size', textSize.toString());
     localStorage.setItem('mesbook_wallpaper', wallpaper);
+    localStorage.setItem('mesbook_message_radius', messageRadius.toString());
     setActiveView('main');
   };
 
@@ -118,6 +122,7 @@ export default function SettingsPage() {
     setTheme(savedTheme);
     setTextSize(Number(localStorage.getItem('mesbook_text_size')) || 16);
     setWallpaper(localStorage.getItem('mesbook_wallpaper') || '');
+    setMessageRadius(Number(localStorage.getItem('mesbook_message_radius')) || 18);
     setActiveView('main');
   };
 
@@ -282,7 +287,8 @@ export default function SettingsPage() {
                    backgroundColor: !wallpaper ? (theme === 'dark' ? '#161618' : '#e5e5ea') : undefined
                 }}>
               <div className="absolute inset-0 flex flex-col justify-end p-4">
-                 <div className="bg-white dark:bg-[#222224] rounded-[18px] rounded-tl-[4px] p-3 max-w-[85%] self-start shadow-sm border border-black/5 dark:border-white/5 transition-all">
+                 <div className="bg-white dark:bg-[#222224] p-3 max-w-[85%] self-start shadow-sm border border-black/5 dark:border-white/5 transition-all"
+                      style={{ borderRadius: `${messageRadius}px`, borderTopLeftRadius: '4px' }}>
                     <div style={{ fontSize: `${textSize}px` }} className="text-[#1d1d1f] dark:text-[#f5f5f7] leading-snug">
                        {t.previewText}
                     </div>
@@ -305,30 +311,24 @@ export default function SettingsPage() {
              </div>
            </div>
 
+           {/* СКРУГЛЕНИЕ СООБЩЕНИЙ */}
+           <div className="px-4 mt-4">
+             <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 p-5 flex flex-col gap-4">
+                <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.messageRadius}: <span className="text-[#1d1d1f] dark:text-[#f5f5f7]">{messageRadius}px</span></span>
+                <div className="flex items-center gap-4">
+                  <div className="w-6 h-6 bg-[#1d1d1f] dark:bg-[#f5f5f7]" style={{ borderRadius: '2px' }}></div>
+                  <input type="range" min="0" max="22" step="2" value={messageRadius} onChange={e => setMessageRadius(Number(e.target.value))} className="w-full h-1 bg-[#e5e5ea] dark:bg-[#333336] rounded-lg appearance-none cursor-pointer accent-[#1d1d1f] dark:accent-[#f5f5f7]" />
+                  <div className="w-6 h-6 bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full"></div>
+                </div>
+             </div>
+           </div>
+
            {/* ТЕМА (Светлая/Темная/Авто) */}
            <div className="px-4 mt-4">
              <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex overflow-hidden p-1">
                 <button onClick={() => setTheme('light')} className={`flex-1 py-2.5 rounded-[20px] text-[15px] font-medium transition-all ${theme === 'light' ? 'bg-[#1d1d1f] text-white dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5'}`}>{t.themeLight}</button>
                 <button onClick={() => setTheme('dark')} className={`flex-1 py-2.5 rounded-[20px] text-[15px] font-medium transition-all ${theme === 'dark' ? 'bg-[#1d1d1f] text-white dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5'}`}>{t.themeDark}</button>
                 <button onClick={() => setTheme('auto')} className={`flex-1 py-2.5 rounded-[20px] text-[15px] font-medium transition-all ${theme === 'auto' ? 'bg-[#1d1d1f] text-white dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5'}`}>{t.themeAuto}</button>
-             </div>
-           </div>
-
-           {/* ПАЛИТРА: ОБОИ ЧАТА */}
-           <div className="px-4 mt-4">
-             <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 p-5 flex flex-col gap-3">
-                <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">{t.chatBackground}</span>
-                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x">
-                  {/* Кнопка сброса (без фона) */}
-                  <button onClick={() => setWallpaper('')} className={`w-[75px] h-[100px] shrink-0 rounded-[14px] bg-[#f5f5f7] dark:bg-[#161618] border-[3px] transition-all flex items-center justify-center snap-start ${!wallpaper ? 'border-[#1d1d1f] dark:border-[#f5f5f7]' : 'border-black/5 dark:border-white/5'}`}>
-                     <X className="text-[#86868b] opacity-50" size={24} />
-                  </button>
-                  
-                  {/* Палитра выбора цвета */}
-                  <div className={`w-[75px] h-[100px] shrink-0 rounded-[14px] border-[3px] transition-all flex items-center justify-center snap-start relative overflow-hidden ${wallpaper && wallpaper.startsWith('#') ? 'border-[#1d1d1f] dark:border-[#f5f5f7]' : 'border-black/5 dark:border-white/5'}`} style={{ backgroundColor: wallpaper || '#1d1d1f' }}>
-                     <input type="color" value={wallpaper || '#1d1d1f'} onChange={e => setWallpaper(e.target.value)} className="absolute opacity-0 inset-[-10px] w-[200%] h-[200%] cursor-pointer" />
-                  </div>
-                </div>
              </div>
            </div>
 
