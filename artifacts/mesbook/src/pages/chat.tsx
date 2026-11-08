@@ -13,9 +13,9 @@ const getUserId = () => {
   try { const u = JSON.parse(localStorage.getItem('mesbook_user') || '{}'); return u.id || u.userId || u._id || 1; } catch (e) { return 1; }
 };
 
-const FAST_REACTIONS = ['❤️', '👍', '🔥', '😂', '😢'];
+const FAST_REACTIONS = ['鉂わ笍', '馃憤', '馃敟', '馃槀', '馃槩'];
 
-// ЗАГРУЗКА С РЕАЛЬНЫМ ПРОГРЕССОМ 0-100% И ОТМЕНОЙ КАК В TELEGRAM
+// 袟袗袚袪校袟袣袗 小 袪袝袗袥鞋袧蝎袦 袩袪袨袚袪袝小小袨袦 0-100% 袠 袨孝袦袝袧袨袡 袣袗袣 袙 TELEGRAM
 const uploadWithProgress = (
   formData: FormData,
   resourceType: 'auto' | 'video' | 'raw',
@@ -49,24 +49,24 @@ const formatSecTimer = (sec: number | null | undefined) => {
 
 const translations = {
   ru: {
-    saved: "Избранное", companion: "Собеседник", attachment: "Вложение", photo: "Фотография",
-    voiceMsg: "Голосовое сообщение", videoMsg: "Видеосообщение", file: "Файл", link: "Ссылка",
-    info: "Информация", name: "Название", desc: "Описание", bio: "О себе", channel: "Канал",
-    personalChannel: "Личный Канал", birthday: "День рождения", online: "в сети", group: "Группа",
-    subs: ['подписчик', 'подписчика', 'подписчиков'], members: ['участник', 'участника', 'участников'],
-    onlineCount: "в сети", subscribe: "Подписаться", joinGroup: "Вступить в группу",
-    mute: "Убрать звук", unmute: "Включить звук", reply: "Ответ", editing: "Редактирование",
-    edited: "изменено", messagePlaceholder: "Сообщение", commentPlaceholder: "Комментарий...",
-    deleteConfirm: "Удалить сообщение?", comments: "Комментарии", noComments: "Пока нет комментариев",
-    commentsCount: ['комментарий', 'комментария', 'комментариев'], isTyping: "печатает...",
-    areTyping: "печатают...", replyAction: "Ответить", copy: "Копировать", editAction: "Изменить",
-    deleteAction: "Удалить", cancel: "ОТМЕНА", pin: "Закрепить", unpin: "Открепить",
-    forward: "Переслать", pinnedMsg: "Закреплённое сообщение", forwardTitle: "Переслать в...",
-    makeAdmin: "Сделать админом", dismissAdmin: "Разжаловать", deleteChat: "Удалить чат",
-    leaveChat: "Покинуть чат", forwardedFrom: "Переслано от", writeBtn: "Написать",
-    muteBtn: "Звук", leaveBtn: "Leave", mediaTab: "Медиа", membersTab: "Members", filesTab: "Файлы", linksTab: "Ссылки",
-    sendMedia: "Мои заметки", addCaption: "Добавить подпись...", block: "Заблокировать", unblock: "Разблокировать",
-    searchMsgs: "Поиск сообщений", searchDate: "Поиск по дате", changeWallpaper: "Обои чата"
+    saved: "袠蟹斜褉邪薪薪芯械", companion: "小芯斜械褋械写薪懈泻", attachment: "袙谢芯卸械薪懈械", photo: "肖芯褌芯谐褉邪褎懈褟",
+    voiceMsg: "袚芯谢芯褋芯胁芯械 褋芯芯斜褖械薪懈械", videoMsg: "袙懈写械芯褋芯芯斜褖械薪懈械", file: "肖邪泄谢", link: "小褋褘谢泻邪",
+    info: "袠薪褎芯褉屑邪褑懈褟", name: "袧邪蟹胁邪薪懈械", desc: "袨锌懈褋邪薪懈械", bio: "袨 褋械斜械", channel: "袣邪薪邪谢",
+    personalChannel: "袥懈褔薪褘泄 袣邪薪邪谢", birthday: "袛械薪褜 褉芯卸写械薪懈褟", online: "胁 褋械褌懈", group: "袚褉褍锌锌邪",
+    subs: ['锌芯写锌懈褋褔懈泻', '锌芯写锌懈褋褔懈泻邪', '锌芯写锌懈褋褔懈泻芯胁'], members: ['褍褔邪褋褌薪懈泻', '褍褔邪褋褌薪懈泻邪', '褍褔邪褋褌薪懈泻芯胁'],
+    onlineCount: "胁 褋械褌懈", subscribe: "袩芯写锌懈褋邪褌褜褋褟", joinGroup: "袙褋褌褍锌懈褌褜 胁 谐褉褍锌锌褍",
+    mute: "校斜褉邪褌褜 蟹胁褍泻", unmute: "袙泻谢褞褔懈褌褜 蟹胁褍泻", reply: "袨褌胁械褌", editing: "袪械写邪泻褌懈褉芯胁邪薪懈械",
+    edited: "懈蟹屑械薪械薪芯", messagePlaceholder: "小芯芯斜褖械薪懈械", commentPlaceholder: "袣芯屑屑械薪褌邪褉懈泄...",
+    deleteConfirm: "校写邪谢懈褌褜 褋芯芯斜褖械薪懈械?", comments: "袣芯屑屑械薪褌邪褉懈懈", noComments: "袩芯泻邪 薪械褌 泻芯屑屑械薪褌邪褉懈械胁",
+    commentsCount: ['泻芯屑屑械薪褌邪褉懈泄', '泻芯屑屑械薪褌邪褉懈褟', '泻芯屑屑械薪褌邪褉懈械胁'], isTyping: "锌械褔邪褌邪械褌...",
+    areTyping: "锌械褔邪褌邪褞褌...", replyAction: "袨褌胁械褌懈褌褜", copy: "袣芯锌懈褉芯胁邪褌褜", editAction: "袠蟹屑械薪懈褌褜",
+    deleteAction: "校写邪谢懈褌褜", cancel: "袨孝袦袝袧袗", pin: "袟邪泻褉械锌懈褌褜", unpin: "袨褌泻褉械锌懈褌褜",
+    forward: "袩械褉械褋谢邪褌褜", pinnedMsg: "袟邪泻褉械锌谢褢薪薪芯械 褋芯芯斜褖械薪懈械", forwardTitle: "袩械褉械褋谢邪褌褜 胁...",
+    makeAdmin: "小写械谢邪褌褜 邪写屑懈薪芯屑", dismissAdmin: "袪邪蟹卸邪谢芯胁邪褌褜", deleteChat: "校写邪谢懈褌褜 褔邪褌",
+    leaveChat: "袩芯泻懈薪褍褌褜 褔邪褌", forwardedFrom: "袩械褉械褋谢邪薪芯 芯褌", writeBtn: "袧邪锌懈褋邪褌褜",
+    muteBtn: "袟胁褍泻", leaveBtn: "Leave", mediaTab: "袦械写懈邪", membersTab: "Members", filesTab: "肖邪泄谢褘", linksTab: "小褋褘谢泻懈",
+    sendMedia: "袦芯懈 蟹邪屑械褌泻懈", addCaption: "袛芯斜邪胁懈褌褜 锌芯写锌懈褋褜...", block: "袟邪斜谢芯泻懈褉芯胁邪褌褜", unblock: "袪邪蟹斜谢芯泻懈褉芯胁邪褌褜",
+    searchMsgs: "袩芯懈褋泻 褋芯芯斜褖械薪懈泄", searchDate: "袩芯懈褋泻 锌芯 写邪褌械", changeWallpaper: "袨斜芯懈 褔邪褌邪"
   },
   en: {
     saved: "Saved Messages", companion: "Companion", attachment: "Attachment", photo: "Photo",
@@ -100,7 +100,7 @@ function declOfNum(n: number, text_forms: string[], lang: 'ru' | 'en') {
 }
 
 const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
-  if (!timestamp) return lang === 'ru' ? 'был(а) недавно' : 'last seen recently';
+  if (!timestamp) return lang === 'ru' ? '斜褘谢(邪) 薪械写邪胁薪芯' : 'last seen recently';
   const date = new Date(timestamp);
   const now = new Date();
   const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
@@ -108,11 +108,11 @@ const formatLastSeen = (timestamp: number, lang: 'ru' | 'en') => {
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
   const timeStr = date.toLocaleTimeString(lang === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' });
-  if (isToday) return lang === 'ru' ? `был(а) в ${timeStr}` : `last seen today at ${timeStr}`;
-  if (isYesterday) return lang === 'ru' ? `был(а) вчера в ${timeStr}` : `last seen yesterday at ${timeStr}`;
+  if (isToday) return lang === 'ru' ? `斜褘谢(邪) 胁 ${timeStr}` : `last seen today at ${timeStr}`;
+  if (isYesterday) return lang === 'ru' ? `斜褘谢(邪) 胁褔械褉邪 胁 ${timeStr}` : `last seen yesterday at ${timeStr}`;
   let dateStr = date.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' });
   if (lang === 'ru') dateStr = dateStr.replace('.', '');
-  return lang === 'ru' ? `был(а) ${dateStr} в ${timeStr}` : `last seen ${dateStr} at ${timeStr}`;
+  return lang === 'ru' ? `斜褘谢(邪) ${dateStr} 胁 ${timeStr}` : `last seen ${dateStr} at ${timeStr}`;
 };
 
 const isMsgRead = (msg: any, isSavedChat: boolean) => {
@@ -242,7 +242,7 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration, i
         <div className="flex justify-between items-center text-[11px] mt-1.5 font-medium opacity-80">
           <span className="flex items-center gap-1">
             {formatSecTimer(isPlaying ? audioRef.current?.currentTime || 0 : (fixedDuration || duration))}
-            {(isLoading || isSending) && <span className="text-[14px] leading-none">•</span>}
+            {(isLoading || isSending) && <span className="text-[14px] leading-none">鈥�</span>}
           </span>
           <div className="flex items-center gap-1">
             <span>{timeStr}</span>
@@ -274,6 +274,7 @@ export default function ChatPage() {
 
   const [textSize, setTextSize] = useState(16);
   const [wallpaper, setWallpaper] = useState('');
+  const [messageRadius, setMessageRadius] = useState(18);
   const [profileTab, setProfileTab] = useState<'members' | 'media' | 'files' | 'links'>(isGroupOrChannel && !isSavedChat ? 'members' : 'media');
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -296,6 +297,8 @@ export default function ChatPage() {
   const [deleteForBoth, setDeleteForBoth] = useState(true);
   const wallpaperInputRef = useRef<HTMLInputElement>(null);
 
+  const wallpaperStorageKey = `mesbook_wallpaper_${currentUserId}_${chatId || 'saved'}`;
+
   const [uploadProgressMap, setUploadProgressMap] = useState<Record<number, number>>({});
   const uploadAbortMap = useRef<Record<number, () => void>>({});
 
@@ -313,16 +316,18 @@ export default function ChatPage() {
 
   useEffect(() => {
     const savedSize = Number(localStorage.getItem('mesbook_text_size')) || 16;
-    const savedWallpaper = localStorage.getItem('mesbook_wallpaper') || '';
+    const savedWallpaper = localStorage.getItem(wallpaperStorageKey) || '';
+    const savedRadius = Number(localStorage.getItem('mesbook_message_radius')) || 18;
     const savedTheme = localStorage.getItem('mesbook_theme') || localStorage.getItem('theme') || 'auto';
     setTextSize(savedSize);
     setWallpaper(savedWallpaper);
+    setMessageRadius(Math.max(0, Math.min(22, savedRadius)));
     if (savedTheme === 'dark' || (savedTheme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, []);
+  }, [wallpaperStorageKey]);
 
   const outboxKey = `mesbook_outbox_${currentUserId}_${chatId}`;
   const cacheKey = isSavedChat ? `mesbook_saved_messages_${currentUserId}` : `mesbook_messages_cache_${currentUserId}_${chatId}`;
@@ -923,7 +928,7 @@ export default function ChatPage() {
         }, 100);
       }
     } catch (e) {
-      alert('Необходим доступ к микрофону и/или камере');
+      alert('袧械芯斜褏芯写懈屑 写芯褋褌褍锌 泻 屑懈泻褉芯褎芯薪褍 懈/懈谢懈 泻邪屑械褉械');
       setRecordingType(null);
     }
   };
@@ -1017,7 +1022,7 @@ export default function ChatPage() {
   const getAuthorNameForReply = (msg: any) => {
     if (!msg) return displayName;
     if (msg.senderName) return msg.senderName;
-    if (String(msg.senderId) === String(currentUserId)) return currentUser?.displayName || (lang === 'ru' ? 'Вы' : 'You');
+    if (String(msg.senderId) === String(currentUserId)) return currentUser?.displayName || (lang === 'ru' ? '袙褘' : 'You');
     return displayName;
   };
 
@@ -1283,7 +1288,7 @@ export default function ChatPage() {
     }
 
     if (msg.myReaction === key && !resolved.some(u => String(u.id) === String(currentUserId))) {
-      resolved.unshift({ id: currentUserId, name: currentUser?.displayName || 'Я', avatar: currentUser?.avatarUrl });
+      resolved.unshift({ id: currentUserId, name: currentUser?.displayName || '携', avatar: currentUser?.avatarUrl });
     }
 
     if (resolved.length < count && !isGroupOrChannel && chatInfo?.participant) {
@@ -1298,7 +1303,7 @@ export default function ChatPage() {
 
     if (resolved.length === 0) {
       if (msg.myReaction === key || isSavedChat) {
-        resolved.push({ id: currentUserId, name: currentUser?.displayName || 'Я', avatar: currentUser?.avatarUrl });
+        resolved.push({ id: currentUserId, name: currentUser?.displayName || '携', avatar: currentUser?.avatarUrl });
       } else if (chatInfo?.participant) {
         resolved.push({ id: 'companion', name: chatInfo.participant.displayName || displayName, avatar: chatInfo.participant.avatarUrl });
       }
@@ -1421,8 +1426,8 @@ export default function ChatPage() {
       if (parts.length > 0) {
         const headerRaw = parts[0].slice(2).trim();
         text = parts.slice(1).join(DOUBLE_NL).trim();
-        if (headerRaw.startsWith('Переслано от ')) {
-          forwardedFrom = headerRaw.slice('Переслано от '.length).trim();
+        if (headerRaw.startsWith('袩械褉械褋谢邪薪芯 芯褌 ')) {
+          forwardedFrom = headerRaw.slice('袩械褉械褋谢邪薪芯 芯褌 '.length).trim();
         } else if (headerRaw.startsWith('Forwarded from ')) {
           forwardedFrom = headerRaw.slice('Forwarded from '.length).trim();
         } else {
@@ -1453,7 +1458,7 @@ export default function ChatPage() {
         if (trimmedLine.startsWith('[FILE] ')) {
           const rawFile = trimmedLine.slice(7).trim();
           const [fUrl, fName, fSize] = rawFile.split('|');
-          if (fUrl) fileData = { url: fUrl, name: fName || 'Документ', size: fSize || '' };
+          if (fUrl) fileData = { url: fUrl, name: fName || '袛芯泻褍屑械薪褌', size: fSize || '' };
           continue;
         }
 
@@ -1573,8 +1578,8 @@ export default function ChatPage() {
 
   const handleApplyWallpaper = (val: string) => {
     setWallpaper(val);
-    if (val) localStorage.setItem('mesbook_wallpaper', val);
-    else localStorage.removeItem('mesbook_wallpaper');
+    if (val) localStorage.setItem(wallpaperStorageKey, val);
+    else localStorage.removeItem(wallpaperStorageKey);
     setIsWallpaperModalOpen(false);
   };
 
@@ -1611,20 +1616,20 @@ export default function ChatPage() {
   const activeThreadContent = activeThread ? parseContent(activeThread.content) : null;
   const safePinIdx = pinnedMessages.length > 0 ? Math.min(activePinnedIndex, pinnedMessages.length - 1) : 0;
   const currentPinnedMsg = pinnedMessages[safePinIdx] || pinnedMessages[0];
-// === КОНЕЦ ПЕРВОЙ ЧАСТИ (СРАЗУ НИЖЕ ВСТАВЛЯЙ ВТОРУЮ ЧАСТЬ) ===
+// === 袣袨袧袝笑 袩袝袪袙袨袡 效袗小孝袠 (小袪袗袟校 袧袠袞袝 袙小孝袗袙袥携袡 袙孝袨袪校挟 效袗小孝鞋) ===
   return (
     <div
       className={`flex flex-col h-[100dvh] transition-colors duration-300 relative font-sans overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out ${!wallpaper ? 'bg-[#f5f5f7] dark:bg-[#161618]' : ''}`}
       style={wallpaper ? { background: wallpaper.startsWith('#') ? wallpaper : `url(${wallpaper}) center/cover fixed` } : {}}
       onClick={() => { setContextMenu(null); setIsChatMenuOpen(false); setIsProfileMenuOpen(false); setShowFileQuickBtn(false); }}
     >
-      {/* МОДАЛКА МУЛЬТИЗАГРУЗКИ ФОТО С КНОПКОЙ ВЫБОРА ФАЙЛА И НЕОБЯЗАТЕЛЬНОЙ ПОДПИСЬЮ */}
+      {/* 袦袨袛袗袥袣袗 袦校袥鞋孝袠袟袗袚袪校袟袣袠 肖袨孝袨 小 袣袧袨袩袣袨袡 袙蝎袘袨袪袗 肖袗袡袥袗 袠 袧袝袨袘携袟袗孝袝袥鞋袧袨袡 袩袨袛袩袠小鞋挟 */}
       {selectedFiles.length > 0 && (
         <div className="fixed inset-0 z-[400] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in fade-in duration-200" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between p-4 bg-white/90 dark:bg-[#222224]/90 border-b border-black/5 dark:border-white/5 backdrop-blur-xl absolute top-0 w-full z-10 pt-10">
             <div className="flex items-center gap-3">
               <button onClick={() => { setSelectedFiles([]); setMediaPreviews([]); setCurrentPreviewIndex(0); }} className="p-2 text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95 transition-transform"><ArrowLeft size={24} /></button>
-              <span className="font-semibold text-[18px] text-[#1d1d1f] dark:text-[#f5f5f7]">Выбрано {selectedFiles.length}</span>
+              <span className="font-semibold text-[18px] text-[#1d1d1f] dark:text-[#f5f5f7]">袙褘斜褉邪薪芯 {selectedFiles.length}</span>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => docInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/5 dark:bg-white/10 text-[13px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] active:scale-95">
@@ -1670,7 +1675,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* МОДАЛКА УДАЛЕНИЯ ЧАТА (У СЕБЯ ИЛИ У ОБОИХ) */}
+      {/* 袦袨袛袗袥袣袗 校袛袗袥袝袧袠携 效袗孝袗 (校 小袝袘携 袠袥袠 校 袨袘袨袠啸) */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 z-[350] bg-black/50 backdrop-blur-xs flex items-center justify-center p-5 animate-in fade-in duration-150" onClick={() => setIsDeleteModalOpen(false)}>
           <div className="bg-white dark:bg-[#222224] rounded-[22px] w-full max-w-xs p-5 shadow-2xl border border-black/5 dark:border-white/5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
@@ -1678,7 +1683,7 @@ export default function ChatPage() {
             {!isGroupOrChannel && !isSavedChat && (
               <label className="flex items-center gap-3 cursor-pointer select-none text-[14px] text-[#1d1d1f] dark:text-[#f5f5f7]">
                 <input type="checkbox" checked={deleteForBoth} onChange={e => setDeleteForBoth(e.target.checked)} className="w-4 h-4 accent-[#1d1d1f] dark:accent-[#f5f5f7] rounded" />
-                <span>Также удалить для {displayName}</span>
+                <span>孝邪泻卸械 褍写邪谢懈褌褜 写谢褟 {displayName}</span>
               </label>
             )}
             <div className="flex justify-end gap-2 mt-1">
@@ -1689,7 +1694,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* МОДАЛКА ПОИСКА ПО ДАТЕ */}
+      {/* 袦袨袛袗袥袣袗 袩袨袠小袣袗 袩袨 袛袗孝袝 */}
       {isDateModalOpen && (
         <div className="fixed inset-0 z-[350] bg-black/50 backdrop-blur-xs flex items-center justify-center p-5 animate-in fade-in duration-150" onClick={() => setIsDateModalOpen(false)}>
           <div className="bg-white dark:bg-[#222224] rounded-[22px] w-full max-w-xs p-5 shadow-2xl border border-black/5 dark:border-white/5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
@@ -1711,14 +1716,14 @@ export default function ChatPage() {
                 }}
                 className="px-4 py-2 rounded-[12px] text-[14px] font-semibold bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] active:scale-95"
               >
-                Перейти
+                袩械褉械泄褌懈
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* МОДАЛКА ВЫБОРА ОБОЕВ ЧАТА */}
+      {/* 袦袨袛袗袥袣袗 袙蝎袘袨袪袗 袨袘袨袝袙 效袗孝袗 */}
       {isWallpaperModalOpen && (
         <div className="fixed inset-0 z-[350] bg-black/50 backdrop-blur-xs flex items-center justify-center p-5 animate-in fade-in duration-150" onClick={() => setIsWallpaperModalOpen(false)}>
           <div className="bg-white dark:bg-[#222224] rounded-[22px] w-full max-w-xs p-5 shadow-2xl border border-black/5 dark:border-white/5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
@@ -1731,19 +1736,19 @@ export default function ChatPage() {
                   className="h-12 rounded-[12px] border border-black/10 dark:border-white/10 flex items-center justify-center text-[11px] font-semibold text-[#86868b]"
                   style={{ background: col || undefined }}
                 >
-                  {col === '' ? 'Сброс' : ''}
+                  {col === '' ? '小斜褉芯褋' : ''}
                 </button>
               ))}
             </div>
             <input type="file" accept="image/*" ref={wallpaperInputRef} className="hidden" onChange={handleCustomWallpaperFile} />
             <button onClick={() => wallpaperInputRef.current?.click()} className="w-full py-2.5 rounded-[14px] bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] font-semibold text-[14px] active:scale-95">
-              Выбрать фото из галереи
+              袙褘斜褉邪褌褜 褎芯褌芯 懈蟹 谐邪谢械褉械懈
             </button>
           </div>
         </div>
       )}
 
-      {/* ЗАПИСЬ ВИДЕОКРУЖОЧКА */}
+      {/* 袟袗袩袠小鞋 袙袠袛袝袨袣袪校袞袨效袣袗 */}
       {recordingType === 'video' && (
         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[240px] h-[240px] rounded-full overflow-hidden border-[3px] border-[#1d1d1f] dark:border-[#f5f5f7] shadow-2xl z-[100] animate-in zoom-in duration-200 bg-black">
           <video ref={hiddenVideoRef} playsInline muted autoPlay className="hidden" />
@@ -1752,7 +1757,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ПЕРЕСЫЛКА */}
+      {/* 袩袝袪袝小蝎袥袣袗 */}
       {forwardingMsg && (
         <div className="fixed inset-0 z-[300] bg-black/40 backdrop-blur-sm flex flex-col justify-end animate-in fade-in duration-200" onClick={() => setForwardingMsg(null)}>
           <div className="bg-[#f5f5f7] dark:bg-[#161618] w-full rounded-t-[24px] overflow-hidden flex flex-col max-h-[80vh] animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
@@ -1780,7 +1785,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ЛАЙТБОКС С ПОДДЕРЖКОЙ ЗУМА И СВАЙПА */}
+      {/* 袥袗袡孝袘袨袣小 小 袩袨袛袛袝袪袞袣袨袡 袟校袦袗 袠 小袙袗袡袩袗 */}
       {lightboxData && lightboxData.urls.length > 0 && (
         <div
           className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl flex flex-col animate-in fade-in duration-200 ease-out touch-none"
@@ -1814,7 +1819,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ПРОФИЛЬ ЧАТА / КАНАЛА С РАБОЧИМИ 3 ТОЧКАМИ И ВКЛАДКАМИ МЕДИА, ФАЙЛЫ, ССЫЛКИ */}
+      {/* 袩袪袨肖袠袥鞋 效袗孝袗 / 袣袗袧袗袥袗 小 袪袗袘袨效袠袦袠 3 孝袨效袣袗袦袠 袠 袙袣袥袗袛袣袗袦袠 袦袝袛袠袗, 肖袗袡袥蝎, 小小蝎袥袣袠 */}
       {showProfile && chatInfo?.participant && (
         <div className="fixed inset-0 z-[150] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out overflow-y-auto" onClick={() => setIsProfileMenuOpen(false)}>
           <header className="flex items-center justify-between px-4 pt-12 pb-2 sticky top-0 bg-[#f5f5f7]/90 dark:bg-[#161618]/90 backdrop-blur-xl z-20">
@@ -1906,7 +1911,7 @@ export default function ChatPage() {
                         {chatInfo.participant.username && (
                           <div className="flex flex-col">
                             <span className="text-[16px] text-[#1d1d1f] dark:text-[#f5f5f7] leading-snug">{chatInfo.participant.username}</span>
-                            <span className="text-[13px] text-[#86868b] dark:text-[#98989d] mt-1">Никнейм (@username)</span>
+                            <span className="text-[13px] text-[#86868b] dark:text-[#98989d] mt-1">袧懈泻薪械泄屑 (@username)</span>
                           </div>
                         )}
                         {chatInfo.participant.bio && (
@@ -1979,7 +1984,7 @@ export default function ChatPage() {
                   {profileTab === 'media' && (
                     <div className="grid grid-cols-3 gap-1">
                       {chatMedia.length === 0 ? (
-                        <div className="col-span-3 text-center py-10 text-[#86868b] font-medium">Нет медиа</div>
+                        <div className="col-span-3 text-center py-10 text-[#86868b] font-medium">袧械褌 屑械写懈邪</div>
                       ) : (
                         chatMedia.map((url, i) => (
                           <div key={i} className="aspect-square bg-[#e5e5ea] dark:bg-[#333336] rounded-[4px] overflow-hidden cursor-pointer active:scale-[0.98] transition-transform" onClick={() => openLightbox(url)}>
@@ -1992,7 +1997,7 @@ export default function ChatPage() {
 
                   {profileTab === 'files' && (
                     chatFiles.length === 0 ? (
-                      <div className="text-center py-10 text-[#86868b] font-medium">Пока нет файлов</div>
+                      <div className="text-center py-10 text-[#86868b] font-medium">袩芯泻邪 薪械褌 褎邪泄谢芯胁</div>
                     ) : (
                       <div className="flex flex-col gap-2">
                         {chatFiles.map((f, i) => (
@@ -2013,7 +2018,7 @@ export default function ChatPage() {
 
                   {profileTab === 'links' && (
                     chatLinks.length === 0 ? (
-                      <div className="text-center py-10 text-[#86868b] font-medium">Пока нет ссылок</div>
+                      <div className="text-center py-10 text-[#86868b] font-medium">袩芯泻邪 薪械褌 褋褋褘谢芯泻</div>
                     ) : (
                       <div className="flex flex-col gap-2">
                         {chatLinks.map((lnk, i) => (
@@ -2034,7 +2039,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ШАПКА ЧАТА С РАБОЧИМ ПОИСКОМ И МЕНЮ 3 ТОЧЕК */}
+      {/* 楔袗袩袣袗 效袗孝袗 小 袪袗袘袨效袠袦 袩袨袠小袣袨袦 袠 袦袝袧挟 3 孝袨效袝袣 */}
       <header className="px-3 pt-10 pb-2 border-b border-black/5 dark:border-white/5 flex flex-col bg-[#f5f5f7]/90 dark:bg-[#161618]/90 backdrop-blur-xl relative z-20 shadow-sm">
         {isChatSearchOpen ? (
           <div className="flex items-center gap-2 py-1">
@@ -2102,7 +2107,7 @@ export default function ChatPage() {
         )}
       </header>
 
-      {/* КОМПАКТНАЯ ПЛАВАЮЩАЯ КАПСУЛА ЗАКРЕПЛЁННЫХ СООБЩЕНИЙ */}
+      {/* 袣袨袦袩袗袣孝袧袗携 袩袥袗袙袗挟些袗携 袣袗袩小校袥袗 袟袗袣袪袝袩袥衼袧袧蝎啸 小袨袨袘些袝袧袠袡 */}
       {pinnedMessages.length > 0 && currentPinnedMsg && (
         <div className="px-2 pt-1.5 pb-0.5 relative z-20">
           <div
@@ -2138,7 +2143,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ОСНОВНАЯ ЛЕНТА СООБЩЕНИЙ */}
+      {/* 袨小袧袨袙袧袗携 袥袝袧孝袗 小袨袨袘些袝袧袠袡 */}
       <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 pb-4 relative" onClick={() => { setContextMenu(null); setIsChatMenuOpen(false); setShowFileQuickBtn(false); }}>
         <div className="flex flex-col w-full max-w-full">
           {(() => {
@@ -2205,9 +2210,10 @@ export default function ChatPage() {
                         ? `relative flex flex-col cursor-pointer bg-transparent transition-all duration-500 rounded-full ${isHighlighted ? 'ring-4 ring-[#1d1d1f]/40 dark:ring-[#f5f5f7]/40 scale-[1.03]' : ''}`
                         : `shadow-sm relative flex flex-col min-w-[72px] ${hasMedia ? 'w-[75vw] max-w-[320px]' : 'w-fit max-w-full'} cursor-pointer overflow-hidden transition-all duration-500 ${isChannel ? 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[22px] rounded-tl-[6px] border border-black/5 dark:border-white/5' : (isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5')} ${isHighlighted ? 'ring-2 ring-[#1d1d1f] dark:ring-[#f5f5f7] scale-[1.02]' : ''}`
                       }
+                      style={!isOnlyVideoNote ? { borderRadius: `${messageRadius}px`, borderTopLeftRadius: isChannel || !isMe ? '4px' : `${messageRadius}px`, borderTopRightRadius: !isChannel && isMe ? '4px' : `${messageRadius}px` } : undefined}
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                     >
-                      {/* ЗАГОЛОВОК ПЕРЕСЫЛКИ */}
+                      {/* 袟袗袚袨袥袨袙袨袣 袩袝袪袝小蝎袥袣袠 */}
                       {forwardedFrom && (
                         <div className={`px-3 pt-2 pb-0.5 flex items-center gap-1.5 text-[12px] font-semibold ${isMe && !isChannel ? 'text-white/80 dark:text-black/75' : 'text-[#86868b] dark:text-[#98989d]'}`}>
                           <Forward size={13} className="shrink-0" />
@@ -2215,7 +2221,7 @@ export default function ChatPage() {
                         </div>
                       )}
 
-                      {/* ПЛАШКА ОТВЕТА (ПРОКРУТКА И ПОДСВЕТКА ПРИ КЛИКЕ) */}
+                      {/* 袩袥袗楔袣袗 袨孝袙袝孝袗 (袩袪袨袣袪校孝袣袗 袠 袩袨袛小袙袝孝袣袗 袩袪袠 袣袥袠袣袝) */}
                       {quotedText && !text && (
                         <div
                           className="px-2.5 pt-2 pb-1"
@@ -2233,7 +2239,7 @@ export default function ChatPage() {
                         </div>
                       )}
 
-                      {/* РЕНДЕР ПРИКРЕПЛЕННОГО ФАЙЛА */}
+                      {/* 袪袝袧袛袝袪 袩袪袠袣袪袝袩袥袝袧袧袨袚袨 肖袗袡袥袗 */}
                       {fileData && (
                         <a
                           href={fileData.url}
@@ -2258,7 +2264,7 @@ export default function ChatPage() {
                         </a>
                       )}
 
-                      {/* РЕНДЕР ВИДЕОКРУЖОЧКА С КОЛЬЦОМ ЗАГРУЗКИ КАК В TELEGRAM */}
+                      {/* 袪袝袧袛袝袪 袙袠袛袝袨袣袪校袞袨效袣袗 小 袣袨袥鞋笑袨袦 袟袗袚袪校袟袣袠 袣袗袣 袙 TELEGRAM */}
                       {(videoNoteUrl || isVideoNoteLoading) && (() => {
                         const isUploadingThis = Boolean(msg.isUploadingMedia) || isVideoNoteLoading;
                         const prog = uploadProgressMap[msg.id] || 15;
@@ -2299,7 +2305,7 @@ export default function ChatPage() {
                               {expandedVideoMsgId !== msg.id && (
                                 <div className="absolute bottom-3 left-3 bg-black/45 text-white px-2.5 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
                                   <span>{formatSecTimer(fixedDuration)}</span>
-                                  <span className="text-[14px] leading-none">•</span>
+                                  <span className="text-[14px] leading-none">鈥�</span>
                                 </div>
                               )}
 
@@ -2318,7 +2324,7 @@ export default function ChatPage() {
                         );
                       })()}
 
-                      {/* РЕНДЕР ГОЛОСОВОГО СООБЩЕНИЯ С КОЛЬЦОМ ЗАГРУЗКИ */}
+                      {/* 袪袝袧袛袝袪 袚袨袥袨小袨袙袨袚袨 小袨袨袘些袝袧袠携 小 袣袨袥鞋笑袨袦 袟袗袚袪校袟袣袠 */}
                       {(voiceUrl || isVoiceLoading) && (
                         <div className={`${hasText ? 'pb-1' : ''}`}>
                           <VoicePlayer
@@ -2372,7 +2378,7 @@ export default function ChatPage() {
                       )}
 
                       {text && (
-                        <div className={`px-3 pt-2 ${hasReactions ? 'pb-1' : 'pb-2'}`}>
+                        <div className={`relative px-3 pt-2 pr-14 ${hasReactions ? 'pb-1' : 'pb-2'}`}>
                           {quotedText && (
                             <div
                               className={`mb-1.5 px-2.5 py-1.5 rounded-[10px] border-l-[3px] flex flex-col cursor-pointer hover:opacity-80 transition-opacity ${isMe && !isChannel ? 'bg-white/15 dark:bg-black/10 border-white dark:border-[#1d1d1f]' : 'bg-black/[0.05] dark:bg-white/[0.08] border-[#1d1d1f] dark:border-[#f5f5f7]'}`}
@@ -2390,13 +2396,12 @@ export default function ChatPage() {
                           <div className="leading-[1.35] break-words whitespace-pre-wrap" style={{ fontSize: `${textSize}px` }}>
                             {text}
                             {(!voiceUrl && !videoNoteUrl && !hasReactions) && (
-                              <span className={`float-right inline-flex items-center gap-1 text-[10px] ml-3 mt-1.5 pointer-events-none select-none relative top-[2px] ${isMe && !isChannel ? 'opacity-65 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
+                              <span className={`absolute right-2.5 bottom-1.5 inline-flex items-center gap-1 text-[10px] pointer-events-none select-none z-10 ${isMe && !isChannel ? 'opacity-65 text-current' : 'text-[#86868b] dark:text-[#98989d]'}`}>
                                 {msg.isEdited && <span className="italic mr-0.5">{t.edited}</span>}
                                 {timeStr}
                                 {isMe && !isChannel && (msg.isSending ? <Clock size={11} strokeWidth={2.5} className="animate-pulse ml-0.5" /> : <div className="flex -space-x-1 ml-0.5"><Check size={12} strokeWidth={2.5} />{isMsgRead(msg, isSavedChat) ? <Check size={12} strokeWidth={2.5} /> : null}</div>)}
                               </span>
                             )}
-                            <div className="clear-both"></div>
                           </div>
                         </div>
                       )}
@@ -2462,7 +2467,7 @@ export default function ChatPage() {
         </div>
       </main>
 
-      {/* МОДАЛКА КОММЕНТАРИЕВ КАНАЛА */}
+      {/* 袦袨袛袗袥袣袗 袣袨袦袦袝袧孝袗袪袠袝袙 袣袗袧袗袥袗 */}
       {activeThread && (
         <div className="fixed inset-0 z-[80] bg-[#f5f5f7] dark:bg-[#161618] flex flex-col animate-in slide-in-from-bottom duration-300 ease-out" onClick={() => setContextMenu(null)}>
           <header className="flex items-center justify-between px-4 pt-12 pb-4 border-b border-black/5 dark:border-white/5 bg-[#f5f5f7]/80 dark:bg-[#161618]/80 backdrop-blur-xl z-10">
@@ -2576,7 +2581,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ПАНЕЛЬ ОТПРАВКИ СООБЩЕНИЯ */}
+      {/* 袩袗袧袝袥鞋 袨孝袩袪袗袙袣袠 小袨袨袘些袝袧袠携 */}
       {!activeThread && (
         <div className="bg-white/90 dark:bg-[#161618]/90 border-t border-black/5 dark:border-white/5 relative z-10 flex flex-col backdrop-blur-xl">
           {isBlocked ? (
@@ -2682,7 +2687,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* КОНТЕКСТНОЕ МЕНЮ СООБЩЕНИЯ */}
+      {/* 袣袨袧孝袝袣小孝袧袨袝 袦袝袧挟 小袨袨袘些袝袧袠携 */}
       {contextMenu && (() => {
         const menuWidth = 220; const menuHeight = 280;
         let safeX = contextMenu.x; let safeY = contextMenu.y;
@@ -2722,4 +2727,4 @@ export default function ChatPage() {
       })()}
     </div>
   );
-}
+         }
