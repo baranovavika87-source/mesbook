@@ -61,7 +61,7 @@ const translations = {
     commentsCount: ['泻芯屑屑械薪褌邪褉懈泄', '泻芯屑屑械薪褌邪褉懈褟', '泻芯屑屑械薪褌邪褉懈械胁'], isTyping: "锌械褔邪褌邪械褌...",
     areTyping: "锌械褔邪褌邪褞褌...", replyAction: "袨褌胁械褌懈褌褜", copy: "袣芯锌懈褉芯胁邪褌褜", editAction: "袠蟹屑械薪懈褌褜",
     deleteAction: "校写邪谢懈褌褜", cancel: "袨孝袦袝袧袗", pin: "袟邪泻褉械锌懈褌褜", unpin: "袨褌泻褉械锌懈褌褜",
-    forward: "袩械褉械褋谢邪褌褜", pinnedMsg: "袟邪泻褉械锌谢褢薪薪芯械 褋芯芯斜褖械薪懈械", forwardTitle: "袩械褉械褋谢邪褌褜 胁...",
+    forward: "袩械褉械褋谢邪褌褜", pinnedMsg: "袟邪泻褉械锌谢褗薪薪芯械 褋芯芯斜褖械薪懈械", forwardTitle: "袩械褉械褋谢邪褌褜 胁...",
     makeAdmin: "小写械谢邪褌褜 邪写屑懈薪芯屑", dismissAdmin: "袪邪蟹卸邪谢芯胁邪褌褜", deleteChat: "校写邪谢懈褌褜 褔邪褌",
     leaveChat: "袩芯泻懈薪褍褌褜 褔邪褌", forwardedFrom: "袩械褉械褋谢邪薪芯 芯褌", writeBtn: "袧邪锌懈褋邪褌褜",
     muteBtn: "袟胁褍泻", leaveBtn: "Leave", mediaTab: "袦械写懈邪", membersTab: "Members", filesTab: "肖邪泄谢褘", linksTab: "小褋褘谢泻懈",
@@ -242,7 +242,7 @@ const VoicePlayer = ({ url, isMe, timeStr, readStatus, isSaved, fixedDuration, i
         <div className="flex justify-between items-center text-[11px] mt-1.5 font-medium opacity-80">
           <span className="flex items-center gap-1">
             {formatSecTimer(isPlaying ? audioRef.current?.currentTime || 0 : (fixedDuration || duration))}
-            {(isLoading || isSending) && <span className="text-[14px] leading-none">鈥�</span>}
+            {(isLoading || isSending) && <span className="text-[14px] leading-none">鈴�</span>}
           </span>
           <div className="flex items-center gap-1">
             <span>{timeStr}</span>
@@ -2305,7 +2305,7 @@ export default function ChatPage() {
                               {expandedVideoMsgId !== msg.id && (
                                 <div className="absolute bottom-3 left-3 bg-black/45 text-white px-2.5 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 backdrop-blur-md">
                                   <span>{formatSecTimer(fixedDuration)}</span>
-                                  <span className="text-[14px] leading-none">鈥�</span>
+                                  <span className="text-[14px] leading-none">鈴�</span>
                                 </div>
                               )}
 
@@ -2727,4 +2727,4 @@ export default function ChatPage() {
       })()}
     </div>
   );
-         }
+      }
