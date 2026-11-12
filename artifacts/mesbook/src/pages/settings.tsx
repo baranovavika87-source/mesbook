@@ -28,7 +28,6 @@ const translations = {
     theme: "Тема оформления",
     themeLight: "Светлая",
     themeDark: "Тёмная",
-    themeAuto: "Авто",
     textSize: "Размер текста",
     chatBackground: "Цвет чата",
     previewText: "Привет, как твои дела?",
@@ -60,7 +59,6 @@ const translations = {
     theme: "Appearance",
     themeLight: "Light",
     themeDark: "Dark",
-    themeAuto: "Auto",
     textSize: "Text Size",
     chatBackground: "Chat Color",
     previewText: "Hi, how are you?",
@@ -94,14 +92,14 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Chat Settings State (Live values)
-  const [theme, setTheme] = useState(localStorage.getItem('mesbook_theme') || 'auto');
+  const [theme, setTheme] = useState(localStorage.getItem('mesbook_theme') || 'light');
   const [textSize, setTextSize] = useState(Number(localStorage.getItem('mesbook_text_size')) || 16);
   const [wallpaper, setWallpaper] = useState(localStorage.getItem('mesbook_wallpaper') || '');
   const [messageRadius, setMessageRadius] = useState(Number(localStorage.getItem('mesbook_message_radius')) || 18);
 
   // Эффект для живой смены темы (без немедленного сохранения)
   useEffect(() => {
-    if (theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
@@ -118,7 +116,7 @@ export default function SettingsPage() {
   };
 
   const cancelChatSettings = () => {
-    const savedTheme = localStorage.getItem('mesbook_theme') || 'auto';
+    const savedTheme = localStorage.getItem('mesbook_theme') || 'light';
     setTheme(savedTheme);
     setTextSize(Number(localStorage.getItem('mesbook_text_size')) || 16);
     setWallpaper(localStorage.getItem('mesbook_wallpaper') || '');
@@ -323,12 +321,11 @@ export default function SettingsPage() {
              </div>
            </div>
 
-           {/* ТЕМА (Светлая/Темная/Авто) */}
+           {/* ТЕМА (Светлая/Темная) */}
            <div className="px-4 mt-4">
              <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex overflow-hidden p-1">
                 <button onClick={() => setTheme('light')} className={`flex-1 py-2.5 rounded-[20px] text-[15px] font-medium transition-all ${theme === 'light' ? 'bg-[#1d1d1f] text-white dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5'}`}>{t.themeLight}</button>
                 <button onClick={() => setTheme('dark')} className={`flex-1 py-2.5 rounded-[20px] text-[15px] font-medium transition-all ${theme === 'dark' ? 'bg-[#1d1d1f] text-white dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5'}`}>{t.themeDark}</button>
-                <button onClick={() => setTheme('auto')} className={`flex-1 py-2.5 rounded-[20px] text-[15px] font-medium transition-all ${theme === 'auto' ? 'bg-[#1d1d1f] text-white dark:bg-[#f5f5f7] dark:text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:bg-black/5 dark:hover:bg-white/5'}`}>{t.themeAuto}</button>
              </div>
            </div>
 
@@ -453,4 +450,4 @@ export default function SettingsPage() {
       </main>
     </div>
   );
-}
+                                               }
