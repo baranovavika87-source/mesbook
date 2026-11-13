@@ -135,6 +135,27 @@ export default function SettingsPage() {
     }
   }, [theme]);
 
+  const formatBirthDate = (date: string) => {
+    if (!date) {
+      return lang === 'ru' ? 'Выберите дату' : 'Select date';
+    }
+
+    const parsedDate = new Date(`${date}T00:00:00`);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return date;
+    }
+
+    return parsedDate.toLocaleDateString(
+      lang === 'ru' ? 'ru-RU' : 'en-US',
+      {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      }
+    );
+  };
+
   const handleSaveChatSettings = () => {
     localStorage.setItem('mesbook_theme', theme);
     localStorage.setItem('mesbook_text_size', textSize.toString());
@@ -329,33 +350,42 @@ export default function SettingsPage() {
             <div className="absolute -left-10 -bottom-20 w-40 h-40 rounded-full bg-white/5 blur-2xl" />
 
             <div className="relative flex items-center gap-5">
-              <div
-                className="relative w-[92px] h-[92px] rounded-full overflow-hidden bg-[#3b3b40] flex items-center justify-center border-2 border-white/20 cursor-pointer"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {editAvatar && editAvatar.length > 5 ? (
-                  <img
-                    src={editAvatar}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-[34px] font-semibold text-white">
-                    {editName.charAt(0).toUpperCase() || 'U'}
-                  </span>
-                )}
-
-                {isUploading && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                    <Loader2
-                      size={24}
-                      className="text-white animate-spin"
+              <div className="relative w-[92px] h-[92px]">
+                <button
+                  type="button"
+                  aria-label="Изменить фото профиля"
+                  className="relative w-[92px] h-[92px] rounded-full overflow-hidden bg-[#3b3b40] flex items-center justify-center border-2 border-white/20 cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {editAvatar && editAvatar.length > 5 ? (
+                    <img
+                      src={editAvatar}
+                      className="w-full h-full object-cover"
                     />
-                  </div>
-                )}
+                  ) : (
+                    <span className="text-[34px] font-semibold text-white">
+                      {editName.charAt(0).toUpperCase() || 'U'}
+                    </span>
+                  )}
 
-                <div className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-white flex items-center justify-center shadow-md">
+                  {isUploading && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                      <Loader2
+                        size={24}
+                        className="text-white animate-spin"
+                      />
+                    </div>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  aria-label="Изменить фото профиля"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-white flex items-center justify-center shadow-md active:scale-95 transition-transform"
+                >
                   <Camera size={14} className="text-[#1d1d1f]" />
-                </div>
+                </button>
               </div>
 
               <div className="relative min-w-0">
@@ -419,12 +449,18 @@ export default function SettingsPage() {
                   {t.birthday}
                 </label>
 
-                <input
-                  type="date"
-                  value={editBirthDate}
-                  onChange={e => setEditBirthDate(e.target.value)}
-                  className="w-full bg-transparent text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] outline-none [color-scheme:light] dark:[color-scheme:dark]"
-                />
+                <div className="relative">
+                  <div className="w-full bg-transparent text-[17px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+                    {formatBirthDate(editBirthDate)}
+                  </div>
+
+                  <input
+                    type="date"
+                    value={editBirthDate}
+                    onChange={e => setEditBirthDate(e.target.value)}
+                    className="absolute inset-0 w-full opacity-0 cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
+                  />
+                </div>
               </div>
 
               <div className="px-5 py-4">
@@ -809,4 +845,4 @@ export default function SettingsPage() {
       </main>
     </div>
   );
-}
+                  }
