@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, ArrowLeft, Download, Copy, Reply, ChevronRight, Paperclip } from 'lucide-react';
+import { MessageSquare, Users, Loader2, Edit2, Trash2, X, MessageCircle, ArrowLeft, Download, Copy, Reply, ChevronRight, Paperclip, ChevronLeft } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -113,11 +113,13 @@ export default function WallPage() {
   const [commentReplyingTo, setCommentReplyingTo] = useState<any>(null);
   
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  const [fullScreenGallery, setFullScreenGallery] = useState<{ urls: string[], currentIndex: number } | null>(null);
+  const [galleryZoom, setGalleryZoom] = useState(1);
+  const [galleryPan, setGalleryPan] = useState({ x: 0, y: 0 });
+  const galleryTouchStartRef = useRef({ x: 0, y: 0, distance: 0 });
+  
   const commentFileInputRef = useRef<HTMLInputElement>(null);
   const commentsScrollRef = useRef<HTMLDivElement>(null);
-  
-  const pressTimer = useRef<NodeJS.Timeout | null>(null);
-  const photoOpenedRef = useRef(false);
 
   const [contextMenu, setContextMenu] = useState<{ id: number, x: number, y: number, type: 'post' | 'comment', item: any } | null>(null);
 
@@ -393,10 +395,6 @@ export default function WallPage() {
   const openGlobalMenu = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
     e.stopPropagation();
     e.preventDefault();
-    if (photoOpenedRef.current) { 
-      photoOpenedRef.current = false; 
-      return; 
-    }
     
     let clientX, clientY;
     if ('touches' in e && e.touches.length > 0) {
@@ -410,31 +408,67 @@ export default function WallPage() {
     setContextMenu({ id: item.id, x: clientX, y: clientY, type, item });
   };
 
-  const handleTouchStartPhoto = (e: React.TouchEvent | React.MouseEvent, url: string) => {
-    e.stopPropagation();
-    photoOpenedRef.current = false;
-    
-    pressTimer.current = setTimeout(() => {
-      photoOpenedRef.current = true;
-      if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(40);
-      setFullScreenImage(url); 
-      setContextMenu(null);
-    }, 400); 
+  const openImageGallery = (urls: string[], currentIndex: number = 0) => {
+    setFullScreenGallery({ urls, currentIndex });
+    setGalleryZoom(1);
+    setGalleryPan({ x: 0, y: 0 });
   };
 
-  const clearPhotoTimer = () => { 
-    if (pressTimer.current) clearTimeout(pressTimer.current); 
-  };
-
-  const handlePhotoClick = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'post' | 'comment') => {
-    e.stopPropagation();
-    e.preventDefault();
-    clearPhotoTimer();
-    if (photoOpenedRef.current) { 
-      photoOpenedRef.current = false; 
-      return; 
+  const handleGalleryTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const distance = Math.hypot(
+        touch2.clientX - touch1.clientX,
+        touch2.clientY - touch1.clientY
+      );
+      galleryTouchStartRef.current = {
+        x: (touch1.clientX + touch2.clientX) / 2,
+        y: (touch1.clientY + touch2.clientY) / 2,
+        distance
+      };
+    } else if (e.touches.length === 1) {
+      galleryTouchStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+        distance: 0
+      };
     }
-    openGlobalMenu(e, item, type);
+  };
+
+  const handleGalleryTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && fullScreenGallery) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const distance = Math.hypot(
+        touch2.clientX - touch1.clientX,
+        touch2.clientY - touch1.clientY
+      );
+      const newZoom = Math.max(1, Math.min(4, (distance / galleryTouchStartRef.current.distance) * galleryZoom));
+      setGalleryZoom(newZoom);
+    }
+  };
+
+  const nextGalleryImage = () => {
+    if (fullScreenGallery && fullScreenGallery.currentIndex < fullScreenGallery.urls.length - 1) {
+      setFullScreenGallery({
+        ...fullScreenGallery,
+        currentIndex: fullScreenGallery.currentIndex + 1
+      });
+      setGalleryZoom(1);
+      setGalleryPan({ x: 0, y: 0 });
+    }
+  };
+
+  const prevGalleryImage = () => {
+    if (fullScreenGallery && fullScreenGallery.currentIndex > 0) {
+      setFullScreenGallery({
+        ...fullScreenGallery,
+        currentIndex: fullScreenGallery.currentIndex - 1
+      });
+      setGalleryZoom(1);
+      setGalleryPan({ x: 0, y: 0 });
+    }
   };
 
   const activeThreadContent = activeThread ? parseContent(activeThread.content) : null;
@@ -442,7 +476,53 @@ export default function WallPage() {
   return (
     <div className="flex h-[100dvh] flex-col bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans relative overflow-hidden selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in fade-in duration-300 ease-out" onClick={() => setContextMenu(null)}>
       
-      {/* ЛАЙТБОКС */}
+      {/* ЛАЙТБОКС ГАЛЕРЕИ */}
+      {fullScreenGallery && (
+        <div className="fixed inset-0 z-[200] bg-black flex flex-col animate-in fade-in duration-200 ease-out" onClick={() => setFullScreenGallery(null)}>
+          <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-10">
+            <button onClick={() => setFullScreenGallery(null)} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><X size={24} /></button>
+            <button onClick={() => downloadImage(fullScreenGallery.urls[fullScreenGallery.currentIndex])} className="p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"><Download size={24} /></button>
+          </div>
+          
+          <div className="flex-1 flex items-center justify-center p-2 overflow-hidden relative" onTouchStart={handleGalleryTouchStart} onTouchMove={handleGalleryTouchMove}>
+            <img 
+              src={fullScreenGallery.urls[fullScreenGallery.currentIndex]} 
+              alt="Gallery" 
+              className="max-w-full max-h-full object-contain select-none cursor-grab active:cursor-grabbing"
+              style={{
+                transform: `scale(${galleryZoom}) translate(${galleryPan.x}px, ${galleryPan.y}px)`,
+                transition: 'transform 0.2s ease-out'
+              }}
+            />
+            
+            {fullScreenGallery.urls.length > 1 && (
+              <>
+                {fullScreenGallery.currentIndex > 0 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); prevGalleryImage(); }}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"
+                  >
+                    <ChevronLeft size={24} />
+                  </button>
+                )}
+                {fullScreenGallery.currentIndex < fullScreenGallery.urls.length - 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); nextGalleryImage(); }}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-white bg-black/30 rounded-full backdrop-blur-md active:scale-95 transition-transform"
+                  >
+                    <ChevronRight size={24} />
+                  </button>
+                )}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full text-white text-[12px] font-medium">
+                  {fullScreenGallery.currentIndex + 1} / {fullScreenGallery.urls.length}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ЛАЙТБОКС ОДНОГО ИЗОБРАЖЕНИЯ */}
       {fullScreenImage && (
         <div className="fixed inset-0 z-[200] bg-black flex flex-col animate-in fade-in duration-200 ease-out">
           <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent absolute top-0 w-full z-10">
@@ -514,8 +594,6 @@ export default function WallPage() {
                 <div key={post.id} className="w-full relative mb-5 z-10 animate-in slide-in-from-bottom-4 fade-in duration-300 ease-out">
                   <div 
                     className="w-full bg-white dark:bg-[#222224] rounded-[22px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 flex flex-col cursor-pointer overflow-hidden"
-                    onClick={(e) => openGlobalMenu(e, post, 'post')}
-                    onContextMenu={(e) => openGlobalMenu(e, post, 'post')}
                   >
                     {/* КОМПАКТНАЯ СТРОКА НАЗВАНИЯ КАНАЛА СВЕРХУ */}
                     <div className="px-4 py-2.5 bg-white dark:bg-[#222224] flex items-center">
@@ -528,22 +606,39 @@ export default function WallPage() {
                     
                     {/* ФОТО / ВИДЕО ВО ВСЮ ШИРИНУ КАРТОЧКИ */}
                     {hasMedia && (
-                      <div className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[2px] bg-black/5 dark:bg-white/5' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                      <div 
+                        className={`relative w-full overflow-hidden ${mediaUrls.length > 1 ? 'grid gap-[2px] bg-black/5 dark:bg-white/5' : 'flex justify-center bg-transparent'} ${mediaUrls.length >= 5 ? 'grid-cols-3' : mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (mediaUrls.length > 1) {
+                            openImageGallery(mediaUrls, 0);
+                          }
+                        }}
+                      >
                         {mediaUrls.map((url: string, idx: number) => {
                            const isSingle = mediaUrls.length === 1;
                            const itemClass = isSingle ? 'relative w-full flex justify-center' : `relative bg-[#e5e5ea] dark:bg-[#333336] ${mediaUrls.length === 3 && idx === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`;
                            const imgClass = isSingle ? 'w-full h-auto max-h-[420px] object-cover' : 'absolute inset-0 w-full h-full object-cover';
                            return (
-                             <div key={idx} className={itemClass}>
+                             <div 
+                               key={idx} 
+                               className={itemClass}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 if (isSingle) {
+                                   setFullScreenImage(url);
+                                 }
+                               }}
+                             >
                                {isVideo || url.match(/\.(mp4|webm|mov)$/i) || url.includes('/video/upload/') ? (
                                   <video src={url} controls className={imgClass} onClick={(e) => e.stopPropagation()} />
                                ) : (
                                   <img 
-                                    src={url} loading="lazy" decoding="async" className={imgClass} 
+                                    src={url} 
+                                    loading="lazy" 
+                                    decoding="async" 
+                                    className={`${imgClass} cursor-pointer`}
                                     style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                                    onTouchStart={(e) => handleTouchStartPhoto(e, url)} onMouseDown={(e) => handleTouchStartPhoto(e, url)}
-                                    onTouchEnd={clearPhotoTimer} onTouchMove={clearPhotoTimer} onMouseUp={clearPhotoTimer} onMouseLeave={clearPhotoTimer}
-                                    onClick={(e) => handlePhotoClick(e, post, 'post')}
                                     onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, post, 'post'); }}
                                     onError={(e) => { e.currentTarget.src = 'https://placehold.co/300x400/1c1c1e/ffffff?text=Image+Not+Found'; }} 
                                   />
@@ -556,7 +651,7 @@ export default function WallPage() {
                     
                     {/* ТЕКСТ ПОСТА */}
                     {hasText && (
-                      <div className="px-3.5 pt-2.5 pb-0.5">
+                      <div className="px-3.5 pt-2.5 pb-0.5" onClick={(e) => openGlobalMenu(e, post, 'post')}>
                          {quotedText && (
                            <div className="mb-1.5 pl-2.5 border-l-[2px] text-[12px] font-medium opacity-80 truncate border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7]">{quotedText}</div>
                          )}
@@ -631,7 +726,7 @@ export default function WallPage() {
               {activeThreadContent?.hasMedia && (
                 <div className="flex gap-2 overflow-x-auto my-2">
                   {activeThreadContent.mediaUrls.map((url: string) => (
-                    <img key={url} src={url} className="h-[80px] w-auto rounded-[8px] object-cover border border-black/5 dark:border-white/5" />
+                    <img key={url} src={url} className="h-[80px] w-auto rounded-[8px] object-cover border border-black/5 dark:border-white/5 cursor-pointer" onClick={() => openImageGallery(activeThreadContent.mediaUrls, activeThreadContent.mediaUrls.indexOf(url))} />
                   ))}
                 </div>
               )}
@@ -650,14 +745,16 @@ export default function WallPage() {
                  return (
                    <div key={c.id} className="relative flex flex-col mb-2 z-10">
                      <div 
-                        className="flex gap-3 items-start cursor-pointer" 
-                        onClick={(e) => openGlobalMenu(e, c, 'comment')}
-                        onContextMenu={(e) => openGlobalMenu(e, c, 'comment')}
+                        className="flex gap-3 items-start" 
                      >
                        <div className="w-9 h-9 rounded-full bg-[#e5e5ea] dark:bg-[#333336] flex items-center justify-center shrink-0 overflow-hidden text-[13px] font-medium border border-black/5 dark:border-white/5 text-[#1d1d1f] dark:text-[#f5f5f7]">
                          {c.senderAvatar ? <img src={c.senderAvatar} className="w-full h-full object-cover" /> : c.senderName?.charAt(0).toUpperCase() || 'U'}
                        </div>
-                       <div className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5">
+                       <div 
+                         className="flex flex-col flex-1 bg-white dark:bg-[#222224] p-3 rounded-[18px] rounded-tl-[4px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 cursor-pointer"
+                         onClick={(e) => openGlobalMenu(e, c, 'comment')}
+                         onContextMenu={(e) => openGlobalMenu(e, c, 'comment')}
+                       >
                          <span className="text-[13px] font-semibold mb-1 text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">{c.senderName}</span>
                          
                          {quotedText && (
@@ -667,15 +764,9 @@ export default function WallPage() {
                          {hasMedia && (
                              <img 
                                src={mediaUrls[0]} 
-                               className={`max-h-[200px] w-auto object-cover pointer-events-none ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
+                               className={`max-h-[200px] w-auto object-cover pointer-events-auto cursor-pointer ${hasText ? 'rounded-t-[8px] mb-1' : 'rounded-[8px]'}`} 
                                style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
-                               onTouchStart={(e) => handleTouchStartPhoto(e, mediaUrls[0])} 
-                               onMouseDown={(e) => handleTouchStartPhoto(e, mediaUrls[0])}
-                               onTouchEnd={clearPhotoTimer} 
-                               onTouchMove={clearPhotoTimer}
-                               onMouseUp={clearPhotoTimer}
-                               onMouseLeave={clearPhotoTimer}
-                               onClick={(e) => handlePhotoClick(e, c, 'comment')}
+                               onClick={(e) => { e.stopPropagation(); openImageGallery(mediaUrls, 0); }}
                                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openGlobalMenu(e, c, 'comment'); }}
                              />
                          )}
@@ -693,11 +784,15 @@ export default function WallPage() {
                              const rData = c.reactions[key];
                              const count = typeof rData === 'number' ? rData : (rData?.count || 1);
                              const users = Array.isArray(rData) ? rData : (rData?.users || []);
-                             const firstUser = users.length > 0 ? users[0] : null;
+                             const firstUser = users && users.length > 0 ? users[0] : null;
 
                              return (
-                               <button key={key} onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}>
-                                 {firstUser ? (
+                               <button 
+                                 key={key} 
+                                 onClick={(e) => { e.stopPropagation(); toggleReaction(c.id, key, true); }} 
+                                 className={`flex items-center justify-center gap-1 h-[24px] pl-0.5 pr-2 rounded-full border transition-transform active:scale-95 ${c.myReaction === key ? 'bg-black/5 dark:bg-white/20 border-black/20 dark:border-white/30 z-10' : 'bg-[#f5f5f7] dark:bg-[#333336] border-black/5 dark:border-white/5 shadow-sm'}`}
+                               >
+                                 {firstUser && firstUser.name ? (
                                    <div className="w-[18px] h-[18px] rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-white dark:bg-[#222224] text-[9px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/5 dark:border-white/5">
                                      {firstUser.avatar ? <img src={firstUser.avatar} className="w-full h-full object-cover" /> : firstUser.name?.charAt(0).toUpperCase() || 'U'}
                                    </div>
