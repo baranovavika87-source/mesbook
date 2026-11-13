@@ -2671,7 +2671,7 @@ export default function ChatPage() {
                         </div>
                       </button>
                     ) : (
-                      <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95"><ArrowUp size={20} strokeWidth={2.5} /></button>
+                      <button type="submit" disabled={isUploading} className="w-[38px] h-[38px] shrink-0 rounded-full bg-red-500 dark:bg-red-600 text-white flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95 text-[24px] font-bold">></button>
                     )}
                   </form>
                 )
