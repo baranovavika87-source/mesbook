@@ -287,30 +287,40 @@ export default function WallPage() {
 
   const toggleReaction = async (id: number, reaction: string, isComment = false) => {
     setContextMenu(null);
+    
+    const updateFn = (item: any) => {
+      const newR = { ...(item.reactions || {}) };
+      if (item.myReaction === reaction) {
+        if (newR[reaction]) {
+          newR[reaction].count = Math.max(0, (newR[reaction].count || 1) - 1);
+          newR[reaction].users = (newR[reaction].users || []).filter((u: any) => String(u.id) !== String(currentUserId));
+        }
+        if (!newR[reaction] || newR[reaction].count === 0) delete newR[reaction];
+        return { ...item, reactions: newR, myReaction: null };
+      } else {
+        if (item.myReaction && newR[item.myReaction]) {
+          newR[item.myReaction].count = Math.max(0, (newR[item.myReaction].count || 1) - 1);
+          newR[item.myReaction].users = (newR[item.myReaction].users || []).filter((u: any) => String(u.id) !== String(currentUserId));
+          if (newR[item.myReaction].count === 0) delete newR[item.myReaction];
+        }
+        if (!newR[reaction]) newR[reaction] = { count: 0, users: [] };
+        newR[reaction].count = (newR[reaction].count || 0) + 1;
+        const userObj = { id: currentUserId, name: 'U', avatar: '' };
+        newR[reaction].users = [userObj, ...(newR[reaction].users || []).filter((u: any) => String(u.id) !== String(currentUserId))];
+        return { ...item, reactions: newR, myReaction: reaction };
+      }
+    };
+    
+    if (isComment) {
+      setThreadComments(prev => prev.map(c => c.id === id ? updateFn(c) : c));
+    } else {
+      setPosts(prev => prev.map(p => p.id === id ? updateFn(p) : p));
+    }
+
     try {
       const targetChatId = isComment && activeThread ? activeThread.chatId : posts.find(p => p.id === id)?.chatId;
       if (!targetChatId) return;
       
-      if (!isComment) {
-         setPosts(prev => prev.map(p => {
-           if (p.id !== id) return p;
-           const newR = { ...(p.reactions || {}) };
-           if (p.myReaction === reaction) {
-             if (newR[reaction]) newR[reaction].count = Math.max(0, newR[reaction].count - 1);
-             if (newR[reaction]?.count === 0) delete newR[reaction];
-             return { ...p, reactions: newR, myReaction: null };
-           } else {
-             if (p.myReaction && newR[p.myReaction]) {
-               newR[p.myReaction].count = Math.max(0, newR[p.myReaction].count - 1);
-               if (newR[p.myReaction].count === 0) delete newR[p.myReaction];
-             }
-             if (!newR[reaction]) newR[reaction] = { count: 0, users: [] };
-             newR[reaction].count++;
-             return { ...p, reactions: newR, myReaction: reaction };
-           }
-         }));
-      }
-
       await fetch(`/api/chats/${targetChatId}/messages/${id}/reaction`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentUserId }, 
@@ -324,7 +334,6 @@ export default function WallPage() {
       }
     } catch (e) {}
   };
-
   const handleSendComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentContent.trim() || !activeThread) return;
