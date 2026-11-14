@@ -311,9 +311,11 @@ export default function ChatPage() {
     else localStorage.removeItem(`mesbook_blocked_${currentUserId}_${chatId}`);
   };
 
+  const wallpaperStorageKey = `mesbook_wallpaper_${currentUserId}_${chatId}`;
+ 
   useEffect(() => {
     const savedSize = Number(localStorage.getItem('mesbook_text_size')) || 16;
-    const savedWallpaper = localStorage.getItem('mesbook_wallpaper') || '';
+    const savedWallpaper = localStorage.getItem(wallpaperStorageKey) || '';
     const savedTheme = localStorage.getItem('mesbook_theme') || localStorage.getItem('theme') || 'auto';
     setTextSize(savedSize);
     setWallpaper(savedWallpaper);
@@ -1573,8 +1575,8 @@ export default function ChatPage() {
 
   const handleApplyWallpaper = (val: string) => {
     setWallpaper(val);
-    if (val) localStorage.setItem('mesbook_wallpaper', val);
-    else localStorage.removeItem('mesbook_wallpaper');
+    if (val) localStorage.setItem(wallpaperStorageKey, val);
+    else localStorage.removeItem(wallpaperStorageKey);
     setIsWallpaperModalOpen(false);
   };
 
@@ -1723,18 +1725,6 @@ export default function ChatPage() {
         <div className="fixed inset-0 z-[350] bg-black/50 backdrop-blur-xs flex items-center justify-center p-5 animate-in fade-in duration-150" onClick={() => setIsWallpaperModalOpen(false)}>
           <div className="bg-white dark:bg-[#222224] rounded-[22px] w-full max-w-xs p-5 shadow-2xl border border-black/5 dark:border-white/5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
             <h3 className="text-[17px] font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">{t.changeWallpaper}</h3>
-            <div className="grid grid-cols-4 gap-2.5">
-              {['', '#000000', '#161618', '#262629', '#e5e5ea', '#d1d1d6', '#1c242b', '#2b1c28'].map((col, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleApplyWallpaper(col)}
-                  className="h-12 rounded-[12px] border border-black/10 dark:border-white/10 flex items-center justify-center text-[11px] font-semibold text-[#86868b]"
-                  style={{ background: col || undefined }}
-                >
-                  {col === '' ? 'Сброс' : ''}
-                </button>
-              ))}
-            </div>
             <input type="file" accept="image/*" ref={wallpaperInputRef} className="hidden" onChange={handleCustomWallpaperFile} />
             <button onClick={() => wallpaperInputRef.current?.click()} className="w-full py-2.5 rounded-[14px] bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] font-semibold text-[14px] active:scale-95">
               Выбрать фото из галереи
@@ -2082,7 +2072,7 @@ export default function ChatPage() {
                 <MoreVertical size={24} />
               </button>
               {isChatMenuOpen && (
-                <div className="absolute right-0 top-10 w-56 bg-white dark:bg-[#222224] rounded-[16px] shadow-xl border border-black/5 dark:border-white/5 py-1 z-30 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                <div className="absolute right-0 top-10 w-56 bg-white dark:bg-[#222224] rounded-[16px] shadow-xl border border-black/5 dark:border-white/5 py-1 z-50 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
                   <button onClick={() => { setIsChatMenuOpen(false); setIsChatSearchOpen(true); }} className="w-full text-left px-4 py-2.5 text-[15px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3">
                     <Search size={18} /> {t.searchMsgs}
                   </button>
