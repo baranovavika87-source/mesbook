@@ -1309,6 +1309,7 @@ export default function ChatPage() {
     }
 
     return { users: resolved.slice(0, 3), count };
+    };
   const deleteMessage = async (msgId: number, isComment = false) => {
     try {
       setDeletingIds(prev => new Set(prev).add(msgId));
