@@ -503,6 +503,8 @@ export default function ChatPage() {
   const [swipeState, setSwipeState] = useState<{ id: number | null, offset: number }>({ id: null, offset: 0 });
   const swipeTouchRef = useRef<{ id: number, x: number, y: number, item: any, locked: 'h' | 'v' | null, vibrated: boolean } | null>(null);
 
+  const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
+
   const handleMsgSwipeStart = (e: React.TouchEvent, msg: any) => {
     if (e.touches.length !== 1) return;
     swipeTouchRef.current = { id: msg.id, x: e.touches[0].clientX, y: e.touches[0].clientY, item: msg, locked: null, vibrated: false };
@@ -1307,33 +1309,46 @@ export default function ChatPage() {
     }
 
     return { users: resolved.slice(0, 3), count };
-  };
-
   const deleteMessage = async (msgId: number, isComment = false) => {
     try {
-      if (isSavedChat && !isComment) {
-        const updated = messages.filter(m => m.id !== msgId);
-        syncSavedMessages(updated);
-        if (pinnedMessages.some(p => p.id === msgId)) {
-          persistPinnedMessages(pinnedMessages.filter(p => p.id !== msgId));
+      setDeletingIds(prev => new Set(prev).add(msgId));
+      
+      setTimeout(async () => {
+        try {
+          if (isSavedChat && !isComment) {
+            const updated = messages.filter(m => m.id !== msgId);
+            syncSavedMessages(updated);
+            if (pinnedMessages.some(p => p.id === msgId)) {
+              persistPinnedMessages(pinnedMessages.filter(p => p.id !== msgId));
+            }
+            setDeletingIds(prev => { const next = new Set(prev); next.delete(msgId); return next; });
+            return;
+          }
+          if (!isComment) {
+            if (pinnedMessages.some(p => p.id === msgId)) {
+              persistPinnedMessages(pinnedMessages.filter(p => p.id !== msgId));
+            }
+            const latestOutbox = (await loadSecureData(outboxKey)) || [];
+            if (latestOutbox.some((m: any) => m.id === msgId)) {
+              await saveSecureData(outboxKey, latestOutbox.filter((m: any) => m.id !== msgId));
+              setMessages(prev => prev.filter(m => m.id !== msgId));
+              setDeletingIds(prev => { const next = new Set(prev); next.delete(msgId); return next; });
+              return;
+            }
+          }
+          const targetChatId = isComment && activeThread ? (activeThread.chatId || chatId) : chatId;
+          await fetch(`/api/chats/${targetChatId}/messages/${msgId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId } });
+          if (isComment && activeThread) loadComments(targetChatId, activeThread.id);
+          else loadData();
+          setDeletingIds(prev => { const next = new Set(prev); next.delete(msgId); return next; });
+        } catch (e) {
+          setDeletingIds(prev => { const next = new Set(prev); next.delete(msgId); return next; });
         }
-        return;
-      }
-      if (!isComment) {
-        if (pinnedMessages.some(p => p.id === msgId)) {
-          persistPinnedMessages(pinnedMessages.filter(p => p.id !== msgId));
-        }
-        const latestOutbox = (await loadSecureData(outboxKey)) || [];
-        if (latestOutbox.some((m: any) => m.id === msgId)) {
-          await saveSecureData(outboxKey, latestOutbox.filter((m: any) => m.id !== msgId));
-          setMessages(prev => prev.filter(m => m.id !== msgId));
-          return;
-        }
-      }
-      const targetChatId = isComment && activeThread ? (activeThread.chatId || chatId) : chatId;
-      await fetch(`/api/chats/${targetChatId}/messages/${msgId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + currentUserId } });
-      if (isComment && activeThread) loadComments(targetChatId, activeThread.id);
-      else loadData();
+      }, 300);
+    } catch (e) {
+      setDeletingIds(prev => { const next = new Set(prev); next.delete(msgId); return next; });
+    }
+  };
     } catch (e) {}
   };
 
@@ -2191,9 +2206,10 @@ export default function ChatPage() {
                     )}
 
                     <div
+                    <div
                       className={isOnlyVideoNote
-                        ? `relative flex flex-col cursor-pointer bg-transparent transition-all duration-500 rounded-full ${isHighlighted ? 'ring-4 ring-[#1d1d1f]/40 dark:ring-[#f5f5f7]/40 scale-[1.03]' : ''}`
-                        : `shadow-sm relative flex flex-col min-w-[72px] ${hasMedia ? 'w-[75vw] max-w-[320px]' : 'w-fit max-w-full'} cursor-pointer overflow-hidden transition-all duration-500 ${isChannel ? 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[22px] rounded-tl-[6px] border border-black/5 dark:border-white/5' : (isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5')} ${isHighlighted ? 'ring-2 ring-[#1d1d1f] dark:ring-[#f5f5f7] scale-[1.02]' : ''}`
+                        ? `relative flex flex-col cursor-pointer bg-transparent transition-all duration-500 rounded-full ${isHighlighted ? 'ring-4 ring-[#1d1d1f]/40 dark:ring-[#f5f5f7]/40 scale-[1.03]' : ''} ${deletingIds.has(msg.id) ? 'opacity-0 scale-95 origin-center' : ''}`
+                        : `shadow-sm relative flex flex-col min-w-[72px] ${hasMedia ? 'w-[75vw] max-w-[320px]' : 'w-fit max-w-full'} cursor-pointer overflow-hidden transition-all duration-300 ${isChannel ? 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[22px] rounded-tl-[6px] border border-black/5 dark:border-white/5' : (isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5')} ${isHighlighted ? 'ring-2 ring-[#1d1d1f] dark:ring-[#f5f5f7] scale-[1.02]' : ''} ${deletingIds.has(msg.id) ? 'opacity-0 scale-95 origin-center' : ''}`
                       }
                       onClick={(e) => openGlobalMenu(e, msg, 'message')}
                     >
