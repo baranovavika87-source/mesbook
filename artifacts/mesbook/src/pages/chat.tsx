@@ -2204,7 +2204,6 @@ export default function ChatPage() {
                     )}
 
                     <div
-                    <div
                       className={isOnlyVideoNote
                         ? `relative flex flex-col cursor-pointer bg-transparent transition-all duration-500 rounded-full ${isHighlighted ? 'ring-4 ring-[#1d1d1f]/40 dark:ring-[#f5f5f7]/40 scale-[1.03]' : ''} ${deletingIds.has(msg.id) ? 'opacity-0 scale-95 origin-center' : ''}`
                         : `shadow-sm relative flex flex-col min-w-[72px] ${hasMedia ? 'w-[75vw] max-w-[320px]' : 'w-fit max-w-full'} cursor-pointer overflow-hidden transition-all duration-300 ${isChannel ? 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[22px] rounded-tl-[6px] border border-black/5 dark:border-white/5' : (isMe ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7] text-[#f5f5f7] dark:text-[#1d1d1f] rounded-[18px] rounded-tr-[4px]' : 'bg-white dark:bg-[#222224] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[18px] rounded-tl-[4px] border border-black/5 dark:border-white/5')} ${isHighlighted ? 'ring-2 ring-[#1d1d1f] dark:ring-[#f5f5f7] scale-[1.02]' : ''} ${deletingIds.has(msg.id) ? 'opacity-0 scale-95 origin-center' : ''}`

@@ -1349,8 +1349,6 @@ export default function ChatPage() {
       setDeletingIds(prev => { const next = new Set(prev); next.delete(msgId); return next; });
     }
   };
-    } catch (e) {}
-  };
 
   const openGlobalMenu = (e: React.MouseEvent | React.TouchEvent, item: any, type: 'message' | 'comment') => {
     e.stopPropagation();
