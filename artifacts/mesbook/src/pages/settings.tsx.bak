@@ -672,7 +672,6 @@ export default function SettingsPage() {
         </div>
       </div>
     );
-  }
 
   if (activeView === 'privacy') {
     return (
