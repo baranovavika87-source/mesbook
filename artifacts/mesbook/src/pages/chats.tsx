@@ -204,7 +204,7 @@ export default function ChatsPage() {
   const currentUserId = getUserId();
 
   const [lang] = useState<'ru' | 'en'>((localStorage.getItem('mesbook_lang') as 'ru' | 'en') || 'ru');
-  const t = translations[lang] || translations.ru;
+  const [showWallTab, setShowWallTab] = useState(() => localStorage.getItem('mesbook_show_wall_tab') === 'true');
 
   const [chats, setChats] = useState<any[]>(() => {
     try {
@@ -883,12 +883,14 @@ export default function ChatsPage() {
                   <span className="text-[13px] font-semibold tracking-tight">{t.chats}</span>
                 </a>
               </Link>
-              <Link href="/wall">
-                <a className="flex-1 flex items-center justify-center gap-2 py-2.5 px-5 rounded-full bg-white/55 dark:bg-[#222224]/75 text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] border border-black/[0.05] dark:border-white/[0.06] backdrop-blur-xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] transition-all duration-300 ease-out active:scale-90">
-                  <Users size={19} strokeWidth={1.8} />
-                  <span className="text-[13px] font-medium tracking-tight">{t.wall}</span>
-                </a>
-              </Link>
+               {showWallTab && (
+                 <Link href="/wall">
+                   <a className="flex-1 flex items-center justify-center gap-2 py-2.5 px-5 rounded-full bg-white/55 dark:bg-[#222224]/75 text-[#86868b] dark:text-[#98989d] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] border border-black/[0.05] dark:border-white/[0.06] backdrop-blur-xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] transition-all duration-300 ease-out active:scale-90">
+                     <Users size={19} strokeWidth={1.8} />
+                     <span className="text-[13px] font-medium tracking-tight">{t.wall}</span>
+                   </a>
+                 </Link>
+               )}
             </div>
           </nav>
         </>

@@ -44,8 +44,9 @@ const translations = {
     chatBackground: "Цвет чата",
     previewText: "Привет, как твои дела?",
     previewTime: "12:34",
-    messageRadius: "Скругление сообщений"
-  },
+     messageRadius: "Скругление сообщений",
+     showWallTab: "Показывать вкладку Стена"
+   },
   en: {
     settings: "Settings",
     account: "Account",
@@ -75,8 +76,9 @@ const translations = {
     chatBackground: "Chat Color",
     previewText: "Hi, how are you?",
     previewTime: "12:34",
-    messageRadius: "Message Corner Radius"
-  }
+     messageRadius: "Message Corner Radius",
+     showWallTab: "Show Wall Tab"
+   }
 };
 
 type ViewState = 'main' | 'edit' | 'privacy' | 'language' | 'chat_settings';
@@ -125,6 +127,10 @@ export default function SettingsPage() {
 
   const [messageRadius, setMessageRadius] = useState(
     Number(localStorage.getItem('mesbook_message_radius')) || 18
+  );
+
+  const [showWallTab, setShowWallTab] = useState(
+    localStorage.getItem('mesbook_show_wall_tab') === 'true'
   );
 
   useEffect(() => {
@@ -607,6 +613,33 @@ export default function SettingsPage() {
                 />
 
                 <div className="w-6 h-6 bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full" />
+              </div>
+            </div>
+
+          <div className="px-4 mt-4">
+            <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 p-5 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-bold text-[#86868b] dark:text-[#98989d] uppercase tracking-wider">
+                  {t.showWallTab}
+                </span>
+                <button
+                  onClick={() => {
+                    const newValue = !showWallTab;
+                    setShowWallTab(newValue);
+                    localStorage.setItem('mesbook_show_wall_tab', newValue ? 'true' : 'false');
+                  }}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                    showWallTab
+                      ? 'bg-[#1d1d1f] dark:bg-[#f5f5f7]'
+                      : 'bg-[#e5e5ea] dark:bg-[#333336]'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white dark:bg-[#1d1d1f] transition-transform ${
+                      showWallTab ? 'translate-x-5' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
           </div>
