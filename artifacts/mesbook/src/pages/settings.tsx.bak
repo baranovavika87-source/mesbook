@@ -672,6 +672,7 @@ export default function SettingsPage() {
                 <div className="w-6 h-6 bg-[#1d1d1f] dark:bg-[#f5f5f7] rounded-full" />
               </div>
             </div>
+          </div>
 
           <div className="px-4 mt-4">
             <div className="bg-white dark:bg-[#222224] rounded-[24px] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-black/5 dark:border-white/5 p-5 flex flex-col gap-4">

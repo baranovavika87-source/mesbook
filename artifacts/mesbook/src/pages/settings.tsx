@@ -730,7 +730,7 @@ export default function SettingsPage() {
         </div>
       </div>
     );
-
+  }
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[#f5f5f7] dark:bg-[#161618] transition-colors duration-300 font-sans selection:bg-[#1d1d1f]/20 dark:selection:bg-[#f5f5f7]/20 animate-in slide-in-from-right-8 fade-in duration-300 ease-out">
